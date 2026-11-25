@@ -111,10 +111,13 @@ class AgentMacroIntegrationTests {
         String biuro = addAgent("Biuro");
         String zaplecze = addAgent("Zaplecze");
 
-        // Bez zgłoszeń agentów nie ma wolnego komputera.
-        collect(deliveryId).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("NO_COMPUTER"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("agent nie odpowiada")));
+        // Bez zgłoszeń agentów nie ma wolnego komputera: zlecenie czeka w kolejce (tu je anulujemy).
+        String waiting = JsonPath.read(collect(deliveryId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.queuePosition").value(1))
+                .andExpect(jsonPath("$.waitReason").value(org.hamcrest.Matchers.containsString("agent nie odpowiada")))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        cancel(waiting).andExpect(jsonPath("$.status").value("CANCELLED"));
 
         // Kasa używana przed chwilą, biuro wolne od 10 min, zaplecze bez odtwarzacza makr.
         poll(kasa, 20, false, true).andExpect(jsonPath("$.offer").doesNotExist());
@@ -130,8 +133,13 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.status").value("OFFERED"))
                 .andExpect(jsonPath("$.computer").value("Biuro"))
                 .andReturn().getResponse().getContentAsString(), "$.id");
-        // Drugie makro w tym czasie: sklep ma jeden Mercalys.
-        collect(deliveryId).andExpect(status().isConflict());
+        // Drugie makro w tym czasie czeka w kolejce: sklep ma jeden Mercalys.
+        String second = JsonPath.read(collect(deliveryId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.queuePosition").value(1))
+                .andExpect(jsonPath("$.waitReason").value("czeka na wcześniejsze makro sklepu"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        cancel(second).andExpect(jsonPath("$.status").value("CANCELLED"));
 
         poll(kasa, 20, false, true).andExpect(jsonPath("$.offer").doesNotExist());
         poll(biuro, 600, false, true)
@@ -148,13 +156,14 @@ class AgentMacroIntegrationTests {
         agentPost(biuro, "/macro-jobs/" + job + "/start", "").andExpect(status().isConflict());
         // Strona po odświeżeniu: trwające makro na górze, z bonem i komputerem, wcześniejsza próba pod nim.
         mvc.perform(get(base() + "/recent").cookie(owner)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.jobs.length()").value(2))
-                .andExpect(jsonPath("$.jobs[0].id").value(job))
-                .andExpect(jsonPath("$.jobs[0].status").value("OFFERED"))
-                .andExpect(jsonPath("$.jobs[0].reference").value("09516050082"))
-                .andExpect(jsonPath("$.jobs[0].computer").value("Kasa"))
-                .andExpect(jsonPath("$.jobs[0].declined[0]").value("Biuro"))
-                .andExpect(jsonPath("$.jobs[1].status").value("NO_COMPUTER"))
+                .andExpect(jsonPath("$.jobs.length()").value(3))
+                .andExpect(jsonPath("$.jobs[0].id").value(second))
+                .andExpect(jsonPath("$.jobs[1].id").value(job))
+                .andExpect(jsonPath("$.jobs[1].status").value("OFFERED"))
+                .andExpect(jsonPath("$.jobs[1].reference").value("09516050082"))
+                .andExpect(jsonPath("$.jobs[1].computer").value("Kasa"))
+                .andExpect(jsonPath("$.jobs[1].declined[0]").value("Biuro"))
+                .andExpect(jsonPath("$.jobs[2].status").value("CANCELLED"))
                 .andExpect(jsonPath("$.update").doesNotExist());
 
         String macro = JsonPath.read(agentPost(kasa, "/macro-jobs/" + job + "/start", "")
@@ -245,10 +254,12 @@ class AgentMacroIntegrationTests {
         String receiving = "/api/stores/" + storeId + "/base-deliveries/" + deliveryId + "/receiving";
         // Agent bez wersji odtwarzacza (sprzed 1.8.0) i starszy odtwarzacz nie wezmą tego makra.
         poll(kasa, 900, false, true);
-        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("AutoJob 0.67")));
+        String waiting = JsonPath.read(base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.waitReason").value(org.hamcrest.Matchers.containsString("AutoJob 0.67")))
+                .andReturn().getResponse().getContentAsString(), "$.id");
         poll(kasa, "0.66");
-        base("base-receive", deliveryId).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        mvc.perform(get(base() + "/" + waiting).cookie(owner)).andExpect(jsonPath("$.status").value("QUEUED"));
+        cancel(waiting);
         poll(kasa, "0.67");
         // Bez zamówień nie ma czego kończyć.
         base("base-close", deliveryId).andExpect(status().isConflict());
@@ -800,9 +811,11 @@ class AgentMacroIntegrationTests {
                         .content("{\"deliveryId\":\"" + deliveryId + "\",\"agentId\":\"" + kasaId + "\"}"))
                 .andExpect(jsonPath("$.computer").value("Kasa"))
                 .andReturn().getResponse().getContentAsString(), "$.id");
-        // Wybrany komputer odmawia: innego nie szukamy.
+        // Wybrany komputer odmawia: innego nie szukamy, zlecenie czeka w kolejce i wróci na kasę za 10 min.
         agentPost(kasa, "/macro-jobs/" + job + "/decline", "{}").andExpect(status().isNoContent());
-        mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("NO_COMPUTER"));
+        mvc.perform(get(base() + "/" + job).cookie(owner)).andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.waitReason").value(org.hamcrest.Matchers.containsString("Kasa")));
+        poll(kasa, 900, false, true).andExpect(jsonPath("$.offer").doesNotExist());
 
         String second = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.computer").value("Biuro"))
                 .andReturn().getResponse().getContentAsString(), "$.id");
@@ -817,6 +830,57 @@ class AgentMacroIntegrationTests {
         mvc.perform(post(base() + "/itm8-collect").cookie(viewer).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"deliveryId\":\"" + deliveryId + "\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void macrosWaitInQueueAndStartOneAfterAnother() throws Exception {
+        String deliveryId = uploadDelivery();
+        String kasa = addAgent("Kasa");
+        poll(kasa, 900, false, true);
+        String first = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.status").value("OFFERED"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String second = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.queuePosition").value(1))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String third = JsonPath.read(collect(deliveryId).andExpect(jsonPath("$.queuePosition").value(2))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        // Kolejka nie wygasa i jest w bazie: widać ją po odświeżeniu strony bez względu na wiek zlecenia.
+        jdbc.update("update agent_macro_jobs set created_at = created_at - interval '3 days' where id in (?::uuid,"
+                + " ?::uuid)", second, third);
+        mvc.perform(get(base() + "/recent").cookie(owner))
+                .andExpect(jsonPath("$.jobs[?(@.id == '" + third + "')].queuePosition").value(2));
+
+        // Koniec pierwszego: drugie od razu dostaje komputer.
+        agentPost(kasa, "/macro-jobs/" + first + "/start", "").andExpect(status().isOk());
+        agentPost(kasa, "/macro-jobs/" + first + "/finish", "{\"ok\":true}").andExpect(status().isNoContent());
+        poll(kasa, 900, false, true).andExpect(jsonPath("$.offer.id").value(second));
+        mvc.perform(get(base() + "/" + third).cookie(owner)).andExpect(jsonPath("$.queuePosition").value(1));
+
+        // „Anuluj” na jedynym komputerze: drugie czeka 10 min, a trzecie nie stoi za nim.
+        agentPost(kasa, "/macro-jobs/" + second + "/decline", "{}").andExpect(status().isNoContent());
+        mvc.perform(get(base() + "/" + second).cookie(owner)).andExpect(jsonPath("$.status").value("QUEUED"));
+        poll(kasa, 900, false, true).andExpect(jsonPath("$.offer.id").value(third));
+
+        // Anulowane przez zlecającego wraca „Przywróć” na swoje miejsce.
+        cancel(third).andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(post(base() + "/" + third + "/restore").cookie(owner).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OFFERED"));
+        mvc.perform(get(base() + "/" + second).cookie(owner)).andExpect(jsonPath("$.queuePosition").value(1));
+
+        // Wynik makra nie doszedł (np. restart serwera dłuższy niż ponawianie w agencie): komputer zgłasza się jako
+        // wolny, więc makro kończy się z opisem i kolejka nie stoi.
+        agentPost(kasa, "/macro-jobs/" + third + "/start", "").andExpect(status().isOk());
+        poll(kasa, 900, false, true);
+        mvc.perform(get(base() + "/" + third).cookie(owner)).andExpect(jsonPath("$.status").value("RUNNING"));
+        jdbc.update("update agent_macro_jobs set started_at = started_at - interval '1 minute' where id = ?::uuid",
+                third);
+        poll(kasa, 900, false, true);
+        mvc.perform(get(base() + "/" + third).cookie(owner)).andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("wynik nie doszedł")));
+    }
+
+    private ResultActions cancel(String job) throws Exception {
+        return mvc.perform(post(base() + "/" + job + "/cancel").cookie(owner).with(csrf())).andExpect(status().isOk());
     }
 
     private ResultActions collect(String deliveryId) throws Exception {

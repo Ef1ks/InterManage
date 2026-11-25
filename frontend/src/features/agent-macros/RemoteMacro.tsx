@@ -15,7 +15,7 @@ import { ApiError } from '@/lib/api'
 import type { AgentComputer, AgentMacroJob } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { cancelMacro, isActive, type MacroRequest, runMacro, useAgentActivity } from './api'
+import { cancelMacro, isActive, type MacroRequest, restoreMacro, runMacro, useAgentActivity } from './api'
 import { hiddenResults, hideResult } from './hidden-results'
 
 /** Makra, których podsumowanie warto pokazać także po udanym przebiegu. */
@@ -77,8 +77,22 @@ export function useRemoteMacro(storeId: string, { matches, onFinished }: Restore
 
   const cancel = async () => {
     if (!job) return
+    const id = job.id
     try {
-      setJob(await cancelMacro(storeId, job.id))
+      setJob(await cancelMacro(storeId, id))
+      toast.success('Makro anulowane', {
+        action: {
+          label: 'Przywróć',
+          onClick: () => {
+            restoreMacro(storeId, id)
+              // Dalszy stan przychodzi z serwera (lista makr sklepu), tak jak po odświeżeniu strony.
+              .then(() => setJob(null))
+              .catch((error) =>
+                toast.error(error instanceof ApiError ? error.message : 'Nie udało się przywrócić makra'),
+              )
+          },
+        },
+      })
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : 'Nie udało się anulować makra')
     }
@@ -156,6 +170,10 @@ export function RemoteMacroStatus({
   const failed = job.status === 'FAILED' || job.status === 'NO_COMPUTER'
   const done = job.status === 'DONE'
   const texts: Record<AgentMacroJob['status'], string> = {
+    QUEUED:
+      job.queuePosition && job.queuePosition > 1
+        ? `W kolejce, ${job.queuePosition}. miejsce. Ruszy samo, możesz zamknąć stronę.`
+        : 'W kolejce, następne. Ruszy samo, możesz zamknąć stronę.',
     OFFERED: `Odliczanie na komputerze ${job.computer ?? ''}…`,
     RUNNING: `Makro działa na komputerze ${job.computer ?? ''}`,
     DONE: `Makro zakończone na komputerze ${job.computer ?? ''}`,
@@ -186,6 +204,7 @@ export function RemoteMacroStatus({
       )}
       <div className="grid min-w-0 flex-1 gap-0.5">
         <p className="font-medium">{texts[job.status]}</p>
+        {job.status === 'QUEUED' && job.waitReason && <p>Czeka: {job.waitReason}</p>}
         {isActive(job) && job.declined.length > 0 && (
           <p>Wcześniej anulowane albo bez odpowiedzi: {job.declined.join(', ')}</p>
         )}
@@ -193,7 +212,7 @@ export function RemoteMacroStatus({
           <p className="max-h-32 overflow-auto break-words whitespace-pre-line">{job.message}</p>
         )}
       </div>
-      {job.status === 'OFFERED' && (
+      {(job.status === 'OFFERED' || job.status === 'QUEUED') && (
         <Button variant="outline" size="sm" onClick={onCancel}>
           Anuluj
         </Button>

@@ -102,6 +102,27 @@ class CadPriorityMacroTests {
                 .doesNotHaveDuplicates();
     }
 
+    /** „Ten kod ITM jest już przyznany” (10023, 25.11.2026): komunikat zamknięty, karta pominięta do ręcznej poprawy. */
+    @Test
+    void skipsItm8AssignedToAnotherCard() {
+        String reason = "Pominięto 604: " + CadPriorityMacro.ASSIGNED_ELSEWHERE + " (61509966), popraw ręcznie";
+        assertThat(List.of(macro.split("\r\n"))).containsSubsequence(
+                "WEBKEY|Mercalys|txtZ02_Itm_TxtBox|^a61509966{Tab}",
+                "WEBIFVALUE|Mercalys|lstZ04_Fournisseur_TxtBox|^0*[1-9]\\d*$|brak-itm8-604|8000",
+                "IFDIALOG|okno dialogowe strony|przyznany|Fermer|wolny-604|700",
+                "WEBIFSEEN|ahk_id 1|brak|wyjscie-604|0|" + reason,
+                "LABEL|wolny-604",
+                "WEBCLICK|Mercalys|btnB4_Valider_LnkBouton",
+                "LABEL|brak-itm8-604",
+                "IFDIALOG|okno dialogowe strony|przyznany|Fermer|brak-itm8-bez-karty-604|700",
+                "WEBIFSEEN|ahk_id 1|brak|wyjscie-604|0|" + reason,
+                "LABEL|brak-itm8-bez-karty-604",
+                "LABEL|wyjscie-604");
+        String failure = CadPriorityMacro.skipped(reason).get("604");
+        assertThat(CadPriorityMacro.assignedElsewhere(failure)).isTrue();
+        assertThat(CadPriorityMacro.assignedElsewhere("ITM8 61509966 nie ma jeszcze w Mercalys")).isFalse();
+    }
+
     @Test
     void readsSkippedAndCompletedFromResult() {
         assertThat(CadPriorityMacro.skipped("Pominięto 604: ITM8 61509966 nie ma jeszcze w Mercalys\r\n"

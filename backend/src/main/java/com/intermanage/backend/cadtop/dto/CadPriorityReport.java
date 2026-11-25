@@ -40,7 +40,16 @@ public record CadPriorityReport(String nrCad, LocalDate from, LocalDateTime cata
     public record Item(String topItm8, String topEan, String topName, String topBrand, String topMark,
             BigDecimal topPurchasePrice, BigDecimal topSalePrice, String itm8, String ean, String name, String brand,
             String subfamilyCode, String supplier, BigDecimal stock, BigDecimal salePrice, BigDecimal purchasePrice,
-            boolean active, Task task, Match match, boolean topKnown, List<Alternative> alternatives, Status status, Run run) {
+            boolean active, Task task, Match match, boolean topKnown, List<Alternative> alternatives, Status status, Run run,
+            Conflict conflict) {
+    }
+
+    /**
+     * ITM8 z cadencier jest w Mercalys już na innej karcie („Ten kod ITM jest już przyznany”): do ręcznej poprawy, bez
+     * makra. Z danych: {@code ean} widziany z tym ITM8 jest dziś na karcie {@code otherItm8}. Z makra: tylko
+     * {@code reason}.
+     */
+    public record Conflict(String ean, String otherItm8, String otherName, String reason) {
     }
 
     public record Alternative(String itm8, String name, BigDecimal purchasePrice) {

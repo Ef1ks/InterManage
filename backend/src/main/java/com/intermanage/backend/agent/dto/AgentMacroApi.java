@@ -84,9 +84,14 @@ public final class AgentMacroApi {
     public record ProductFileExpected(boolean expected) {
     }
 
+    /**
+     * Zlecenie makra. {@code queuePosition}: miejsce w kolejce sklepu (1 = następne), tylko przy {@code QUEUED};
+     * {@code waitReason}: dlaczego jeszcze czeka.
+     */
     public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,
             Instant createdAt, Instant offeredAt, Instant startedAt, Instant finishedAt, int countdownSeconds,
-            List<String> declined, String message, List<String> codes, int itemCount, String reference) {
+            List<String> declined, String message, List<String> codes, int itemCount, String reference,
+            Integer queuePosition, String waitReason) {
     }
 
     /** Co robią komputery sklepu: trwające i ostatnie makra (od najnowszego) i trwająca aktualizacja danych. */

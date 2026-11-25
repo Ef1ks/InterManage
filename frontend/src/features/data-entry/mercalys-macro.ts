@@ -1373,8 +1373,13 @@ const PRICE_CONTROL_SCREEN = {
    * „Suma wyboru” w nagłówku strony zrówna się z „Suma linii”. Bez `|`, bo to separator pól makra.
    */
   selectedPagePattern: String.raw`i)Suma linii\s*:\s*([1-9]\d*)(?!\d)[\s\S]*?Suma wyboru\s*:\s*\1(?!\d)`,
-  /** Artykuł w promocji ma gwiazdkę przed nazwą („* PIERNIK…”): MSI go nie wyrównuje, więc zostaje w tabeli. */
-  promoRowPattern: String.raw`(?<!\S)\*\s`,
+  /**
+   * Po Porównaj MSI: artykuł w promocji MSI pomija, więc zostaje w tabeli (tabela nie musi być pusta), a po przeładowaniu
+   * nic nie jest zaznaczone. Czekamy na „Suma wyboru: 0” ze strony, a nie na wygląd wierszy: wcześniejszy wzorzec
+   * gwiazdki przed nazwą nie łapał każdej promocji i makro stawało na pozostałych artykułach. Przed kliknięciem suma
+   * wyboru równa się sumie linii (od 1), więc warunek nie przejdzie za wcześnie; pusta tabela kończy krok tak samo.
+   */
+  alignedPagePattern: String.raw`i)Suma wyboru\s*:\s*0(?!\d)`,
   /** „Art.w promocji nie będą uwzględnione”: komunikat bez tytułu, przycisk Zamknij. */
   alertWindow: 'ahk_class Internet Explorer_TridentDlgFrame',
   alertText: 'promocji',
@@ -1425,7 +1430,7 @@ export function priceControlRowPattern(file: PriceControlMacroFile) {
 /**
  * „Wprowadź zmiany cen”: dla każdego pliku Taryfa → Kontrola ceny → Pobranie danych → Historia, opracowanie wiersza tego pliku (data,
  * godzina, liczba cen, „Przetw. 0 raz”), Tak, zamknięcie PDF-a, potem Różne ceny: Zaznacz wszystko, czekanie na
- * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na pustą tabelę. Pliku, którego
+ * zaznaczone wiersze, Porównaj MSI, Zamknij przy komunikacie o promocjach i czekanie na „Suma wyboru: 0” (artykuły w promocji zostają w tabeli). Pliku, którego
  * nie ma w historii, makro nie rusza (wpis w podsumowaniu). Wymaga odtwarzacza od wersji 0.60 (WEBROWBUTTON z tekstem wiersza siatki, nie tabelki przycisku; WEBGRIDWAIT z warunkiem page i none z wyrażeniem).
  */
 export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
@@ -1459,8 +1464,8 @@ export function buildPriceControlMacro(files: PriceControlMacroFile[]) {
       `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|page|${screen.selectedPagePattern}|${empty}|Różne ceny bez artykułów: ${label}|${PAGE_TIMEOUT_MS}`,
       `WEBCLICK|${WINDOW}|${screen.alignMsiButton}`,
       `WEBDIALOG|${screen.alertWindow}|${screen.alertText}|${screen.alertButton}|${PRICE_CONTROL_ALERT_MS}`,
-      // Po wyrównaniu zostają tylko artykuły w promocji (albo nic).
-      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|none|${screen.promoRowPattern}|||${PRICE_CONTROL_TIMEOUT_MS}`,
+      // Po wyrównaniu zostają artykuły w promocji (albo nic), bez zaznaczenia; pusta tabela skacze do etykiety zaraz niżej.
+      `WEBGRIDWAIT|${WINDOW}|${screen.alignMsiButton}|page|${screen.alignedPagePattern}|${empty}||${PRICE_CONTROL_TIMEOUT_MS}`,
       `LABEL|${empty}`,
       `LABEL|${skip}`,
     )

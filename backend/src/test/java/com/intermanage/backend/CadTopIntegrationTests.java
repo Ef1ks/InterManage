@@ -304,6 +304,42 @@ class CadTopIntegrationTests {
                 .andExpect(jsonPath("$.items[0].itm8").value("0000099000800"));
     }
 
+    /**
+     * ITM8 z cadencier był kartą z innym EAN-em, który jest dziś na innej karcie: Mercalys odpowie „Ten kod ITM jest
+     * już przyznany”, więc artykuł idzie do ręcznej poprawy, bez makra i bez automatu.
+     */
+    @Test
+    void cadencierItm8OnAnotherCardGoesToManualFix() throws Exception {
+        portalFile("htmldownload/261001_" + region + ".xlsx", write(TOP_HEADER, List.of(
+                topRow("900", "00000600", "5900000000600"), topRow("900", "00000700", "5900000000700"))));
+        tops(file("cad900", "261001", "2026-10-01 10:00:00"));
+        upload(plan(List.of(entry("900", today.minusDays(3)), entry("901", today.plusDays(2)))))
+                .andExpect(status().isOk());
+        sync();
+        String oldImport = productImport(today.minusDays(1) + " 07:00");
+        String productImport = productImport(today + " 00:00");
+        product("0000099000600", "5900000000600", productImport);
+        product("0000000000600", "5900000000999", oldImport);
+        product("0000099000999", "5900000000999", productImport);
+        product("0000099000700", "5900000000700", productImport);
+
+        String url = "/api/stores/" + storeId + "/cadencier-priorities";
+        mvc.perform(get(url).cookie(owner)).andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000099000600')].conflict.otherItm8",
+                        hasItem("0000099000999")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000099000600')].conflict.ean", hasItem("5900000000999")))
+                .andExpect(jsonPath("$.items[?(@.itm8 == '0000099000700')].conflict", hasItem(nullValue())));
+
+        String body = "{\"items\":[{\"itm8\":\"0000099000600\",\"topItm8\":\"0000000000600\"}]}";
+        mvc.perform(post(url + "/macro").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isConflict());
+        assertThat(priorities.automaticItems(UUID.fromString(storeId), 60).orElseThrow().items())
+                .extracting(item -> item.item().itm8()).containsExactly("0000099000700");
+        mvc.perform(post(url + "/runs").cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.report.items[?(@.itm8 == '0000099000600')].status", hasItem("WAITING")));
+    }
+
     /** Priorytetowy, ale nieaktywny; nieaktywna karta z innym ITM8; automat po aktualizacji i wynik makra. */
     @Test
     void inactiveCardsAreFixedByComputerAfterDataUpdate() throws Exception {

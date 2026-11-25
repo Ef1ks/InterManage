@@ -37,7 +37,7 @@ import {
   useUndoCadPriorities,
 } from './api'
 
-type View = 'todo' | 'waiting'
+type View = 'todo' | 'manual' | 'waiting'
 type TaskFilter = 'all' | 'priority' | 'active'
 type SortKey = 'name' | 'itm8' | 'topItm8' | 'stock' | 'topSale'
 
@@ -52,7 +52,12 @@ const SORT: SortAccessors<CadPriorityItem, SortKey> = {
 const shortItm8 = (itm8: string) => itm8.replace(/^0+(?=\d)/, '')
 const pill = 'inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap'
 /** Kartę z kilkoma ITM8 do wyboru i pominiętą przez makro zaznacza człowiek. */
-const selectedByDefault = (item: CadPriorityItem) => item.alternatives.length === 0 && !item.run?.failure
+const selectedByDefault = (item: CadPriorityItem) =>
+  item.alternatives.length === 0 && !item.run?.failure && !item.conflict
+
+const VIEW_PARAMS: Record<View, string | null> = { todo: null, manual: 'reczne', waiting: 'czekaja' }
+const viewOf = (param: string | null): View =>
+  param === 'czekaja' ? 'waiting' : param === 'reczne' ? 'manual' : 'todo'
 
 const TASKS: Record<CadPriorityItem['task'], { label: string; className: string }> = {
   PRIORITY: {
@@ -122,7 +127,7 @@ function StorePriorities({ store }: { store: StoreSummary }) {
 
 function Priorities({ storeId, report }: { storeId: string; report: CadPriorityReport }) {
   const [params, setParams] = useSearchParams()
-  const view: View = params.get('widok') === 'czekaja' ? 'waiting' : 'todo'
+  const view = viewOf(params.get('widok'))
   const { text: query, setText: setQuery } = useSearchParamText('szukaj')
   const [sort, setSort] = useState<SortState<SortKey>>({ key: 'name', direction: 'asc' })
   const [checks, setChecks] = useState<Map<string, boolean>>(new Map())
@@ -139,12 +144,17 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
   const run = useRunCadPriorities(storeId)
   const undo = useUndoCadPriorities(storeId)
 
-  const todo = useMemo(() => report.items.filter((item) => item.status !== 'WAITING'), [report.items])
+  const todo = useMemo(() => report.items.filter((item) => item.status !== 'WAITING' && !item.conflict), [report.items])
+  // ITM8 z cadencier jest w Mercalys na innej karcie: makro go nie ustawi („Ten kod ITM jest już przyznany”).
+  const manual = useMemo(
+    () => report.items.filter((item) => item.status !== 'WAITING' && item.conflict),
+    [report.items],
+  )
   const waiting = useMemo(() => report.items.filter((item) => item.status === 'WAITING'), [report.items])
   const shown = useMemo(
     () =>
       sortRows(
-        (view === 'todo' ? todo : waiting).filter(
+        (view === 'todo' ? todo : view === 'manual' ? manual : waiting).filter(
           (item) =>
             (task === 'all' || (task === 'active') === (item.task === 'ACTIVE')) &&
             matchesSearch(
@@ -165,7 +175,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
         SORT,
         sort,
       ),
-    [view, todo, waiting, task, query, sort],
+    [view, todo, manual, waiting, task, query, sort],
   )
   const isChecked = (item: CadPriorityItem) => checks.get(item.itm8) ?? selectedByDefault(item)
   const check = (items: CadPriorityItem[], value: boolean) =>
@@ -175,7 +185,8 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
       return next
     })
   // Zlecamy tylko to, co widać: wyszukiwanie zawęża też zaznaczenie.
-  const chosen = view === 'todo' ? shown.filter(isChecked) : []
+  const selectable = view !== 'waiting'
+  const chosen = selectable ? shown.filter(isChecked) : []
   const allChecked = shown.length > 0 && chosen.length === shown.length
 
   const undoRuns = (ids: string[], message: string) =>
@@ -287,7 +298,8 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
             setParams(
               (current) => {
                 const updated = new URLSearchParams(current)
-                if (next === 'waiting') updated.set('widok', 'czekaja')
+                const param = VIEW_PARAMS[next]
+                if (param) updated.set('widok', param)
                 else updated.delete('widok')
                 return updated
               },
@@ -296,6 +308,9 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
           }
           options={[
             { value: 'todo', label: `Do ustawienia (${todo.length})` },
+            ...(manual.length > 0 || view === 'manual'
+              ? [{ value: 'manual' as const, label: `Do ręcznej poprawy (${manual.length})` }]
+              : []),
             { value: 'waiting', label: `Czekają na raport (${waiting.length})` },
           ]}
         />
@@ -312,7 +327,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
         <div className="min-w-64 flex-1">
           <SearchInput value={query} onChange={setQuery} placeholder="Szukaj: nazwa, EAN, ITM8, marka, dostawca" />
         </div>
-        {view === 'todo' && (
+        {selectable && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
@@ -323,17 +338,19 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
               <CheckIcon />
               Ustawione ręcznie ({chosen.length})
             </Button>
-            <Button
-              variant="outline"
-              disabled={chosen.length === 0 || remote.busy}
-              loading={run.isPending}
-              title="Makro do schowka: lewy Alt+E uruchamia je w Mercalys na tym komputerze"
-              onClick={() => void start(true)}
-            >
-              <ClipboardCopyIcon />
-              Makro do Mercalys ({chosen.length})
-            </Button>
-            {canEdit && computers.length > 0 && (
+            {view === 'todo' && (
+              <Button
+                variant="outline"
+                disabled={chosen.length === 0 || remote.busy}
+                loading={run.isPending}
+                title="Makro do schowka: lewy Alt+E uruchamia je w Mercalys na tym komputerze"
+                onClick={() => void start(true)}
+              >
+                <ClipboardCopyIcon />
+                Makro do Mercalys ({chosen.length})
+              </Button>
+            )}
+            {view === 'todo' && canEdit && computers.length > 0 && (
               <RemoteMacroButton
                 computers={computers}
                 label={`Wykonaj na wolnym komputerze (${chosen.length})`}
@@ -351,6 +368,12 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
         </div>
       )}
 
+      {view === 'manual' && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          ITM8 z cadencier jest w Mercalys już przypisany do innej karty, więc makro go nie ustawi (Mercalys odpowiada
+          „Ten kod ITM jest już przyznany”). Popraw karty ręcznie, a potem oznacz je jako ustawione.
+        </p>
+      )}
       {shown.length === 0 ? (
         <Card className="items-center gap-1 px-6 py-10 text-center">
           <p className="font-medium">
@@ -358,7 +381,9 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
               ? 'Brak artykułów dla tych filtrów'
               : view === 'todo'
                 ? 'Wszystkie ITM8 z cadencier są priorytetowe i aktywne'
-                : 'Nic nie czeka na raport kartoteki'}
+                : view === 'manual'
+                  ? 'Nic nie czeka na ręczną poprawę'
+                  : 'Nic nie czeka na raport kartoteki'}
           </p>
         </Card>
       ) : (
@@ -366,7 +391,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
           <Table className="tabular-nums">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                {view === 'todo' && (
+                {selectable && (
                   <TableHead className="w-8 pl-4">
                     <input
                       type="checkbox"
@@ -392,7 +417,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
                 <SortHead column="topSale" sort={sort} onSort={setSort} right>
                   Cena w cadencier
                 </SortHead>
-                <TableHead className="pr-4">{view === 'todo' ? 'Uwagi' : 'Zlecone'}</TableHead>
+                <TableHead className="pr-4">{selectable ? 'Uwagi' : 'Zlecone'}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -400,7 +425,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
                 <PriorityRow
                   key={item.itm8}
                   item={item}
-                  checked={view === 'todo' ? isChecked(item) : null}
+                  checked={selectable ? isChecked(item) : null}
                   onCheck={(value) => check([item], value)}
                   choice={choices.get(item.itm8) ?? item.topItm8}
                   onChoice={(topItm8) => setChoices((current) => new Map(current).set(item.itm8, topItm8))}
@@ -522,7 +547,8 @@ function PriorityRow({
         ) : (
           <span className="flex flex-wrap gap-1">
             <span className={cn(pill, TASKS[item.task].className)}>{TASKS[item.task].label}</span>
-            {item.status === 'FAILED' && item.run && (
+            {item.conflict && <ConflictNote conflict={item.conflict} topItm8={item.topItm8} />}
+            {item.status === 'FAILED' && item.run && !item.conflict?.reason && (
               <span
                 className={cn(pill, 'bg-red-200 whitespace-normal text-red-950 dark:bg-red-900/70 dark:text-red-100')}
               >
@@ -553,6 +579,17 @@ function PriorityRow({
         )}
       </TableCell>
     </TableRow>
+  )
+}
+
+function ConflictNote({ conflict, topItm8 }: { conflict: NonNullable<CadPriorityItem['conflict']>; topItm8: string }) {
+  return (
+    <span className={cn(pill, 'bg-red-200 whitespace-normal text-red-950 dark:bg-red-900/70 dark:text-red-100')}>
+      ITM8 {shortItm8(topItm8)} jest na innej karcie
+      {conflict.otherItm8
+        ? `: ${conflict.otherName ?? 'karta'} (ITM8 ${shortItm8(conflict.otherItm8)}, EAN ${conflict.ean})`
+        : ' (makro: „Ten kod ITM jest już przyznany”)'}
+    </span>
   )
 }
 

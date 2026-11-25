@@ -34,7 +34,8 @@ class PriceControlMacroTests {
         assertThat(macro.lines()).endsWith(
                 "WEBCLICK|Mercalys|btnB6_AlignerMSI_LnkBouton",
                 "WEBDIALOG|ahk_class Internet Explorer_TridentDlgFrame|promocji|Fermer|15000",
-                "WEBGRIDWAIT|Mercalys|btnB6_AlignerMSI_LnkBouton|none|(?<!\\S)\\*\\s|||120000",
+                "WEBGRIDWAIT|Mercalys|btnB6_AlignerMSI_LnkBouton|page|i)Suma wyboru\\s*:\\s*0(?!\\d)"
+                        + "|zmiana-cen-1-bez-roznic||120000",
                 "LABEL|zmiana-cen-1-bez-roznic",
                 "LABEL|zmiana-cen-1",
                 "WINMIN|Mercalys ahk_exe Mercalys.exe");

@@ -258,9 +258,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1795598425.315539,
-    "seen": 1795598527.6514182,
-    "ast_hash": "f7c744a24c523ed6691eb3224d8fb03a",
+    "mtime": 1795602058.1995513,
+    "seen": 1795602289.2185943,
+    "ast_hash": "2d4ae450fbd0dbef0b08f122a9f49679",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795598458.236331,
-    "seen": 1795598527.684166,
-    "ast_hash": "73f66fc3636b11ead383a17f5cf4fe3e",
+    "mtime": 1795602222.0628793,
+    "seen": 1795602289.2501404,
+    "ast_hash": "e07eb36ded98d0a9b0bd9caef1de5585",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -7926,9 +7926,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/data-entry/mercalys-macro.ts": {
-    "mtime": 1795591105.2692204,
-    "seen": 1795591196.3239493,
-    "ast_hash": "9987af84456fa26d525cfdb9756e230a",
+    "mtime": 1795600632.507837,
+    "seen": 1795600765.4150972,
+    "ast_hash": "f546a90aff81c34112d1a163d660cc8b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/controller/DataEntryInvoiceClosingController.java": {
@@ -14538,21 +14538,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/AgentMacroController.java": {
-    "mtime": 1795592503.4481213,
-    "seen": 1795592779.0199797,
-    "ast_hash": "cf971cf62a0ad0c56c3edca2d0a3539b",
+    "mtime": 1795601125.0675542,
+    "seen": 1795601649.7670739,
+    "ast_hash": "1864f66378a821895826c91dca8fbf1f",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/dto/AgentMacroApi.java": {
-    "mtime": 1795592503.4481213,
-    "seen": 1795592779.0209827,
-    "ast_hash": "9cdb282c22287d727dc1c0448afc1ef6",
+    "mtime": 1795601079.4185953,
+    "seen": 1795601649.7680767,
+    "ast_hash": "dda2fb7e2d6e35b8ab3051e4b7c8af8e",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroJob.java": {
-    "mtime": 1795554434.287047,
-    "seen": 1795554823.512449,
-    "ast_hash": "ecf0a8210f6b370abb4d19698ba1ff17",
+    "mtime": 1795600983.3513598,
+    "seen": 1795601649.7690742,
+    "ast_hash": "a61f5028ee6a536dd672f011cedd0ced",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroKind.java": {
@@ -14562,21 +14562,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/entity/AgentMacroStatus.java": {
-    "mtime": 1795451013.4271538,
-    "seen": 1795494088.3595357,
-    "ast_hash": "0ab5064676c8fbffeeed7fa630d96660",
+    "mtime": 1795600957.754192,
+    "seen": 1795601649.7690742,
+    "ast_hash": "c0b32244649e1c20e3a00ab27f756538",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/repository/AgentMacroJobRepository.java": {
-    "mtime": 1795592503.4471202,
-    "seen": 1795592779.0229797,
-    "ast_hash": "46135328ecaad61423395d4d58deb7bb",
+    "mtime": 1795601125.0675542,
+    "seen": 1795601649.7700737,
+    "ast_hash": "044db5c7c9976c722ed1f99bc6de6d6a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/AgentMacroService.java": {
-    "mtime": 1795592503.4481213,
-    "seen": 1795592779.0239809,
-    "ast_hash": "c3e40b1ca1fa9ef97a9f713f2a5225c8",
+    "mtime": 1795601463.8470433,
+    "seen": 1795601649.7710738,
+    "ast_hash": "eabad0903171f3a2aeedadf468944d29",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/basedelivery/component/Itm8Macro.java": {
@@ -14586,21 +14586,21 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/AgentMacroIntegrationTests.java": {
-    "mtime": 1795592503.449122,
-    "seen": 1795592779.2573297,
-    "ast_hash": "d1aaef18ee74a495ec9af8acca61f868",
+    "mtime": 1795601476.3134975,
+    "seen": 1795601650.015502,
+    "ast_hash": "223fce2b161ac2fd5ebee1c9796d88d8",
     "semantic_hash": ""
   },
   "frontend/src/features/agent-macros/RemoteMacro.tsx": {
-    "mtime": 1795592548.0381315,
-    "seen": 1795592779.284336,
-    "ast_hash": "e2c49b751d68f8a15e904b3e036a08ec",
+    "mtime": 1795601387.13352,
+    "seen": 1795601650.0425882,
+    "ast_hash": "6ec653245341df056d1181af13d1ba4f",
     "semantic_hash": ""
   },
   "frontend/src/features/agent-macros/api.ts": {
-    "mtime": 1795592548.067132,
-    "seen": 1795592779.284336,
-    "ast_hash": "368b088a69edd3ecdbb06ab05ef00624",
+    "mtime": 1795601387.13352,
+    "seen": 1795601650.0425882,
+    "ast_hash": "086e3e2c76ec07334daf0b3d38f0c2b1",
     "semantic_hash": ""
   },
   "agent/src/MercalysPath.cs": {
@@ -14766,9 +14766,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/CadTopIntegrationTests.java": {
-    "mtime": 1795554655.1772847,
-    "seen": 1795554823.7971306,
-    "ast_hash": "a4fa25780f86b93946e5a6b560fe25e1",
+    "mtime": 1795602150.4916196,
+    "seen": 1795602289.1269555,
+    "ast_hash": "d65d3f369cb7cdef3cf776bf52abe847",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/CadTopRealFileTests.java": {
@@ -14802,9 +14802,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/component/CadPriorityMacro.java": {
-    "mtime": 1795597861.0253267,
-    "seen": 1795597992.317032,
-    "ast_hash": "030eb2a1ce17814277509c19fb685677",
+    "mtime": 1795601979.1181884,
+    "seen": 1795602288.9266298,
+    "ast_hash": "090229d10e9a156aaab50bd175c66523",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/controller/CadPriorityController.java": {
@@ -14814,9 +14814,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/dto/CadPriorityReport.java": {
-    "mtime": 1795554434.2850473,
-    "seen": 1795554823.5459616,
-    "ast_hash": "3cdbac9fcd1171cec30e4239ee0044f5",
+    "mtime": 1795601978.9077494,
+    "seen": 1795602288.9276302,
+    "ast_hash": "2f50296acb8d46a8657281a8091a3263",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/dto/CadPriorityRequest.java": {
@@ -14832,21 +14832,21 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/repository/CadPriorityRunRepository.java": {
-    "mtime": 1795554434.2850473,
-    "seen": 1795554823.5479608,
-    "ast_hash": "6de612b7a564efe2c3ead650463b51a4",
+    "mtime": 1795601949.551787,
+    "seen": 1795602288.9296303,
+    "ast_hash": "25793b30d59c86b8d49d13c12ca477d1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/cadtop/service/CadPriorityService.java": {
-    "mtime": 1795554434.286047,
-    "seen": 1795554823.5479608,
-    "ast_hash": "84a20ed1933c6a160c353d099d493012",
+    "mtime": 1795602017.616554,
+    "seen": 1795602288.9306302,
+    "ast_hash": "e33afd0b33a4db8f9bd9574f7a8c59ed",
     "semantic_hash": ""
   },
   "frontend/src/features/cad-priority/CadPriorityPage.tsx": {
-    "mtime": 1795592503.4611213,
-    "seen": 1795592779.2893357,
-    "ast_hash": "986ba27d7d403f81c557d32d940e9130",
+    "mtime": 1795602059.16388,
+    "seen": 1795602289.1624086,
+    "ast_hash": "a05a5fce76cffa9d106c99ca33534f2a",
     "semantic_hash": ""
   },
   "frontend/src/features/cad-priority/api.ts": {
@@ -15000,15 +15000,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/PriceControlMacro.java": {
-    "mtime": 1795544470.5127742,
-    "seen": 1795544780.6288576,
-    "ast_hash": "5f44eb19195e7123ae9ae2415a9f5986",
+    "mtime": 1795600632.574641,
+    "seen": 1795600765.1731334,
+    "ast_hash": "3dcd0e0f481bfe469fe4519d29aa3ffb",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/PriceControlMacroTests.java": {
-    "mtime": 1795544540.4976213,
-    "seen": 1795544780.8225899,
-    "ast_hash": "09e29755fb952480fc07a1856b9f23fa",
+    "mtime": 1795600632.6023557,
+    "seen": 1795600765.3798306,
+    "ast_hash": "47faa88bf20b42eac2b9a032a03e37f1",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/service/CadPriorityMacroService.java": {
@@ -15030,9 +15030,9 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/CadPriorityMacroTests.java": {
-    "mtime": 1795597861.06549,
-    "seen": 1795597992.5107083,
-    "ast_hash": "aec656af271e28fcb8c3f4bf3c17a65a",
+    "mtime": 1795602164.909896,
+    "seen": 1795602289.1269555,
+    "ast_hash": "00d9fda78f54ac488e36cef20a874558",
     "semantic_hash": ""
   },
   "agent/src/MacroPlayback.cs": {
@@ -15078,9 +15078,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/agent-macros/AgentActivity.tsx": {
-    "mtime": 1795592503.4621234,
-    "seen": 1795592779.284336,
-    "ast_hash": "35d2e05ddacaaaeec7c02a28944655a2",
+    "mtime": 1795601387.1340487,
+    "seen": 1795601650.0425882,
+    "ast_hash": "568fe822bfc61bc73326fc0ccaf421bc",
     "semantic_hash": ""
   },
   "frontend/src/features/agent-macros/hidden-results.ts": {

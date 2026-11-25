@@ -24,7 +24,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 /**
- * Makro zlecone z przeglądarki na wolnym komputerze sklepu. Treść składa serwer ({@code macro}, bez hasła Mercalys:
+ * Makro zlecone z przeglądarki (albo przez serwer) na wolnym komputerze sklepu; zlecenie z przeglądarki, które nie
+ * może ruszyć od razu, czeka w kolejce ({@link AgentMacroStatus#QUEUED}). Treść składa serwer ({@code macro}, bez hasła Mercalys:
  * dokłada je agent). {@code agentId}: komputer, któremu zlecenie zaproponowano albo który je wykonuje;
  * {@code declinedAgentIds}: komputery, które odmówiły (pracownik anulował odliczanie albo nie odpowiedziały).
  */
@@ -99,6 +100,14 @@ public class AgentMacroJob {
     @JoinColumn(name = "cancelled_by")
     private AppUser cancelledBy;
 
+    /** Dlaczego zlecenie z kolejki jeszcze nie ruszyło (pokazywane zlecającemu). */
+    @Column(name = "wait_reason")
+    private String waitReason;
+
+    /** Zlecenie z kolejki rusza najwcześniej wtedy (po „Anuluj” na wszystkich komputerach). */
+    @Column(name = "retry_at")
+    private Instant retryAt;
+
     protected AgentMacroJob() {
     }
 
@@ -124,6 +133,35 @@ public class AgentMacroJob {
         status = AgentMacroStatus.OFFERED;
         agentId = agent;
         offeredAt = now;
+        waitReason = null;
+        retryAt = null;
+    }
+
+    /**
+     * Do kolejki (albo z powrotem do niej, gdy żaden komputer go nie wziął): zostaje na swoim miejscu, bo kolejność
+     * to chwila zlecenia. Komputery, które odmówiły, dostaną je znowu przy następnej próbie.
+     */
+    public void queue(String reason, Instant notBefore) {
+        status = AgentMacroStatus.QUEUED;
+        agentId = null;
+        offeredAt = null;
+        declinedAgentIds = new ArrayList<>();
+        waitReason = reason;
+        retryAt = notBefore;
+    }
+
+    /** Powód czekania, bez zapisu, gdy się nie zmienił. */
+    public void waiting(String reason) {
+        if (!java.util.Objects.equals(waitReason, reason)) {
+            waitReason = reason;
+        }
+    }
+
+    /** Anulowane przed startem wraca do kolejki na swoje miejsce. */
+    public void restore() {
+        cancelledBy = null;
+        finishedAt = null;
+        queue(null, null);
     }
 
     /** Komputer odmówił (albo nie odpowiedział): nie dostanie już tego zlecenia. */
@@ -223,5 +261,13 @@ public class AgentMacroJob {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public String getWaitReason() {
+        return waitReason;
+    }
+
+    public Instant getRetryAt() {
+        return retryAt;
     }
 }

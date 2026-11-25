@@ -24,6 +24,7 @@ import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.cadtop.component.CadPriorityMacro;
 import com.intermanage.backend.cadtop.dto.CadPriorityReport;
 import com.intermanage.backend.cadtop.dto.CadPriorityReport.Alternative;
+import com.intermanage.backend.cadtop.dto.CadPriorityReport.Conflict;
 import com.intermanage.backend.cadtop.dto.CadPriorityReport.Item;
 import com.intermanage.backend.cadtop.dto.CadPriorityReport.Run;
 import com.intermanage.backend.cadtop.dto.CadPriorityReport.RunResult;
@@ -96,14 +97,38 @@ public class CadPriorityService {
         if (!byCard.isEmpty()) {
             runs.findActive(storeId, byCard.keySet()).forEach(run -> latestRuns.putIfAbsent(run.getItm8(), run));
         }
-        List<Item> items = byCard.values().stream()
-                .map(card -> item(card, latestRuns.get(card.getFirst().getItm8()), generatedAt)).toList();
+        Map<String, Conflict> conflicts = conflicts(storeId, importId, byCard);
+        List<Item> items = byCard.values().stream().map(card -> item(card, latestRuns.get(card.getFirst().getItm8()),
+                generatedAt, conflicts)).toList();
         return new CadPriorityReport(current.file().getNrCad(), current.from(), generatedAt, counts.getTop(),
                 counts.getTop() - counts.getMissing() - counts.getInactive(), (int) variants,
                 (int) (counts.getMissing() - matchedTops), automatic, items);
     }
 
-    private static Item item(List<Match> card, CadPriorityRun run, LocalDateTime catalogGeneratedAt) {
+    /**
+     * ITM8 z cadencier, które dane sklepu pokazują na innej karcie: klucz = karta + ITM8 z cadencier. Liczone dla
+     * wszystkich par karty (także alternatyw), żeby wybór innego ITM8 też to widział.
+     */
+    private Map<String, Conflict> conflicts(UUID storeId, UUID importId, Map<String, List<Match>> byCard) {
+        List<Match> pairs = byCard.values().stream().flatMap(List::stream)
+                .filter(match -> !match.getTopItm8().equals(match.getItm8())).toList();
+        if (pairs.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Conflict> result = new HashMap<>();
+        runs.findAssignedElsewhere(storeId, importId, pairs.stream().map(Match::getTopItm8).toArray(String[]::new),
+                pairs.stream().map(Match::getItm8).toArray(String[]::new))
+                .forEach(found -> result.putIfAbsent(conflictKey(found.getItm8(), found.getTopItm8()),
+                        new Conflict(found.getEan(), found.getOtherItm8(), found.getOtherName(), null)));
+        return result;
+    }
+
+    private static String conflictKey(String card, String topItm8) {
+        return card + "|" + topItm8;
+    }
+
+    private static Item item(List<Match> card, CadPriorityRun run, LocalDateTime catalogGeneratedAt,
+            Map<String, Conflict> conflicts) {
         // Zlecony wcześniej inny ITM8 z tym EAN-em zostaje przy wierszu jako wybrany.
         Match chosen = run == null ? card.getFirst() : card.stream()
                 .filter(match -> match.getTopItm8().equals(run.getTopItm8())).findFirst().orElse(card.getFirst());
@@ -111,6 +136,13 @@ public class CadPriorityService {
                 .map(match -> new Alternative(match.getTopItm8(), match.getTopName(), match.getTopPurchasePrice()))
                 .toList();
         Status status = status(run, chosen.getTopItm8(), catalogGeneratedAt);
+        // Makro trafiło na „Ten kod ITM jest już przyznany”: zostaje do ręcznej poprawy bez względu na wiek zlecenia.
+        Conflict known = conflicts.get(conflictKey(chosen.getItm8(), chosen.getTopItm8()));
+        String reason = run != null && run.getTopItm8().equals(chosen.getTopItm8())
+                && CadPriorityMacro.assignedElsewhere(run.getFailure()) ? run.getFailure() : null;
+        Conflict conflict = known == null && reason == null ? null
+                : known == null ? new Conflict(null, null, null, reason)
+                        : new Conflict(known.ean(), known.otherItm8(), known.otherName(), reason);
         boolean active = Boolean.TRUE.equals(chosen.getActive());
         Task task = chosen.getTopItm8().equals(chosen.getItm8()) ? Task.ACTIVE
                 : active ? Task.PRIORITY : Task.PRIORITY_AND_ACTIVE;
@@ -121,7 +153,7 @@ public class CadPriorityService {
                 active, task, CadPriorityReport.Match.values()[chosen.getRank()],
                 chosen.getTopKnown(), alternatives, status, status == Status.TODO ? null
                         : new Run(run.getId(), run.getSource(), run.getCreatedAt(), run.getCreatedBy() == null ? null
-                                : run.getCreatedBy().getDisplayName(), run.getFailure()));
+                                : run.getCreatedBy().getDisplayName(), run.getFailure()), conflict);
     }
 
     private static Status status(CadPriorityRun run, String topItm8, LocalDateTime catalogGeneratedAt) {
@@ -151,14 +183,24 @@ public class CadPriorityService {
     /** „Wykonaj makro”: makro do schowka dla zaznaczonych artykułów, które przechodzą do czekających na raport. */
     @Transactional
     public RunResult macro(UUID storeId, CadPriorityRequest request, UUID userId) {
-        Chosen chosen = chosen(storeId, request);
+        Chosen chosen = withoutConflicts(chosen(storeId, request));
         return save(storeId, chosen, CadPriorityRun.Source.MACRO, CadPriorityMacro.build(chosen.macroItems()), userId);
     }
 
     /** Artykuły z listy do makra na komputerze sklepu (409, gdy któregoś już na niej nie ma). */
     @Transactional(readOnly = true)
     public Chosen chosenForComputer(UUID storeId, CadPriorityRequest request) {
-        return chosen(storeId, request);
+        return withoutConflicts(chosen(storeId, request));
+    }
+
+    /** ITM8 na innej karcie Mercalys odrzuci: takie artykuły poprawia się ręcznie, nie makrem. */
+    private static Chosen withoutConflicts(Chosen chosen) {
+        chosen.items().stream().filter(ChosenItem::conflicted).findFirst().ifPresent(item -> {
+            throw ApiException.conflict("ITM8 " + CadPriorityMacro.key(item.topItm8()) + " jest już na innej karcie"
+                    + " w Mercalys. Artykuł " + CadPriorityMacro.key(item.item().itm8())
+                    + " popraw ręcznie i oznacz jako ustawiony.");
+        });
+        return chosen;
     }
 
     /** Zlecenia makra, które przyjął komputer sklepu ({@code userId} puste = zlecił je serwer). */
@@ -185,6 +227,7 @@ public class CadPriorityService {
                 .filter(item -> item.status() == Status.TODO
                         || item.status() == Status.FAILED && item.run().failure() == null)
                 .filter(item -> item.alternatives().isEmpty() || item.run() != null)
+                .filter(item -> item.conflict() == null)
                 .filter(item -> !withdrawn.contains(item.itm8())).limit(limit)
                 .map(item -> new ChosenItem(item, item.topItm8())).toList();
         return items.isEmpty() ? Optional.empty() : Optional.of(new Chosen(report.nrCad(), items));
@@ -225,6 +268,11 @@ public class CadPriorityService {
     }
 
     public record ChosenItem(Item item, String topItm8) {
+
+        /** Konflikt dotyczy ITM8 wybranego przy wierszu; inny wybrany ITM8 z cadencier może być wolny. */
+        boolean conflicted() {
+            return item.conflict() != null && item.topItm8().equals(topItm8);
+        }
     }
 
     public record Chosen(String nrCad, List<ChosenItem> items) {

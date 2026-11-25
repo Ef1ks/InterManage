@@ -10,11 +10,21 @@ import { ApiError } from '@/lib/api'
 import type { AgentMacroJob } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { cancelMacro, isActive, markLoadedByHand, type RecentMacro, retryMacro, useAgentActivity } from './api'
+import {
+  cancelMacro,
+  isActive,
+  markLoadedByHand,
+  onComputer,
+  type RecentMacro,
+  restoreMacro,
+  retryMacro,
+  useAgentActivity,
+} from './api'
 
 const time = (value: string) => new Date(value).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
 
 const LABELS: Record<AgentMacroJob['status'], string> = {
+  QUEUED: 'w kolejce',
   OFFERED: 'odliczanie',
   RUNNING: 'trwa',
   DONE: 'zakończone',
@@ -36,12 +46,15 @@ export function AgentActivity() {
   const { data } = useAgentActivity(store?.id, canView)
   if (!store || !canView || !data || (data.jobs.length === 0 && !data.update)) return null
 
-  const active = data.jobs.find((job) => isActive(job))
-  const text = active
+  const active = data.jobs.find((job) => onComputer(job))
+  const queued = data.jobs.filter((job) => job.status === 'QUEUED').length
+  const waiting = queued > 0 ? `w kolejce: ${queued}` : null
+  const current = active
     ? `${active.title}${active.computer ? ` · ${active.computer}` : ''}`
     : data.update
       ? `Aktualizacja danych · ${data.update.computer}`
       : null
+  const text = current && waiting ? `${current} · ${waiting}` : (current ?? (waiting && `Makra ${waiting}`))
   const problem = !text && data.jobs[0]?.fresh && failed(data.jobs[0])
   return (
     <Popover.Root>
@@ -138,17 +151,40 @@ function JobRow({
           <p className="font-medium break-words">{job.title}</p>
           <p className="text-xs text-muted-foreground">
             {time(job.startedAt ?? job.createdAt)} · {LABELS[job.status]}
+            {job.status === 'QUEUED' && job.queuePosition && ` (${job.queuePosition}.)`}
             {job.computer && ` · ${job.computer}`} · {job.requestedBy}
           </p>
+          {job.status === 'QUEUED' && job.waitReason && (
+            <p className="mt-0.5 text-xs break-words text-muted-foreground">Czeka: {job.waitReason}</p>
+          )}
           {failed(job) && job.message && (
             <p className="mt-1 max-h-24 overflow-auto text-xs break-words whitespace-pre-line">{job.message}</p>
           )}
         </div>
       </div>
-      {((canEdit && job.status === 'OFFERED') || canRetry) && (
+      {((canEdit && (job.status === 'OFFERED' || job.status === 'QUEUED')) || canRetry) && (
         <div className="flex flex-wrap gap-2 pl-6">
-          {canEdit && job.status === 'OFFERED' && (
-            <Button size="sm" variant="outline" loading={busy} onClick={() => act(() => cancelMacro(storeId, job.id))}>
+          {canEdit && (job.status === 'OFFERED' || job.status === 'QUEUED') && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={busy}
+              onClick={() =>
+                act(async () => {
+                  await cancelMacro(storeId, job.id)
+                  toast.success('Makro anulowane', {
+                    action: {
+                      label: 'Przywróć',
+                      onClick: () => {
+                        restoreMacro(storeId, job.id).catch((error) =>
+                          toast.error(error instanceof ApiError ? error.message : 'Nie udało się przywrócić makra'),
+                        )
+                      },
+                    },
+                  })
+                })
+              }
+            >
               Anuluj
             </Button>
           )}

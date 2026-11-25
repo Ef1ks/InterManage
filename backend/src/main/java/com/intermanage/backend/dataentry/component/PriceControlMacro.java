@@ -44,8 +44,11 @@ public final class PriceControlMacro {
     private static final String ALIGN_MSI = "btnB6_AlignerMSI_LnkBouton";
     private static final String SELECTED_PAGE =
             "i)Suma linii\\s*:\\s*([1-9]\\d*)(?!\\d)[\\s\\S]*?Suma wyboru\\s*:\\s*\\1(?!\\d)";
-    /** Artykuł w promocji (gwiazdka przed nazwą): MSI go nie wyrównuje, więc zostaje w tabeli. */
-    private static final String PROMO_ROW = "(?<!\\S)\\*\\s";
+    /**
+     * Po Porównaj MSI artykuły w promocji zostają w tabeli bez zaznaczenia, więc czekamy na „Suma wyboru: 0”, a nie na
+     * pustą tabelę ani na wygląd wiersza (gwiazdka nie łapała każdej promocji).
+     */
+    private static final String ALIGNED_PAGE = "i)Suma wyboru\\s*:\\s*0(?!\\d)";
     private static final String ALERT_WINDOW = "ahk_class Internet Explorer_TridentDlgFrame";
     private static final String ALERT_TEXT = "promocji";
 
@@ -114,7 +117,7 @@ public final class PriceControlMacro {
                         + "|Różne ceny bez artykułów: " + label + "|" + PAGE_TIMEOUT_MS,
                 "WEBCLICK|" + WINDOW + "|" + ALIGN_MSI,
                 "WEBDIALOG|" + ALERT_WINDOW + "|" + ALERT_TEXT + "|Fermer|" + ALERT_MS,
-                "WEBGRIDWAIT|" + WINDOW + "|" + ALIGN_MSI + "|none|" + PROMO_ROW + "|||" + WORK_TIMEOUT_MS,
+                "WEBGRIDWAIT|" + WINDOW + "|" + ALIGN_MSI + "|page|" + ALIGNED_PAGE + "|" + empty + "||" + WORK_TIMEOUT_MS,
                 "LABEL|" + empty,
                 "LABEL|" + skip));
     }

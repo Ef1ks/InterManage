@@ -56,8 +56,16 @@ import com.intermanage.backend.store.repository.StoreRepository;
  * dostaje komputer z działającym odtwarzaczem makr, odblokowanym ekranem i bez innego makra, najdłużej nieużywany
  * (wolny = {@link #FREE_AFTER} bez ruchu myszy i klawiatury), przy remisie preferowany. Agent pokazuje odliczanie
  * ({@link #COUNTDOWN_SECONDS}) z „Anuluj”: anulowanie albo brak odpowiedzi w {@link #OFFER_TIMEOUT} przekazuje
- * zlecenie kolejnemu komputerowi, a gdy żadnego nie ma, zlecenie kończy się „Żaden komputer nie jest wolny”.
- * W sklepie najwyżej jedno makro naraz (Mercalys jest jeden).
+ * zlecenie kolejnemu komputerowi.
+ *
+ * <p>Kolejka: w sklepie najwyżej jedno makro naraz. Zlecenie z przeglądarki, które nie może ruszyć od razu (trwa
+ * inne makro, żaden komputer nie jest wolny, wszyscy anulowali), czeka w bazie ({@link AgentMacroStatus#QUEUED}) i
+ * rusza samo, po kolei według chwili zlecenia ({@link #dispatch}); nie wygasa, zdejmuje je tylko „Anuluj”. Kolejkę
+ * przesuwa każde zgłoszenie agenta (agent czeka na makro jednym długim żądaniem po drugim, więc zgłasza się co
+ * najwyżej co minutę) i każdy odczyt stanu, a kolejka leży w bazie: restart serwera albo zamknięta przeglądarka
+ * niczego nie gubią. Makra serwera (pliki nowych artykułów, zmiany cen, ITM8 po
+ * aktualizacji) mają własne czekanie w swoich tabelach i ustępują kolejce: przy trwającym albo czekającym makrze
+ * dostają 409 i serwer ponawia je sam.
  */
 @Service
 public class AgentMacroService {
@@ -80,6 +88,11 @@ public class AgentMacroService {
     private static final Duration RECENT = Duration.ofHours(12);
     private static final int RECENT_LIMIT = 15;
     private static final String SERVER_REQUEST = "Intermanage, po aktualizacji danych";
+    /** Po „Anuluj” na wszystkich komputerach zlecenie z kolejki wraca do nich dopiero po tym czasie. */
+    public static final Duration DECLINED_RETRY = Duration.ofMinutes(10);
+    private static final String WAITS_FOR_EARLIER = "czeka na wcześniejsze makro sklepu";
+    /** Zgłoszenie „wolny” liczy się jako koniec makra dopiero tyle po starcie (zgłoszenie sprzed startu w drodze). */
+    private static final Duration RESULT_GRACE = Duration.ofSeconds(30);
 
     /** Makra dostawy z bazy: polecenia odtwarzacza od 0.67 i wysyłka bonów przez agenta od 1.8.0. */
     private static final Set<AgentMacroKind> BASE_KINDS = Set.of(AgentMacroKind.BASE_RECEIVE,
@@ -264,13 +277,18 @@ public class AgentMacroService {
         jobs.flush();
         Map<UUID, String> labels = new HashMap<>();
         agents.findByStore(storeId).forEach(agent -> labels.put(agent.getId(), label(agent)));
-        List<AgentMacroApi.Job> recent = jobs.findRecent(storeId, now.minus(RECENT), Limit.of(RECENT_LIMIT)).stream()
+        List<UUID> queue = jobs.findQueuedIds(storeId);
+        List<AgentMacroJobRepository.Recent> found = new ArrayList<>(jobs.findPending(storeId));
+        found.addAll(jobs.findRecent(storeId, now.minus(RECENT), Limit.of(RECENT_LIMIT)));
+        found.sort(Comparator.comparing(AgentMacroJobRepository.Recent::getCreatedAt).reversed());
+        List<AgentMacroApi.Job> recent = found.stream()
                 .map(job -> new AgentMacroApi.Job(job.getId(), job.getKind().name(), job.getTitle(),
                         job.getStatus().name(), job.getAgentId() == null ? null : labels.get(job.getAgentId()),
                         job.getRequestedBy() == null ? SERVER_REQUEST : job.getRequestedBy(), job.getCreatedAt(),
                         job.getOfferedAt(), job.getStartedAt(), job.getFinishedAt(), countdown(job.getKind()),
                         job.getDeclinedAgentIds().stream().map(id -> labels.getOrDefault(id, "komputer")).toList(),
-                        job.getResultMessage(), job.getResultCodes(), job.getItemCount(), job.getReference()))
+                        job.getResultMessage(), job.getResultCodes(), job.getItemCount(), job.getReference(),
+                        queue.contains(job.getId()) ? queue.indexOf(job.getId()) + 1 : null, job.getWaitReason()))
                 .toList();
         return new AgentMacroApi.Activity(recent, agents.findRunningUpdate(storeId)
                 .map(update -> new AgentMacroApi.Update(update.getMachineName() == null ? update.getName()
@@ -292,10 +310,26 @@ public class AgentMacroService {
         if (job.getStatus() == AgentMacroStatus.RUNNING) {
             throw ApiException.conflict("Makro już działa na komputerze. Zatrzymać je można tylko tam (Esc).");
         }
-        if (job.getStatus() == AgentMacroStatus.OFFERED) {
+        if (job.getStatus() == AgentMacroStatus.OFFERED || job.getStatus() == AgentMacroStatus.QUEUED) {
             job.cancel(users.getReferenceById(userId), Instant.now());
             announce(job);
+            jobs.flush();
+            dispatch(storeId, Instant.now());
         }
+        return response(job);
+    }
+
+    /** „Przywróć” po anulowaniu: zlecenie wraca do kolejki na swoje miejsce (tylko takie, które nie ruszyło). */
+    @Transactional
+    public AgentMacroApi.Job restore(UUID storeId, UUID id) {
+        AgentMacroJob job = job(storeId, id);
+        if (job.getStatus() != AgentMacroStatus.CANCELLED || job.getStartedAt() != null || !queueable(job)) {
+            throw ApiException.conflict("To makro nie czeka już na start");
+        }
+        job.restore();
+        jobs.flush();
+        dispatch(storeId, Instant.now());
+        announce(job);
         return response(job);
     }
 
@@ -310,20 +344,73 @@ public class AgentMacroService {
             throw ApiException.conflict("Makra zlecane z przeglądarki są w tym sklepie wyłączone "
                     + "(Ustawienia sklepu → Agent sklepu).");
         }
-        if (!jobs.findActiveForUpdate(storeId).isEmpty()) {
-            throw ApiException.conflict("W sklepie trwa już makro na innym komputerze. Poczekaj, aż się skończy.");
-        }
         if (targetAgentId != null && agents.findById(targetAgentId)
                 .filter(agent -> agent.getDeletedAt() == null && agent.getStore().getId().equals(storeId))
                 .isEmpty()) {
             throw ApiException.notFound("Nie znaleziono komputera sklepu");
         }
+        // Blokada kolejki przed sprawdzeniem trwającego: równoległe przydziały idą po kolei.
+        List<AgentMacroJob> queued = jobs.findQueuedForUpdate(storeId);
+        boolean busy = !jobs.findActiveForUpdate(storeId).isEmpty();
         AgentMacroJob job = new AgentMacroJob(stores.getReferenceById(storeId), kind, title, macro, reference,
                 itemCount, targetAgentId, userId == null ? null : users.getReferenceById(userId));
-        offerNext(job, now);
+        if (!queueable(job)) {
+            // Makra serwera czekają u siebie i ustępują zleceniom z przeglądarki.
+            if (busy || !queued.isEmpty()) {
+                throw ApiException.conflict(busy ? "W sklepie trwa już makro na innym komputerze."
+                        : "W sklepie czekają makra zlecone z przeglądarki.");
+            }
+            offerNext(job, now, false);
+            jobs.saveAndFlush(job);
+            announce(job);
+            return response(job);
+        }
+        job.queue(busy ? WAITS_FOR_EARLIER : null, null);
         jobs.saveAndFlush(job);
-        announce(job);
+        if (!busy) {
+            dispatch(storeId, now);
+        }
+        if (job.getStatus() == AgentMacroStatus.QUEUED) {
+            if (job.getWaitReason() == null) {
+                job.waiting(WAITS_FOR_EARLIER);
+            }
+            announce(job);
+        }
         return response(job);
+    }
+
+    /**
+     * Zlecenie osoby z przeglądarki czeka w kolejce. Makro serwera (pliki nowych artykułów, zmiany cen, ITM8 po
+     * aktualizacji danych) czeka u siebie, więc bez komputera kończy się „Żaden komputer nie jest wolny”.
+     */
+    private static boolean queueable(AgentMacroJob job) {
+        return job.getCreatedBy() != null && !SERVER_KINDS.contains(job.getKind());
+    }
+
+    /**
+     * Pierwsze zlecenie z kolejki, które może ruszyć, dostaje komputer. Po kolei według chwili zlecenia; zlecenie
+     * czekające na konkretny (wyłączony) komputer albo po „Anuluj” nie blokuje kolejnych.
+     */
+    private void dispatch(UUID storeId, Instant now) {
+        List<AgentMacroJob> queued = jobs.findQueuedForUpdate(storeId);
+        if (queued.isEmpty() || !jobs.findActiveForUpdate(storeId).isEmpty()) {
+            return;
+        }
+        for (AgentMacroJob job : queued) {
+            if (job.getRetryAt() != null && job.getRetryAt().isAfter(now)) {
+                continue;
+            }
+            offerNext(job, now, false);
+            if (job.getStatus() == AgentMacroStatus.OFFERED) {
+                // Pozostałe czekają na to makro.
+                queued.stream().filter(other -> other.getStatus() == AgentMacroStatus.QUEUED
+                        && (other.getRetryAt() == null || !other.getRetryAt().isAfter(now)))
+                        .forEach(other -> other.waiting(WAITS_FOR_EARLIER));
+                jobs.flush();
+                announce(job);
+                return;
+            }
+        }
     }
 
     // --- Agent ---
@@ -371,8 +458,12 @@ public class AgentMacroService {
             return;
         }
         job.decline(agent.agentId());
-        offerNext(job, now);
+        offerNext(job, now, true);
         announce(job);
+        if (job.getStatus() != AgentMacroStatus.OFFERED) {
+            jobs.flush();
+            dispatch(agent.storeId(), now);
+        }
     }
 
     /** Koniec odliczania: makro startuje na tym komputerze (409, gdy zlecenie już do niego nie należy). */
@@ -463,6 +554,9 @@ public class AgentMacroService {
         job.finish(Boolean.TRUE.equals(request.ok()) ? AgentMacroStatus.DONE : AgentMacroStatus.FAILED,
                 message, List.copyOf(codes), Instant.now());
         announce(job);
+        // Następne z kolejki od razu, zanim makra serwera po końcu tego makra spróbują ruszyć same.
+        jobs.flush();
+        dispatch(agent.storeId(), Instant.now());
     }
 
     private AgentMacroJob offeredTo(StoreAgentService.AgentContext agent, UUID id) {
@@ -484,7 +578,7 @@ public class AgentMacroService {
             if (job.getStatus() == AgentMacroStatus.OFFERED) {
                 if (states.silent(job.getAgentId(), now) || job.getOfferedAt().plus(OFFER_TIMEOUT).isBefore(now)) {
                     job.decline(job.getAgentId());
-                    offerNext(job, now);
+                    offerNext(job, now, false);
                     announce(job);
                 }
             } else if (job.getStatus() == AgentMacroStatus.RUNNING) {
@@ -493,13 +587,34 @@ public class AgentMacroService {
                     job.finish(AgentMacroStatus.FAILED, "Komputer przestał odpowiadać w trakcie makra. Sprawdź w "
                             + "Mercalys, co zostało zrobione.", List.of(), now);
                     announce(job);
+                } else if (resultLost(job, now)) {
+                    job.finish(AgentMacroStatus.FAILED, "Makro skończyło się na komputerze, ale wynik nie doszedł do "
+                            + "serwera (np. restart serwera w trakcie). Sprawdź w Mercalys, co zostało zrobione.",
+                            List.of(), now);
+                    announce(job);
                 }
             }
         }
+        jobs.flush();
+        dispatch(storeId, now);
     }
 
-    /** Kolejny komputer dla zlecenia albo koniec „Żaden komputer nie jest wolny”. */
-    private void offerNext(AgentMacroJob job, Instant now) {
+    /**
+     * Agent trzyma „zajęty” od odliczania do wysłania wyniku (wynik ponawia przez ok. 100 s). Komputer, który po
+     * starcie makra zgłasza się jako wolny, makro już skończył, a wynik przepadł (np. restart serwera dłuższy niż
+     * ponawianie): bez tego kolejka sklepu stałaby do {@link #RUN_TIMEOUT}.
+     */
+    private boolean resultLost(AgentMacroJob job, Instant now) {
+        AgentMachineStates.State state = states.get(job.getAgentId()).orElse(null);
+        return state != null && state.fresh(now) && !state.busy()
+                && state.reportedAt().isAfter(job.getStartedAt().plus(RESULT_GRACE));
+    }
+
+    /**
+     * Kolejny komputer dla zlecenia. Bez wolnego komputera zlecenie z przeglądarki wraca do kolejki (po „Anuluj” na
+     * komputerze dopiero za {@link #DECLINED_RETRY}), a makro serwera kończy się „Żaden komputer nie jest wolny”.
+     */
+    private void offerNext(AgentMacroJob job, Instant now, boolean declinedByPerson) {
         UUID storeId = job.getStore().getId();
         Map<StoreAgent, AgentMachineStates.State> candidates = new LinkedHashMap<>();
         List<String> reasons = new ArrayList<>();
@@ -538,7 +653,20 @@ public class AgentMacroService {
         if (declined.isEmpty() && reasons.isEmpty()) {
             message.append(" Sklep nie ma komputera z agentem.");
         }
-        job.finish(AgentMacroStatus.NO_COMPUTER, message.toString(), List.of(), now);
+        if (!queueable(job)) {
+            job.finish(AgentMacroStatus.NO_COMPUTER, message.toString(), List.of(), now);
+            return;
+        }
+        String reason = reasons.isEmpty() ? (declined.isEmpty() ? "sklep nie ma komputera z agentem"
+                : "brak wolnego komputera") : String.join("; ", reasons);
+        if (declinedByPerson) {
+            job.queue("anulowane na komputerze (" + String.join(", ", declined) + "), kolejna próba za "
+                    + DECLINED_RETRY.toMinutes() + " min", now.plus(DECLINED_RETRY));
+        } else if (job.getStatus() != AgentMacroStatus.QUEUED) {
+            job.queue(reason, null);
+        } else {
+            job.waiting(reason);
+        }
     }
 
     private static boolean free(AgentMachineStates.State state, Instant now) {
@@ -596,7 +724,7 @@ public class AgentMacroService {
             fields.put("message", job.getResultMessage());
         }
         live.publish(job.getStore().getId(), "agent-macro", fields);
-        if (job.getStatus() != AgentMacroStatus.OFFERED && job.getStatus() != AgentMacroStatus.RUNNING) {
+        if (job.getStatus().ended()) {
             events.publishEvent(new MacroEnded(job.getStore().getId(), job.getId(), job.getKind(), job.getStatus()));
         }
     }
@@ -613,6 +741,15 @@ public class AgentMacroService {
         return new AgentMacroApi.Job(job.getId(), job.getKind().name(), job.getTitle(), job.getStatus().name(),
                 computer, requestedBy(job), job.getCreatedAt(), job.getOfferedAt(),
                 job.getStartedAt(), job.getFinishedAt(), countdown(job.getKind()), declined, job.getResultMessage(),
-                job.getResultCodes(), job.getItemCount(), job.getReference());
+                job.getResultCodes(), job.getItemCount(), job.getReference(),
+                position(job.getStore().getId(), job.getId(), job.getStatus()), job.getWaitReason());
+    }
+
+    private Integer position(UUID storeId, UUID id, AgentMacroStatus status) {
+        if (status != AgentMacroStatus.QUEUED) {
+            return null;
+        }
+        int index = jobs.findQueuedIds(storeId).indexOf(id);
+        return index < 0 ? null : index + 1;
     }
 }

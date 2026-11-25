@@ -145,6 +145,13 @@ public class AgentMacroController {
         return macros.cancel(storeId, id, principal.getId());
     }
 
+    /** „Przywróć” po anulowaniu: zlecenie wraca do kolejki na swoje miejsce. */
+    @PostMapping("/{id}/restore")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job restore(@PathVariable UUID storeId, @PathVariable UUID id) {
+        return macros.restore(storeId, id);
+    }
+
     @GetMapping("/product-file")
     @PreAuthorize(VIEW)
     public AgentMacroApi.ProductFileExpected productFile(@PathVariable UUID storeId, @RequestParam String fileName) {

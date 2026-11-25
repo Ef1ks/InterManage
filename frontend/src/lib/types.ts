@@ -1598,6 +1598,11 @@ export type CadPriorityItem = {
     /** Dlaczego makro pominęło artykuł. */
     failure: string | null
   } | null
+  /**
+   * ITM8 z cadencier jest w Mercalys już na innej karcie („Ten kod ITM jest już przyznany”): do ręcznej poprawy.
+   * `otherItm8`: karta, na której jest dziś EAN widziany z tym ITM8; `reason`: powód z makra.
+   */
+  conflict: { ean: string | null; otherItm8: string | null; otherName: string | null; reason: string | null } | null
 }
 
 export type CadPriorityReport = {
@@ -5519,7 +5524,8 @@ export type AgentMacroJob = {
     | 'PRICE_CONTROL'
     | 'CAD_PRIORITY'
   title: string
-  status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
+  /** `QUEUED`: czeka w kolejce sklepu (trwa inne makro albo żaden komputer nie jest wolny), rusza samo. */
+  status: 'QUEUED' | 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null
   requestedBy: string
   createdAt: string
@@ -5535,6 +5541,10 @@ export type AgentMacroJob = {
   itemCount: number
   /** Numer bonu z bazy przy makrach dostawy. */
   reference: string | null
+  /** Miejsce w kolejce sklepu (1 = następne), tylko przy `QUEUED`. */
+  queuePosition: number | null
+  /** Dlaczego zlecenie jeszcze czeka. */
+  waitReason: string | null
 }
 
 /** Trwające i ostatnie makra sklepu (od najnowszego) i trwająca aktualizacja danych z Mercalys. */

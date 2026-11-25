@@ -34,6 +34,8 @@ public final class CadPriorityMacro {
     private static final int PAGE_TIMEOUT_MS = 30_000;
     private static final int LOAD_TIMEOUT_MS = 15_000;
     private static final int ITM8_TIMEOUT_MS = 8_000;
+    /** Komunikat „Ten kod ITM jest już przyznany” przychodzi razem z wczytaniem wpisu po Tab. */
+    private static final int ASSIGNED_CHECK_MS = 700;
     private static final int AFTER_CONFIRM_MS = 1_500;
     private static final int AFTER_CHECK_MS = 500;
     /** „Sprzedaż ze stratami! Minimalna cena sprzedaży jest …”: przy zaznaczaniu albo przy zapisie, tylko czasem. */
@@ -69,6 +71,14 @@ public final class CadPriorityMacro {
     private static final String ACTIVE_CHECKBOX = "chkZ10_Actif_CheckBox1";
     private static final String APPROVE = "btnB4_Valider_LnkBouton";
     private static final String BACK = "btnB1_Retour_LnkBouton";
+
+    /**
+     * „Ten kod ITM jest już przyznany” (DialogAlert po Tab w polu ITM8, 25.11.2026): ITM8 z cadencier jest na innej
+     * karcie, z innym EAN-em. Powód w wyniku zaczyna się od {@link #ASSIGNED_ELSEWHERE}, po nim raport odkłada artykuł do
+     * ręcznej poprawy.
+     */
+    private static final String ASSIGNED_ALERT = "przyznany";
+    public static final String ASSIGNED_ELSEWHERE = "ITM8 jest już na innej karcie w Mercalys";
 
     private static final String SKIPPED = "Pominięto ";
     private static final String END = "koniec-";
@@ -111,6 +121,8 @@ public final class CadPriorityMacro {
         String noCard = "brak-karty-" + card;
         String otherEan = "inny-ean-" + card;
         String noItm8 = "brak-itm8-" + card;
+        String noItm8Alert = "brak-itm8-bez-karty-" + card;
+        String free = "wolny-" + card;
         String creates = "nowy-" + card;
         String leave = "wyjscie-" + card;
         String menu = "menu-" + card;
@@ -132,6 +144,9 @@ public final class CadPriorityMacro {
         out.add("WEBKEY|" + WINDOW + "|" + NEW_ITM8 + "|^a" + top + "{Tab}");
         // Pusty wpis ma dostawcę 0; wczytany istniejący ITM8 ma swojego.
         out.add("WEBIFVALUE|" + WINDOW + "|" + NEW_ITM8_SUPPLIER + "|^0*[1-9]\\d*$|" + noItm8 + "|" + ITM8_TIMEOUT_MS);
+        out.add("IFDIALOG|" + ALERT + "|" + ASSIGNED_ALERT + "|Fermer|" + free + "|" + ASSIGNED_CHECK_MS);
+        out.add(jump(leave, skippedLine(card, assignedReason(top))));
+        out.add("LABEL|" + free);
         out.add("WEBVALUE|" + WINDOW + "|" + NEW_ITM8 + "|^0*" + top + "$");
         out.add("WEBIFVALUE|" + WINDOW + "|" + PRIORITY_CHECKBOX + "|^tak$|" + change + "|1000");
         out.add("WEBIFVALUE|" + WINDOW + "|" + ACTIVE_CHECKBOX + "|^nie$|" + back + "|1000");
@@ -176,6 +191,10 @@ public final class CadPriorityMacro {
         out.add("WEBDIALOG|" + DIALOG + "|Utworzy|Non|3000");
         out.add(jump(leave, skippedLine(card, "ITM8 " + top + " nie ma jeszcze na tej karcie w Mercalys")));
         out.add("LABEL|" + noItm8);
+        // Komunikat o ITM8 na innej karcie wstrzymuje wczytanie wpisu, więc częściej kończy się tutaj.
+        out.add("IFDIALOG|" + ALERT + "|" + ASSIGNED_ALERT + "|Fermer|" + noItm8Alert + "|" + ASSIGNED_CHECK_MS);
+        out.add(jump(leave, skippedLine(card, assignedReason(top))));
+        out.add("LABEL|" + noItm8Alert);
         out.add(closeAlert());
         out.add(jump(leave, skippedLine(card, "ITM8 " + top + " nie ma jeszcze w Mercalys")));
 
@@ -270,6 +289,15 @@ public final class CadPriorityMacro {
 
     private static String closeAlert() {
         return "WEBDIALOG|" + DIALOG + "|istniej;nieznany;nie znaleziono|Fermer|1500";
+    }
+
+    private static String assignedReason(String top) {
+        return ASSIGNED_ELSEWHERE + " (" + top + "), popraw ręcznie";
+    }
+
+    /** Powód pominięcia z makra: ITM8 z cadencier jest na innej karcie. */
+    public static boolean assignedElsewhere(String failure) {
+        return failure != null && failure.startsWith(ASSIGNED_ELSEWHERE);
     }
 
     private static String skippedLine(String card, String reason) {

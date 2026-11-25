@@ -139,6 +139,75 @@ public interface CadPriorityRunRepository extends JpaRepository<CadPriorityRun, 
             """, nativeQuery = true)
     List<Match> findMatches(UUID storeId, UUID fileId, UUID importId);
 
+    interface AssignedElsewhere {
+        String getTopItm8();
+
+        String getItm8();
+
+        /** EAN, z którym ITM8 z cadencier był widziany, a który teraz jest na innej karcie. */
+        String getEan();
+
+        String getOtherItm8();
+
+        String getOtherName();
+    }
+
+    /**
+     * ITM8 z cadencier, które w Mercalys są już na innej karcie: ITM8 był widziany (dawna karta, jej pary EAN,
+     * multikody, linie dokumentów, pliki dostawy z bazy) z EAN-em spoza karty, do której chcemy go przypiąć, a ten EAN
+     * jest dziś na innej karcie najnowszego raportu (główny EAN albo obowiązujący multikod). Mercalys odrzuca wtedy
+     * ITM8 komunikatem „Ten kod ITM jest już przyznany”. Kody z etykiet obniżek (13…, 15…, 17…) i wagi pomijane.
+     */
+    @Query(value = """
+            with pairs as (
+                select distinct x.top_itm8, x.card_itm8
+                from unnest(cast(:tops as varchar[]), cast(:cards as varchar[])) as x(top_itm8, card_itm8)
+            ), seen as (
+                select x.top_itm8, x.card_itm8, o.ean from pairs x
+                join products o on o.store_id = :storeId and o.itm8 = x.top_itm8
+                union
+                select x.top_itm8, x.card_itm8, pe.ean from pairs x
+                join products o on o.store_id = :storeId and o.itm8 = x.top_itm8
+                join product_eans pe on pe.product_id = o.id
+                union
+                select x.top_itm8, x.card_itm8, c.ean from pairs x
+                join product_codes c on c.store_id = :storeId and c.itm8 = x.top_itm8
+                union
+                select x.top_itm8, x.card_itm8, l.ean from pairs x
+                join document_lines l on l.itm8 = x.top_itm8
+                join documents d on d.id = l.document_id and d.store_id = :storeId
+                union
+                select x.top_itm8, x.card_itm8, b.ean from pairs x
+                join base_delivery_lines b on ltrim(b.itm8, '0') = ltrim(x.top_itm8, '0')
+                join base_deliveries d on d.id = b.delivery_id and d.store_id = :storeId
+            ), keys as (
+                select distinct s.top_itm8, s.card_itm8, ltrim(s.ean, '0') as k from seen s where s.ean is not null
+            ), foreign_keys as (
+                select k.* from keys k
+                join products card on card.store_id = :storeId and card.itm8 = k.card_itm8
+                    and card.last_seen_import_id = :importId
+                where length(k.k) >= 8 and not (length(k.k) = 13 and k.k ~ '^(1[357]|2[1-9])')
+                  and ltrim(card.ean, '0') <> k.k
+                  and not exists (select 1 from product_codes c where c.store_id = :storeId and c.itm8 = k.card_itm8
+                      and ltrim(c.ean, '0') = k.k)
+                  and not exists (select 1 from product_eans pe where pe.product_id = card.id and ltrim(pe.ean, '0') = k.k)
+            ), others as (
+                select f.top_itm8, f.card_itm8, f.k, p.itm8, p.name from foreign_keys f
+                join products p on p.store_id = :storeId and p.last_seen_import_id = :importId
+                    and ltrim(p.ean, '0') = f.k
+                union
+                select f.top_itm8, f.card_itm8, f.k, p.itm8, p.name from foreign_keys f
+                join product_codes c on c.store_id = :storeId and c.current and ltrim(c.ean, '0') = f.k
+                join products p on p.store_id = c.store_id and p.itm8 = c.itm8 and p.last_seen_import_id = :importId
+            )
+            select o.top_itm8 as "topItm8", o.card_itm8 as itm8, o.k as ean, o.itm8 as "otherItm8",
+                   o.name as "otherName"
+            from others o
+            where o.itm8 <> o.card_itm8 and o.itm8 <> o.top_itm8
+            order by o.top_itm8, o.card_itm8, o.itm8
+            """, nativeQuery = true)
+    List<AssignedElsewhere> findAssignedElsewhere(UUID storeId, UUID importId, String[] tops, String[] cards);
+
     /** Karty z priorytetowym ITM8 z cadencier, które według najnowszego raportu kartoteki są nieaktywne. */
     @Query(value = """
             select t.itm8 as "topItm8", t.ean as "topEan", t.name as "topName", t.brand as "topBrand",
