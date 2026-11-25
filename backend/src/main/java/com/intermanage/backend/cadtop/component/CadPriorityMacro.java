@@ -42,6 +42,8 @@ public final class CadPriorityMacro {
     private static final int CN_ALERT_MS = 500;
     private static final int CARD_CHECK_MS = 3_000;
     private static final int EMPTY_CARD_MS = 2_000;
+    /** Po tylu ms bez karty Powrót klika się drugi raz. */
+    private static final int BACK_RETRY_MS = 15_000;
 
     // Karta artykułu (ar-e001) i „Kod ITM8 :” (ar-e006).
     private static final String ARTICLE_TAB = "mnTp_ARTICLE";
@@ -105,6 +107,7 @@ public final class CadPriorityMacro {
         String change = "zmien-" + card;
         String question = "pytanie-" + card;
         String back = "powrot-" + card;
+        String backAgain = "powrot-znow-" + card;
         String noCard = "brak-karty-" + card;
         String otherEan = "inny-ean-" + card;
         String noItm8 = "brak-itm8-" + card;
@@ -148,7 +151,15 @@ public final class CadPriorityMacro {
         out.add("WEBWAIT|" + DIALOG + "|Oui|zachowa;Utworzy|" + PAGE_TIMEOUT_MS);
         out.add("IFDIALOG|" + DIALOG + "|zachowa|Oui|" + creates + "|5000");
         out.add(closeLossAlert(2_000));
+        // Zapis potrafi chwilę trwać, a Powrót kliknięty w trakcie ginie (25.11.2026 makro stało na karcie
+        // 30 s): czekanie na przycisk po zapisie, a gdy karta nie wróci, drugi klik.
         out.add("LABEL|" + back);
+        out.add("SLEEP|" + AFTER_CHECK_MS);
+        out.add("WEBWAIT|" + WINDOW + "|" + BACK + "||" + PAGE_TIMEOUT_MS);
+        out.add("WEBCLICK|" + WINDOW + "|" + BACK);
+        out.add("WEBIFSEEN|" + WINDOW + "|" + RESET + "|" + backAgain + "|" + BACK_RETRY_MS);
+        out.add(jump(clear, ""));
+        out.add("LABEL|" + backAgain);
         out.add("WEBCLICK|" + WINDOW + "|" + BACK);
         out.add("WEBWAIT|" + WINDOW + "|" + RESET + "||" + PAGE_TIMEOUT_MS);
         out.add(jump(clear, ""));
