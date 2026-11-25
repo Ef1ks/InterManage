@@ -771,14 +771,27 @@ class KsefIntegrationTests {
                 false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
                         invoice("FV/30/2026", "1111111111", "MLECZARNIA", stored, "Vat", null),
                         invoice("FV/31/2026", "2222222222", "LEASING", stored.plusMinutes(1), "Vat", null),
-                        invoice("FV/32/2026", "3333333333", "RECZNY", stored.plusMinutes(2), "Vat", null))));
+                        invoice("FV/32/2026", "3333333333", "RECZNY", stored.plusMinutes(2), "Vat", null),
+                        invoice("FV/33/2026", "2222222222", "LEASING", stored.plusMinutes(3), "Vat", null),
+                        invoice("FV/34/2026", "2222222222", "LEASING", stored.plusMinutes(4), "Vat", null),
+                        invoice("FV/35/2026", "2222222222", "LEASING", stored.plusMinutes(5), "Vat", null))));
         syncAndWait(owner, storeId);
+        // Leasing: cztery faktury z ostatniego miesiąca (FV/35 najstarsza z nich), FV/31 sprzed miesiąca.
+        LocalDate today = LocalDate.now(java.time.ZoneId.of("Europe/Warsaw"));
+        for (int i = 3; i <= 5; i++) {
+            jdbc.update("update ksef_invoices set issue_date = ? where invoice_number = ? and nip = ?",
+                    today.minusDays(i), "FV/3" + i + "/2026", nip);
+        }
+        jdbc.update("update ksef_invoices set issue_date = ? where invoice_number = 'FV/32/2026' and nip = ?",
+                today.minusDays(1), nip);
+        jdbc.update("update ksef_invoices set issue_date = ? where invoice_number = 'FV/31/2026' and nip = ?",
+                today.minusMonths(2), nip);
         // Na liście dostawców z raportu jest tylko mleczarnia; dostawca dodany ręcznie się nie liczy.
         jdbc.update("insert into suppliers (store_id, code, name, nip) values (?::uuid, '501', 'MLECZARNIA', "
                 + "'1111111111')", storeId);
         jdbc.update("insert into suppliers (store_id, name, nip) values (?::uuid, 'RECZNY', '3333333333')", storeId);
 
-        list(owner, storeId, "").andExpect(jsonPath("$.matchingCount").value(3))
+        list(owner, storeId, "").andExpect(jsonPath("$.matchingCount").value(6))
                 .andExpect(jsonPath("$.listedSuppliersOnly").value(false));
         Cookie employee = employee(owner, storeId);
         list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(1))
@@ -786,12 +799,30 @@ class KsefIntegrationTests {
                 .andExpect(jsonPath("$.invoices[0].invoiceNumber").value("FV/30/2026"));
         mvc.perform(get(url(storeId, "/supplier-access")).cookie(employee)).andExpect(status().isForbidden());
 
+        // NIP dostawcy spoza listy: najwyżej 3 najnowsze faktury z ostatniego miesiąca.
+        list(employee, storeId, "&query=222-222-22-22").andExpect(jsonPath("$.matchingCount").value(3))
+                .andExpect(jsonPath("$.nipLookup").value(true))
+                .andExpect(jsonPath("$.invoices[*].invoiceNumber")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("FV/33/2026", "FV/34/2026", "FV/35/2026")));
+        // NIP dostawcy z listy to zwykłe wyszukiwanie.
+        list(employee, storeId, "&query=1111111111").andExpect(jsonPath("$.nipLookup").value(false));
+
+        // To samo w oknie wczytywania faktur we wprowadzaniu danych.
+        Cookie dataEntry = employeeWith("{\"DATA_ENTRY\":\"EDIT\"}", storeId);
+        String dataEntryUrl = "/api/stores/" + storeId + "/data-entry/invoices?status=ALL";
+        mvc.perform(get(dataEntryUrl).cookie(dataEntry)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.listedSuppliersOnly").value(true));
+        mvc.perform(get(dataEntryUrl + "&query=2222222222").cookie(dataEntry))
+                .andExpect(jsonPath("$.matchingCount").value(3))
+                .andExpect(jsonPath("$.nipLookup").value(true));
+
         // Aderon (tu właściciel) włącza wszystkich dostawców konkretnemu kontu.
         String employeeId = JsonPath.read(mvc.perform(get("/api/auth/me").cookie(employee))
                 .andReturn().getResponse().getContentAsString(), "$.id");
         send(owner, put(url(storeId, "/supplier-access/" + employeeId)), "{\"allSuppliers\":true}")
                 .andExpect(status().isOk());
-        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(3));
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(6));
         send(owner, put(url(storeId, "/supplier-access/" + employeeId)), "{\"allSuppliers\":false}")
                 .andExpect(status().isOk());
         list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(1));
@@ -801,7 +832,7 @@ class KsefIntegrationTests {
                 update user_store_roles set store_role_id = (select id from store_roles
                     where store_id = ?::uuid and role_key = 'ACCOUNTING' and deleted_at is null)
                 where user_id = ?::uuid and store_id = ?::uuid""", storeId, employeeId, storeId);
-        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(3));
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(6));
     }
 
     @Test
@@ -1220,7 +1251,11 @@ class KsefIntegrationTests {
 
     /** Pracownik z uprawnieniem KSEF_INVOICES:EDIT przypisany do podanych sklepów. */
     private Cookie employee(Cookie owner, String... storeIds) throws Exception {
-        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, "{\"KSEF_INVOICES\":\"EDIT\"}") + "\"}";
+        return employeeWith("{\"KSEF_INVOICES\":\"EDIT\"}", storeIds);
+    }
+
+    private Cookie employeeWith(String permissions, String... storeIds) throws Exception {
+        String roleJson = "{\"id\":\"" + TestRanks.role(jdbc, permissions) + "\"}";
         String username = "ksef" + UUID.randomUUID().toString().substring(0, 8);
         String userId = jdbc.queryForObject("""
                 insert into users (username, display_name, password_hash, role_id)

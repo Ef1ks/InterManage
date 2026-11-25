@@ -237,6 +237,7 @@ function ListStep({
   const invoices = useDataEntryInvoices(storeId, effective, debounced)
   const list = invoices.data?.pages.flatMap((page) => page.invoices) ?? []
   const matching = invoices.data?.pages[0]?.matchingCount ?? 0
+  const firstPage = invoices.data?.pages[0]
   // Lista przewija się we własnym obszarze okna: doczytywanie liczy zapas do jego dołu.
   const listRef = useRef<HTMLDivElement>(null)
   // Schowana lista (drugi krok) może zgubić przewinięcie, więc po powrocie wraca do zapamiętanego miejsca.
@@ -382,6 +383,13 @@ function ListStep({
           onChange={setQuery}
           placeholder="Szukaj: numer faktury, dostawca (też refaktury bazy), NIP"
         />
+        {firstPage?.listedSuppliersOnly && (
+          <p className="text-sm text-muted-foreground">
+            {firstPage.nipLookup
+              ? 'Dostawcy z tym NIP-em nie ma na liście dostawców sklepu: widać najwyżej 3 jego faktury z ostatniego miesiąca.'
+              : 'Widać faktury dostawców z listy dostawców sklepu. Fakturę innego dostawcy znajdziesz, wpisując jego NIP.'}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
             label="Rodzaj"

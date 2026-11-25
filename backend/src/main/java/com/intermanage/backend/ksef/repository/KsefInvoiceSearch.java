@@ -54,6 +54,10 @@ public final class KsefInvoiceSearch {
                 boolean showSkipped) {
             this(query, from, to, entered, kind, internalId, showSkipped, false, false);
         }
+
+        public Filter withQuery(String value) {
+            return new Filter(value, from, to, entered, kind, internalId, showSkipped, myDeliveries, quantityChanges);
+        }
     }
 
     /**

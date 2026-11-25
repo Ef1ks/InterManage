@@ -39,6 +39,7 @@ import com.intermanage.backend.ksef.repository.KsefConnectionRepository;
 import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
 import com.intermanage.backend.ksef.service.KsefCorrectedInvoiceService;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
+import com.intermanage.backend.ksef.service.KsefSupplierAccessService;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -69,10 +70,13 @@ public class DataEntryInvoiceService {
     private final AppUserRepository users;
     private final DataEntryInvoiceMapper mapper;
     private final KsefConnectionRepository connections;
+    private final KsefSupplierAccessService supplierAccess;
 
     public DataEntryInvoiceService(KsefInvoiceService ksefInvoices, DataEntryInvoiceMarkRepository marks,
             DataEntrySkippedSupplierRepository skipped, AppUserRepository users,
-            DataEntryInvoiceMapper mapper, KsefConnectionRepository connections) {
+            DataEntryInvoiceMapper mapper, KsefConnectionRepository connections,
+            KsefSupplierAccessService supplierAccess) {
+        this.supplierAccess = supplierAccess;
         this.ksefInvoices = ksefInvoices;
         this.connections = connections;
         this.marks = marks;
@@ -87,13 +91,14 @@ public class DataEntryInvoiceService {
      * {@code showSkipped} nie pokaże i ich faktur.
      */
     @Transactional(readOnly = true)
-    public DataEntryInvoicePage list(UUID storeId, int page, String query, String internalId, boolean corrections,
-            ListStatus status, boolean showSkipped, boolean myDeliveries, boolean quantityChanges) {
-        KsefInvoicePage found = ksefInvoices.list(storeId, page,
+    public DataEntryInvoicePage list(UUID storeId, UUID viewerId, int page, String query, String internalId,
+            boolean corrections, ListStatus status, boolean showSkipped, boolean myDeliveries,
+            boolean quantityChanges) {
+        KsefInvoicePage found = supplierAccess.list(viewerId, storeId, page,
                 filter(query, internalId, corrections, showSkipped, myDeliveries, quantityChanges),
                 extra(storeId, status, showSkipped), "issueDate", "desc");
         return new DataEntryInvoicePage(items(storeId, found.invoices()), found.page(), found.hasMore(),
-                found.matchingCount());
+                found.matchingCount(), found.listedSuppliersOnly(), found.nipLookup());
     }
 
     private static KsefInvoiceSearch.Filter filter(String query, String internalId, boolean corrections,
@@ -235,7 +240,7 @@ public class DataEntryInvoiceService {
             ids = ksefInvoices.ids(storeId, any, (root, query, cb) -> root.get("id").in(wanted), BULK_LIMIT);
         } else if (request.filter() != null) {
             InvoiceBulkRequest.Filter filter = request.filter();
-            ids = ksefInvoices.ids(storeId,
+            ids = supplierAccess.ids(userId, storeId,
                     filter(filter.query(), filter.internalId(), "CORRECTIONS".equals(filter.kind()),
                             Boolean.TRUE.equals(filter.showSkipped()), Boolean.TRUE.equals(filter.myDeliveries()),
                             Boolean.TRUE.equals(filter.quantityChanges())),

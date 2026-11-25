@@ -268,8 +268,9 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
         <Card className="gap-0 py-0">
           {first?.listedSuppliersOnly && (
             <p className="border-b px-4 py-2.5 text-sm text-muted-foreground">
-              Widzisz tylko faktury dostawców z listy dostawców sklepu. Faktury pozostałych widzą Aderon i Księgowość
-              (Aderon może to włączyć innym osobom w ustawieniach KSeF).
+              {first.nipLookup
+                ? 'Dostawcy z tym NIP-em nie ma na liście dostawców sklepu: widać najwyżej 3 jego faktury z ostatniego miesiąca.'
+                : 'Widzisz faktury dostawców z listy dostawców sklepu. Fakturę innego dostawcy znajdziesz, wpisując jego NIP. Wszystkich widzą Aderon i Księgowość (Aderon może to włączyć innym osobom w ustawieniach KSeF).'}
             </p>
           )}
           <StatusLegend />

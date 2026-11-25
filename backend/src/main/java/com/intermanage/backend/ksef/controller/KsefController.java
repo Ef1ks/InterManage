@@ -117,11 +117,7 @@ public class KsefController {
             @AuthenticationPrincipal AppUserPrincipal principal) {
         KsefInvoiceSearch.Filter filter = new KsefInvoiceSearch.Filter(query, from, to, entered, kind, internalId,
                 showSkipped, myDeliveries, quantityChanges);
-        if (supplierAccess.seesAllSuppliers(storeId, principal.getId())) {
-            return invoiceService.list(storeId, page, filter, sort, direction);
-        }
-        return invoiceService.list(storeId, page, filter, KsefInvoiceSearch.listedSuppliersOnly(storeId), sort,
-                direction).withListedSuppliersOnly(true);
+        return supplierAccess.list(principal.getId(), storeId, page, filter, null, sort, direction);
     }
 
     /** Konta sklepu i to, czy widzą faktury wszystkich dostawców (Aderon i właściciel). */

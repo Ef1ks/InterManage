@@ -147,9 +147,10 @@ public class DataEntryController {
             @RequestParam(defaultValue = "NEW") DataEntryInvoiceService.ListStatus status,
             @RequestParam(defaultValue = "false") boolean showSkipped,
             @RequestParam(defaultValue = "false") boolean myDeliveries,
-            @RequestParam(defaultValue = "false") boolean quantityChanges) {
-        return invoiceService.list(storeId, page, query, internalId, "CORRECTIONS".equals(kind), status,
-                showSkipped, myDeliveries, quantityChanges);
+            @RequestParam(defaultValue = "false") boolean quantityChanges,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return invoiceService.list(storeId, principal.getId(), page, query, internalId, "CORRECTIONS".equals(kind),
+                status, showSkipped, myDeliveries, quantityChanges);
     }
 
     /** Znacznik faktury: LOADED po wczytaniu do tabeli, NOT_MINE "nie moja faktura" (DOWNLOADED daje pobranie PDF). */

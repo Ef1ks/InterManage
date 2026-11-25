@@ -2185,6 +2185,8 @@ export type KsefInvoicePage = {
   grossTotal: number
   /** Konto widzi tylko faktury dostawców z listy dostawców sklepu. */
   listedSuppliersOnly: boolean
+  /** Wpisany NIP dostawcy spoza listy: najwyżej 3 jego faktury z ostatniego miesiąca. */
+  nipLookup: boolean
 }
 
 /** Konto sklepu i to, czy w Fakturach KSeF widzi wszystkich dostawców (z urzędu albo włączone przez Aderona). */
@@ -3342,6 +3344,10 @@ export type DataEntryInvoicePage = {
   page: number
   hasMore: boolean
   matchingCount: number
+  /** Konto widzi tylko faktury dostawców z listy dostawców sklepu. */
+  listedSuppliersOnly: boolean
+  /** Wpisany NIP dostawcy spoza listy: najwyżej 3 jego faktury z ostatniego miesiąca. */
+  nipLookup: boolean
 }
 
 /** Reguła dostawcy w oknie wczytywania: HIDDEN pomijany (faktur nie ma w oknie), DONE odkładany do „Wczytane”. */
