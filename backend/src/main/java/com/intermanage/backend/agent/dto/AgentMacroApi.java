@@ -86,6 +86,13 @@ public final class AgentMacroApi {
 
     public record Job(UUID id, String kind, String title, String status, String computer, String requestedBy,
             Instant createdAt, Instant offeredAt, Instant startedAt, Instant finishedAt, int countdownSeconds,
-            List<String> declined, String message, List<String> codes, int itemCount) {
+            List<String> declined, String message, List<String> codes, int itemCount, String reference) {
+    }
+
+    /** Co robią komputery sklepu: trwające i ostatnie makra (od najnowszego) i trwająca aktualizacja danych. */
+    public record Activity(List<Job> jobs, Update update) {
+    }
+
+    public record Update(String computer, Instant startedAt) {
     }
 }

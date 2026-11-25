@@ -43,9 +43,15 @@ const money = (value: number) => value.toFixed(2).replace('.', ',')
 export function Itm8MacroDialog({ storeId, delivery, open, onOpenChange }: Props) {
   const canRunRemotely = useCan('DATA_ENTRY', 'EDIT')
   const { data: computers = [] } = useAgentComputers(storeId, open && canRunRemotely)
-  const remote = useRemoteMacro(storeId)
   const remoteReady = canRunRemotely && computers.length > 0 && delivery !== null
   const [text, setText] = useState('')
+  const remote = useRemoteMacro(storeId, {
+    matches: (job) => job.reference === delivery?.number && (job.kind === 'ITM8_COLLECT' || job.kind === 'ITM8_APPLY'),
+    // Kody zebrane przed odświeżeniem strony wracają do pustego pola.
+    onFinished: (job) => {
+      if (job.kind === 'ITM8_COLLECT' && job.status === 'DONE') setText((current) => current || job.codes.join('\n'))
+    },
+  })
   const codes = parseItm8List(text)
   const plan = delivery && codes.length > 0 ? planMacro(delivery, codes) : null
   const items = plan?.items ?? []
@@ -134,7 +140,7 @@ export function Itm8MacroDialog({ storeId, delivery, open, onOpenChange }: Props
           </DialogDescription>
         </DialogHeader>
 
-        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />}
+        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} onClose={remote.close} />}
 
         <div className="grid gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
           <div className="grid content-start gap-5">

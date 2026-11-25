@@ -37,6 +37,7 @@ import { useIdleLock } from '@/features/auth/use-idle-lock'
 import { useWorkdayLock } from '@/features/auth/use-workday-lock'
 import { usePriceControlWatcher } from '@/features/data-entry/price-control-watch'
 import { FileQueueBanner } from '@/features/file-queue/FileQueueBanner'
+import { AgentActivity } from '@/features/agent-macros/AgentActivity'
 import { AgentStatusDot } from '@/features/store-agent/AgentStatusDot'
 import { useLiveEvents } from '@/features/store-agent/use-live-events'
 import { usePresenceHeartbeat } from '@/features/chat/use-presence'
@@ -180,6 +181,7 @@ export function AppLayout() {
           <BackButton />
           <GroupTabs />
           <div className="ml-auto flex shrink-0 items-center gap-2">
+            <AgentActivity />
             <AgentStatusDot />
             <FeedbackButton />
             <UserMenu />

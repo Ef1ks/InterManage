@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { api, ApiError } from '@/lib/api'
-import type { AgentComputer, AgentMacroJob } from '@/lib/types'
+import type { AgentActivity, AgentComputer, AgentMacroJob } from '@/lib/types'
 
 /*
  * Makra Mercalys na wolnym komputerze sklepu (agent sklepu), także z innego miasta: serwer składa makro i wybiera
@@ -32,6 +32,34 @@ export type MacroRequest =
   | { macro: 'base-receive' | 'base-close'; deliveryId: string; agentId?: string }
 
 export const isActive = (job: AgentMacroJob) => job.status === 'OFFERED' || job.status === 'RUNNING'
+
+/** Tyle po końcu makra jego wynik pokazuje jeszcze okno, z którego je zlecono, także po odświeżeniu strony. */
+const FRESH_MS = 30 * 60_000
+
+/** `fresh`: trwa albo skończyło się niedawno. */
+export type RecentMacro = AgentMacroJob & { fresh: boolean }
+
+/** Makra i aktualizacja danych sklepu z serwera, więc odświeżenie strony ich nie gubi. */
+export function useAgentActivity(storeId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['stores', storeId, 'agent-macros', 'recent'],
+    queryFn: async () => {
+      const activity = await api<AgentActivity>(`${path(storeId ?? '')}/recent`)
+      const since = Date.now() - FRESH_MS
+      return {
+        update: activity.update,
+        jobs: activity.jobs.map((job): RecentMacro => ({
+          ...job,
+          fresh: isActive(job) || (job.finishedAt !== null && new Date(job.finishedAt).getTime() > since),
+        })),
+      }
+    },
+    enabled: enabled && !!storeId,
+    // Zmiany przychodzą na żywo; odpytywanie łapie zgubioną wiadomość i aktualizację danych.
+    refetchInterval: (query) =>
+      query.state.data?.update || query.state.data?.jobs.some((job) => isActive(job)) ? 5_000 : 60_000,
+  })
+}
 
 /** Zleca makro i czeka na jego koniec; `onUpdate` dostaje każdy stan (komputer, odliczanie, w toku, wynik). */
 export async function runMacro(

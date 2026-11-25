@@ -1,5 +1,12 @@
-import { CircleCheckIcon, LoaderCircleIcon, MonitorPlayIcon, MoreVerticalIcon, TriangleAlertIcon } from 'lucide-react'
-import { useState } from 'react'
+import {
+  CircleCheckIcon,
+  LoaderCircleIcon,
+  MonitorPlayIcon,
+  MoreVerticalIcon,
+  TriangleAlertIcon,
+  XIcon,
+} from 'lucide-react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -8,15 +15,45 @@ import { ApiError } from '@/lib/api'
 import type { AgentComputer, AgentMacroJob } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { cancelMacro, isActive, type MacroRequest, runMacro } from './api'
+import { cancelMacro, isActive, type MacroRequest, runMacro, useAgentActivity } from './api'
+import { hiddenResults, hideResult } from './hidden-results'
 
 /** Makra, których podsumowanie warto pokazać także po udanym przebiegu. */
 const SHOWN_RESULTS: AgentMacroJob['kind'][] = ['MEA_CODES', 'BASE_RECEIVE', 'BASE_CLOSE', 'CAD_PRIORITY']
 
-/** Stan zlecenia makra w oknie: jedno naraz, wynik zostaje do następnego zlecenia. */
-export function useRemoteMacro(storeId: string) {
-  const [job, setJob] = useState<AgentMacroJob | null>(null)
+type Restore = {
+  /** Makra tego okna (rodzaj, bon), które mają wrócić po odświeżeniu strony. */
+  matches: (job: AgentMacroJob) => boolean
+  /** Koniec makra, którego to okno samo nie doczekało (odświeżona strona, inna karta). */
+  onFinished?: (job: AgentMacroJob) => void
+}
+
+/**
+ * Stan zlecenia makra w oknie: jedno naraz, wynik zostaje do następnego zlecenia. Makro zlecone przed odświeżeniem
+ * strony wraca z serwera (trwające albo skończone niedawno), póki ktoś nie schowa jego wyniku.
+ */
+export function useRemoteMacro(storeId: string, { matches, onFinished }: Restore) {
+  const [own, setJob] = useState<AgentMacroJob | null>(null)
   const [starting, setStarting] = useState(false)
+  const [hidden, setHidden] = useState(hiddenResults)
+  const { data: activity } = useAgentActivity(storeId)
+  const latest = activity?.jobs.find(matches)
+  const restored = !starting && latest?.fresh && !hidden.includes(latest.id) ? latest : null
+  const job = own ?? restored
+
+  const finished = !own && restored && !isActive(restored) ? restored.id : null
+  const announceFinished = useEffectEvent(() => {
+    if (restored) onFinished?.(restored)
+  })
+  useEffect(() => {
+    if (finished) announceFinished()
+  }, [finished])
+
+  const close = () => {
+    if (!job) return
+    setHidden(hideResult(job.id))
+    setJob(null)
+  }
 
   /** Zleca makro i zwraca wynik, a przy błędzie żądania (pokazanym w powiadomieniu) `null`. */
   const run = async (request: MacroRequest) => {
@@ -47,7 +84,7 @@ export function useRemoteMacro(storeId: string) {
     }
   }
 
-  return { job, busy: starting || (job !== null && isActive(job)), run, cancel }
+  return { job, busy: starting || (job !== null && isActive(job)), run, cancel, close }
 }
 
 type ButtonProps = {
@@ -107,7 +144,15 @@ export function RemoteMacroButton({ computers, label, disabled, busy, size = 'de
 }
 
 /** Przebieg zlecenia: gdzie czeka na start, gdzie działa, kto odmówił i wynik. */
-export function RemoteMacroStatus({ job, onCancel }: { job: AgentMacroJob; onCancel: () => void }) {
+export function RemoteMacroStatus({
+  job,
+  onCancel,
+  onClose,
+}: {
+  job: AgentMacroJob
+  onCancel: () => void
+  onClose: () => void
+}) {
   const failed = job.status === 'FAILED' || job.status === 'NO_COMPUTER'
   const done = job.status === 'DONE'
   const texts: Record<AgentMacroJob['status'], string> = {
@@ -151,6 +196,11 @@ export function RemoteMacroStatus({ job, onCancel }: { job: AgentMacroJob; onCan
       {job.status === 'OFFERED' && (
         <Button variant="outline" size="sm" onClick={onCancel}>
           Anuluj
+        </Button>
+      )}
+      {!isActive(job) && (
+        <Button variant="ghost" size="icon" className="-my-1 size-7" aria-label="Schowaj wynik makra" onClick={onClose}>
+          <XIcon />
         </Button>
       )}
     </div>

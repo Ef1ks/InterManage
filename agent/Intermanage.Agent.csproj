@@ -19,9 +19,9 @@
     <Deterministic>true</Deterministic>
 
     <!-- Zasoby wersji pliku exe (Właściwości → Szczegóły w Eksploratorze). -->
-    <Version>1.12.2</Version>
-    <FileVersion>1.12.2.0</FileVersion>
-    <AssemblyVersion>1.12.2.0</AssemblyVersion>
+    <Version>1.12.3</Version>
+    <FileVersion>1.12.3.0</FileVersion>
+    <AssemblyVersion>1.12.3.0</AssemblyVersion>
     <Company>Intermanage</Company>
     <Product>Intermanage – agent sklepu</Product>
     <AssemblyTitle>Intermanage – agent sklepu</AssemblyTitle>
@@ -43,9 +43,8 @@
   </ItemGroup>
 
   <!--
-    Odtwarzacz makr NIE jest w paczce agenta: program ochronny sklepów (SentinelOne) kasuje niepodpisany player.exe
-    z AutoHotkey (10023, 23.11.2026), więc AutoJob zostaje osobny (z „Do pobrania” przez przeglądarkę). PlayerHost
-    umie uruchomić player\player.exe obok agenta, gdyby kiedyś wrócił (podpisany), ale build go nie dołącza.
+    Odtwarzacz makr NIE jest w paczce agenta, a agent go nie uruchamia ani nie zamyka: program ochronny sklepów
+    (SentinelOne) kasuje niepodpisany player.exe z AutoHotkey, więc AutoJob jest osobny (z „Do pobrania”).
   -->
 
 </Project>

@@ -5492,7 +5492,15 @@ export type AgentComputer = {
 /** Makro zlecone na wolnym komputerze sklepu. */
 export type AgentMacroJob = {
   id: string
-  kind: 'ITM8_COLLECT' | 'ITM8_APPLY' | 'MEA_CODES' | 'BASE_RECEIVE' | 'BASE_CLOSE' | 'PRODUCT_FILES' | 'CAD_PRIORITY'
+  kind:
+    | 'ITM8_COLLECT'
+    | 'ITM8_APPLY'
+    | 'MEA_CODES'
+    | 'BASE_RECEIVE'
+    | 'BASE_CLOSE'
+    | 'PRODUCT_FILES'
+    | 'PRICE_CONTROL'
+    | 'CAD_PRIORITY'
   title: string
   status: 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
   computer: string | null
@@ -5508,4 +5516,12 @@ export type AgentMacroJob = {
   /** Kody ITM8 zebrane przez „Zbierz brakujące ITM8”, a przy dostawie z bazy `dostawca=nr zamówienia`. */
   codes: string[]
   itemCount: number
+  /** Numer bonu z bazy przy makrach dostawy. */
+  reference: string | null
+}
+
+/** Trwające i ostatnie makra sklepu (od najnowszego) i trwająca aktualizacja danych z Mercalys. */
+export type AgentActivity = {
+  jobs: AgentMacroJob[]
+  update: { computer: string; startedAt: string } | null
 }

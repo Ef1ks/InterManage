@@ -39,6 +39,7 @@ import jakarta.validation.Valid;
  * POST /api/stores/{storeId}/agent-macros/base-receive      {deliveryId, agentId?} wprowadź dostawę z bazy do Mercalys
  * POST /api/stores/{storeId}/agent-macros/base-close        {deliveryId, agentId?} Nr BL i zakończenie dostaw bonu
  * POST /api/stores/{storeId}/agent-macros/cad-priorities    {items, agentId?} ITM8 z cadencier: priorytet i aktywność
+ * GET  /api/stores/{storeId}/agent-macros/recent            trwające i ostatnie makra, trwająca aktualizacja danych
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
  * POST /api/stores/{storeId}/agent-macros/{id}/retry        ponawia makro nowych artykułów albo zmian cen
@@ -123,6 +124,12 @@ public class AgentMacroController {
             @Valid @RequestBody CadPriorityRequest.Remote request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return cadPriorities.run(storeId, request, principal.getId());
+    }
+
+    @GetMapping("/recent")
+    @PreAuthorize(VIEW)
+    public AgentMacroApi.Activity recent(@PathVariable UUID storeId) {
+        return macros.activity(storeId);
     }
 
     @GetMapping("/{id}")

@@ -58,7 +58,10 @@ export function ReceiveDialog({ storeId, delivery, rows, missingCarriers, open, 
   const canRun = useCan('DATA_ENTRY', 'EDIT')
   const { data: computers = [] } = useAgentComputers(storeId, open && canRun)
   const receiving = useBaseReceiving(storeId, open ? (delivery?.id ?? null) : null)
-  const remote = useRemoteMacro(storeId)
+  const remote = useRemoteMacro(storeId, {
+    matches: (job) => job.reference === delivery?.number && (job.kind === 'BASE_RECEIVE' || job.kind === 'BASE_CLOSE'),
+    onFinished: () => void (open && receiving.refetch()),
+  })
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [closeOn, setCloseOn] = useState<string | undefined>()
   const suppliers = receiving.data?.suppliers ?? []
@@ -99,7 +102,7 @@ export function ReceiveDialog({ storeId, delivery, rows, missingCarriers, open, 
           </DialogDescription>
         </DialogHeader>
 
-        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />}
+        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} onClose={remote.close} />}
 
         {!ready && (
           <Warning>

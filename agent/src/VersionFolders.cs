@@ -12,8 +12,8 @@ namespace Intermanage.Agent;
 /// <summary>
 /// Wersje agenta w osobnych folderach (od 1.7.5): człowiek rozpakowuje paczkę do folderu <c>1.7.5</c> albo
 /// <c>agent-1.7.5</c> w folderze agenta lub w <c>aktualizacja</c> („Wyodrębnij wszystkie” przy pobranej paczce), więc
-/// nie nadpisuje plików działających agentów. Agent ze starszą wersją przestawia wtedy swój autostart na nową; uruchamia
-/// ją człowiek (menu ikony albo dwuklik) lub następne logowanie. Agent sam niczego nie rozpakowuje ani nie uruchamia.
+/// nie nadpisuje plików działających agentów. Agent ze starszą wersją tylko o niej mówi; uruchamia ją człowiek dwuklikiem,
+/// a nowa wersja przestawia autostart na siebie. Agent sam niczego nie rozpakowuje, nie uruchamia i nie zmienia w tle.
 /// </summary>
 internal static class VersionFolders
 {
@@ -68,7 +68,7 @@ internal static class VersionFolders
         .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).Select(f => f.Name + ":" + f.Length));
 }
 
-/// <summary>Co minutę sprawdza, czy w folderze agenta jest nowsza wersja, i przestawia na nią autostart.</summary>
+/// <summary>Co minutę sprawdza, czy w folderze agenta jest nowsza wersja.</summary>
 internal sealed class VersionWatch : IDisposable
 {
     private static readonly TimeSpan CheckEvery = TimeSpan.FromMinutes(1);
@@ -93,7 +93,6 @@ internal sealed class VersionWatch : IDisposable
         if (Interlocked.Exchange(ref working, 1) == 1) return;
         try
         {
-            RepairAutostart();
             var root = VersionFolders.Root;
             if (!Directory.Exists(root)) return; // dysk sieciowy chwilowo niedostępny
             var found = VersionFolders.FindNewer(root, new Version(Program.Version));
@@ -109,12 +108,6 @@ internal sealed class VersionWatch : IDisposable
             lastSignature = signature;
             if (!stable) return;
             Set(found.Value.Path, found.Value.Version.ToString(3));
-            var autostart = AgentSettings.AutostartPath;
-            if (autostart != null && !Same(autostart, found.Value.Path))
-            {
-                AgentSettings.AutostartPath = found.Value.Path;
-                Log.Info("Autostart przestawiony na nową wersję: " + found.Value.Path);
-            }
             lastProblem = null;
         }
         catch (Exception error)
@@ -128,16 +121,6 @@ internal sealed class VersionWatch : IDisposable
         }
     }
 
-    /// <summary>Usunięty folder wersji, na którą wskazuje autostart: wraca do tej, która działa.</summary>
-    private static void RepairAutostart()
-    {
-        var path = AgentSettings.AutostartPath;
-        if (path == null || Same(path, Application.ExecutablePath) || File.Exists(path)) return;
-        if (!Directory.Exists(Path.GetPathRoot(path))) return;
-        AgentSettings.AutostartPath = Application.ExecutablePath;
-        Log.Info("Autostart wraca do " + Application.ExecutablePath + " (nie ma już " + path + ")");
-    }
-
     private void Set(string? path, string? version)
     {
         if (NewerPath == path && NewerVersion == version) return;
@@ -149,24 +132,19 @@ internal sealed class VersionWatch : IDisposable
 
     internal static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Menu ikony „Uruchom nową wersję”: nowa wersja sama poprosi tę o zamknięcie (<see cref="Handover"/>).</summary>
-    public void Launch()
+    /// <summary>Menu ikony „Pokaż nową wersję”: plik w Eksploratorze, uruchamia go człowiek (<see cref="Handover"/>).</summary>
+    public void ShowFile()
     {
         var path = NewerPath;
         if (path == null) return;
         try
         {
-            Process.Start(new ProcessStartInfo(path)
-            {
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(path)!,
-            })?.Dispose();
+            Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true })
+                ?.Dispose();
         }
         catch (Exception error)
         {
-            Log.Error("Uruchamianie nowej wersji " + path, error);
-            MessageBox.Show("Nie udało się uruchomić nowej wersji: " + error.Message + "\n\nUruchom ją dwuklikiem:\n" + path,
-                "Intermanage – agent sklepu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Log.Error("Otwieranie folderu nowej wersji " + path, error);
         }
     }
 

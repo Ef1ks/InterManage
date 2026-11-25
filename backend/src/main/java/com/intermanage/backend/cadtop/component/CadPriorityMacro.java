@@ -37,6 +37,8 @@ public final class CadPriorityMacro {
     private static final int ITM8_TIMEOUT_MS = 8_000;
     private static final int AFTER_CONFIRM_MS = 1_500;
     private static final int AFTER_CHECK_MS = 500;
+    /** „Sprzedaż ze stratami! Minimalna cena sprzedaży jest …”: przy zaznaczaniu albo przy zapisie, tylko czasem. */
+    private static final String LOSS_ALERT = "Minimalna cena";
     /** Komunikat o kodach CN pokazuje się razem z wczytaną kartą. */
     private static final int CN_ALERT_MS = 500;
     private static final int CARD_CHECK_MS = 3_000;
@@ -97,6 +99,7 @@ public final class CadPriorityMacro {
         String cnReady = "cn-jest-" + card;
         String noCn = "brak-cn-" + card;
         String change = "zmien-" + card;
+        String question = "pytanie-" + card;
         String back = "powrot-" + card;
         String noCard = "brak-karty-" + card;
         String otherEan = "inny-ean-" + card;
@@ -129,13 +132,18 @@ public final class CadPriorityMacro {
         // Priorytet, który już jest, ma pole zablokowane, więc klika się tylko odznaczone. Najpierw priorytet.
         out.addAll(tick(PRIORITY_CHECKBOX, "priorytet-" + card));
         out.addAll(tick(ACTIVE_CHECKBOX, "aktywny-" + card));
+        out.add(closeLossAlert(500));
         out.add("WEBVALUE|" + WINDOW + "|" + PRIORITY_CHECKBOX + "|^tak$");
         out.add("WEBVALUE|" + WINDOW + "|" + ACTIVE_CHECKBOX + "|^tak$");
         out.add("WEBVALUE|" + WINDOW + "|" + NEW_ITM8 + "|^0*" + top + "$");
         out.add("WEBCLICK|" + WINDOW + "|" + APPROVE);
+        // Komunikat o stracie przed pytaniem; gdy po nim pytania nie ma, zostaje Powrót.
+        out.add("IFDIALOG|" + ALERT + "|" + LOSS_ALERT + "|Fermer|" + question + "|1000");
+        out.add("WEBIFSEEN|" + DIALOG + "|Oui|" + back + "|5000");
+        out.add("LABEL|" + question);
         out.add("WEBWAIT|" + DIALOG + "|Oui|zachowa;Utworzy|" + PAGE_TIMEOUT_MS);
         out.add("IFDIALOG|" + DIALOG + "|zachowa|Oui|" + creates + "|5000");
-        out.add("SLEEP|" + AFTER_CONFIRM_MS);
+        out.add(closeLossAlert(2_000));
         out.add("LABEL|" + back);
         out.add("WEBCLICK|" + WINDOW + "|" + BACK);
         out.add("WEBWAIT|" + WINDOW + "|" + RESET + "||" + PAGE_TIMEOUT_MS);
@@ -171,6 +179,10 @@ public final class CadPriorityMacro {
         out.addAll(clearCard("pusta-" + card));
         out.add("LABEL|" + END + card);
         return out;
+    }
+
+    private static String closeLossAlert(int timeoutMs) {
+        return "WEBDIALOG|" + ALERT + "|" + LOSS_ALERT + "|Fermer|" + timeoutMs;
     }
 
     /** Zaznacza odznaczone pole; zaznaczone (także zablokowane) zostawia. */

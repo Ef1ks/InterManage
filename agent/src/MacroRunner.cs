@@ -26,8 +26,8 @@ internal static class MacroRunner
     /// <summary>Jedno makro naraz na komputerze: aktualizacja danych i makra zlecone z przeglądarki.</summary>
     public static readonly SemaphoreSlim Gate = new(1, 1);
 
-    /// <summary>Programy, które na pewno nie są odtwarzaczem (opis exe czytamy raz, a nie co kilka sekund).</summary>
-    private static readonly HashSet<string> NotPlayers = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Produkt z <c>;@Ahk2Exe-SetName</c> w player.ahk.</summary>
+    private const string Product = "Intermanage Makra";
 
     private static int lastPid;
     private static RunningPlayer? last;
@@ -57,8 +57,8 @@ internal static class MacroRunner
     }
 
     /// <summary>
-    /// Szuka odtwarzacza wśród programów. Rozpoznaje go po nazwie pliku albo po opisie programu (osobny plik bywa
-    /// nazwany player.exe, player-v60.exe albo AutoJob.exe).
+    /// Szuka odtwarzacza po nazwie programu (player.exe, player-v60.exe, AutoJob.exe). Zagląda tylko do niego (wersja
+    /// z pliku), innych programów nie otwiera.
     /// </summary>
     private static RunningPlayer? Scan()
     {
@@ -70,37 +70,26 @@ internal static class MacroRunner
             {
                 try
                 {
-                    if (process.SessionId != session) continue;
                     var name = process.ProcessName;
-                    var byName = name.StartsWith("player", StringComparison.OrdinalIgnoreCase)
-                        || name.StartsWith("autojob", StringComparison.OrdinalIgnoreCase);
-                    var path = PlayerHost.ImagePath(process.Id);
-                    if (path == null)
-                    {
-                        if (!byName) continue;
-                        lastPid = process.Id;
-                        return new RunningPlayer(name, null);
-                    }
-                    lock (NotPlayers)
-                    {
-                        if (!byName && NotPlayers.Contains(path)) continue;
-                    }
+                    if (!name.StartsWith("player", StringComparison.OrdinalIgnoreCase)
+                        && !name.StartsWith("autojob", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (process.SessionId != session) continue;
+                    var path = ImagePath(process.Id);
                     FileVersionInfo? info = null;
-                    try { info = FileVersionInfo.GetVersionInfo(path); }
+                    try { info = path == null ? null : FileVersionInfo.GetVersionInfo(path); }
                     catch (Exception) { /* plik na odłączonym dysku sieciowym */ }
-                    if (byName || string.Equals(info?.ProductName?.Trim(), PlayerHost.Product,
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        lastPid = process.Id;
-                        return new RunningPlayer(name,
-                            info == null ? null : new Version(info.FileMajorPart, info.FileMinorPart));
-                    }
-                    if (info == null) continue;
-                    lock (NotPlayers) NotPlayers.Add(path);
+                    // Inny program o podobnej nazwie (np. odtwarzacz wideo).
+                    if (info != null && !string.Equals(info.ProductName?.Trim(), Product,
+                        StringComparison.OrdinalIgnoreCase) && !name.StartsWith("autojob",
+                        StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(name, "player", StringComparison.OrdinalIgnoreCase)) continue;
+                    lastPid = process.Id;
+                    return new RunningPlayer(name,
+                        info == null ? null : new Version(info.FileMajorPart, info.FileMinorPart));
                 }
                 catch (Exception)
                 {
-                    // Proces mógł się zakończyć albo nie mamy do niego dostępu.
+                    // Proces mógł się zakończyć.
                 }
             }
         }
@@ -144,28 +133,6 @@ internal static class MacroRunner
 
     public static int IdleSeconds() => (int)(unchecked((uint)Environment.TickCount - LastInput()) / 1000);
 
-    /// <summary>
-    /// Ekran zablokowany (Win+L, ekran logowania, wygaszacz z hasłem): Windows nie przyjmuje wtedy klawiszy makra.
-    /// </summary>
-    public static bool DesktopLocked()
-    {
-        var desktop = OpenInputDesktop(0, false, DesktopReadObjects);
-        if (desktop == IntPtr.Zero) return true;
-        try
-        {
-            var name = new System.Text.StringBuilder(256);
-            return !GetUserObjectInformation(desktop, ObjectName, name, name.Capacity * 2, out _)
-                || !string.Equals(name.ToString(), "Default", StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            CloseDesktop(desktop);
-        }
-    }
-
-    private const uint DesktopReadObjects = 0x0001;
-    private const int ObjectName = 2;
-
     [StructLayout(LayoutKind.Sequential)]
     private struct LastInputInfo
     {
@@ -179,13 +146,32 @@ internal static class MacroRunner
     [DllImport("user32.dll")]
     private static extern bool GetLastInputInfo(ref LastInputInfo info);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+    private const uint QueryLimitedInformation = 0x1000;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool CloseDesktop(IntPtr desktop);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
 
-    [DllImport("user32.dll", EntryPoint = "GetUserObjectInformationW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool GetUserObjectInformation(IntPtr handle, int index, System.Text.StringBuilder info,
-        int length, out int needed);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder name,
+        ref int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>Ścieżka pliku procesu (odtwarzacza albo Mercalys), także 64-bitowego.</summary>
+    public static string? ImagePath(int processId)
+    {
+        var handle = OpenProcess(QueryLimitedInformation, false, processId);
+        if (handle == IntPtr.Zero) return null;
+        try
+        {
+            var size = 1024;
+            var name = new System.Text.StringBuilder(size);
+            return QueryFullProcessImageName(handle, 0, name, ref size) ? name.ToString() : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
 }

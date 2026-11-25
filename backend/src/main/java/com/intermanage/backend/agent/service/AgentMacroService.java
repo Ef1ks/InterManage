@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -74,6 +76,10 @@ public class AgentMacroService {
     public static final Duration RUN_TIMEOUT = Duration.ofHours(2);
     /** Kody MEA (integracja jednego pliku trwa do kilku minut) i ITM8 z cadencier (setki kart po ok. 10 s). */
     public static final Duration LONG_RUN_TIMEOUT = Duration.ofHours(6);
+    /** Tyle wstecz i tyle makr pokazuje lista ostatnich makr sklepu. */
+    private static final Duration RECENT = Duration.ofHours(12);
+    private static final int RECENT_LIMIT = 15;
+    private static final String SERVER_REQUEST = "Intermanage, po aktualizacji danych";
 
     /** Makra dostawy z bazy: polecenia odtwarzacza od 0.67 i wysyłka bonów przez agenta od 1.8.0. */
     private static final Set<AgentMacroKind> BASE_KINDS = Set.of(AgentMacroKind.BASE_RECEIVE,
@@ -250,6 +256,28 @@ public class AgentMacroService {
                 .anyMatch(agent -> states.get(agent.getId()).filter(state -> state.playerAtLeast(minor)).isPresent());
     }
 
+    /** Trwające i ostatnie makra sklepu, żeby strona po odświeżeniu dalej pokazywała, co robi komputer. */
+    @Transactional
+    public AgentMacroApi.Activity activity(UUID storeId) {
+        Instant now = Instant.now();
+        sweep(storeId, now);
+        jobs.flush();
+        Map<UUID, String> labels = new HashMap<>();
+        agents.findByStore(storeId).forEach(agent -> labels.put(agent.getId(), label(agent)));
+        List<AgentMacroApi.Job> recent = jobs.findRecent(storeId, now.minus(RECENT), Limit.of(RECENT_LIMIT)).stream()
+                .map(job -> new AgentMacroApi.Job(job.getId(), job.getKind().name(), job.getTitle(),
+                        job.getStatus().name(), job.getAgentId() == null ? null : labels.get(job.getAgentId()),
+                        job.getRequestedBy() == null ? SERVER_REQUEST : job.getRequestedBy(), job.getCreatedAt(),
+                        job.getOfferedAt(), job.getStartedAt(), job.getFinishedAt(), countdown(job.getKind()),
+                        job.getDeclinedAgentIds().stream().map(id -> labels.getOrDefault(id, "komputer")).toList(),
+                        job.getResultMessage(), job.getResultCodes(), job.getItemCount(), job.getReference()))
+                .toList();
+        return new AgentMacroApi.Activity(recent, agents.findRunningUpdate(storeId)
+                .map(update -> new AgentMacroApi.Update(update.getMachineName() == null ? update.getName()
+                        : update.getName() + " (" + update.getMachineName() + ")", update.getStartedAt()))
+                .orElse(null));
+    }
+
     @Transactional
     public AgentMacroApi.Job get(UUID storeId, UUID id) {
         sweep(storeId, Instant.now());
@@ -331,7 +359,7 @@ public class AgentMacroService {
             return new AgentMacroApi.PollResponse(null);
         }
         return new AgentMacroApi.PollResponse(new AgentMacroApi.Offer(offered.getId(), offered.getTitle(),
-                requestedBy(offered), countdown(offered), preferredOnly(offered)));
+                requestedBy(offered), countdown(offered.getKind()), preferredOnly(offered)));
     }
 
     /** Pracownik przy komputerze anulował odliczanie: zlecenie idzie do kolejnego komputera. */
@@ -403,8 +431,8 @@ public class AgentMacroService {
         return saved;
     }
 
-    private static int countdown(AgentMacroJob job) {
-        return switch (job.getKind()) {
+    private static int countdown(AgentMacroKind kind) {
+        return switch (kind) {
             case PRODUCT_FILES -> PRODUCT_FILES_COUNTDOWN_SECONDS;
             case PRICE_CONTROL -> PRICE_CONTROL_COUNTDOWN_SECONDS;
             default -> COUNTDOWN_SECONDS;
@@ -574,7 +602,7 @@ public class AgentMacroService {
     }
 
     private static String requestedBy(AgentMacroJob job) {
-        return job.getCreatedBy() == null ? "Intermanage, po aktualizacji danych" : job.getCreatedBy().getDisplayName();
+        return job.getCreatedBy() == null ? SERVER_REQUEST : job.getCreatedBy().getDisplayName();
     }
 
     private AgentMacroApi.Job response(AgentMacroJob job) {
@@ -584,7 +612,7 @@ public class AgentMacroService {
                 .map(id -> agents.findById(id).map(AgentMacroService::label).orElse("komputer")).toList();
         return new AgentMacroApi.Job(job.getId(), job.getKind().name(), job.getTitle(), job.getStatus().name(),
                 computer, requestedBy(job), job.getCreatedAt(), job.getOfferedAt(),
-                job.getStartedAt(), job.getFinishedAt(), countdown(job), declined, job.getResultMessage(),
-                job.getResultCodes(), job.getItemCount());
+                job.getStartedAt(), job.getFinishedAt(), countdown(job.getKind()), declined, job.getResultMessage(),
+                job.getResultCodes(), job.getItemCount(), job.getReference());
     }
 }

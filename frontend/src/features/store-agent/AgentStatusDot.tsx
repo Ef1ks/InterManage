@@ -2,7 +2,8 @@ import { Link } from 'react-router'
 
 import { useCurrentUser } from '@/features/auth/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
-import { useAgentState } from '@/lib/store-agent'
+import { useCurrentStore } from '@/features/stores/current-store'
+import { rememberedAgentStatus, useAgentState } from '@/lib/store-agent'
 import { cn } from '@/lib/utils'
 
 /**
@@ -12,14 +13,23 @@ import { cn } from '@/lib/utils'
 export function AgentStatusDot() {
   const state = useAgentState()
   const me = useCurrentUser()
-  if (!state?.status.enabled || !state.status.present) return null
-  const online = state.status.online
-  const label = online
-    ? `Agent sklepu online${state.status.machineName ? ` (${state.status.machineName})` : ''}: zapisuje pliki i pilnuje folderów`
-    : 'Agent sklepu offline: pliki zapisuje i foldery sprawdza przeglądarka'
+  const store = useCurrentStore()
+  const known = state && state.storeId === store?.id ? state.status : null
+  const status = known ?? (store ? rememberedAgentStatus(store.id) : null)
+  if (!status?.enabled || !status.present) return null
+  const online = status.online
+  const label = `${known ? '' : 'Ostatnio znany stan: '}${
+    online
+      ? `Agent sklepu online${status.machineName ? ` (${status.machineName})` : ''}: zapisuje pliki i pilnuje folderów`
+      : 'Agent sklepu offline: pliki zapisuje i foldery sprawdza przeglądarka'
+  }`
   const dot = (
     <span
-      className={cn('block size-2.5 rounded-full ring-2 ring-background', online ? 'bg-emerald-500' : 'bg-amber-500')}
+      className={cn(
+        'block size-2.5 rounded-full ring-2 ring-background',
+        online ? 'bg-emerald-500' : 'bg-amber-500',
+        !known && 'opacity-50',
+      )}
     />
   )
   return me.owner ? (

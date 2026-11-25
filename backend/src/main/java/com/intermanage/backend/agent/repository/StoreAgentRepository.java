@@ -1,5 +1,6 @@
 package com.intermanage.backend.agent.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,6 +95,23 @@ public interface StoreAgentRepository extends JpaRepository<StoreAgent, UUID> {
                            where store_id = :storeId and update_agent_id is not null
                              and update_started_at >= now() - interval '4 hours')""")
     boolean isUpdating(UUID storeId);
+
+    interface RunningUpdate {
+        String getName();
+
+        String getMachineName();
+
+        Instant getStartedAt();
+    }
+
+    /** Komputer, który prowadzi teraz aktualizację danych (zgłasza się; zabity w trakcie jej już nie prowadzi). */
+    @Query(nativeQuery = true, value = """
+            select a.name as "name", a.machine_name as "machineName", l.update_started_at as "startedAt"
+            from store_agent_leaders l
+            join store_agents a on a.id = l.update_agent_id and a.deleted_at is null
+            where l.store_id = :storeId and l.update_started_at >= now() - interval '4 hours'
+              and a.last_seen_at > now() - interval '3 minutes'""")
+    Optional<RunningUpdate> findRunningUpdate(UUID storeId);
 
     @Modifying
     @Query(nativeQuery = true, value = """

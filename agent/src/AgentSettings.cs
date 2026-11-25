@@ -66,12 +66,6 @@ internal sealed class AgentSettings
     /// <summary>Ten komputer bierze makra zlecone z przeglądarki i automatyczne (aktualizacja danych osobno).</summary>
     public bool AllowMacros { get; set; } = true;
 
-    /// <summary>
-    /// „Uruchamiaj z Windows” odznaczone ręcznie w menu. Bez tego brak wpisu w rejestrze to nie wybór człowieka (nie udał
-    /// się zapis albo wpis usunął inny program), więc agent przy starcie wpisuje się z powrotem.
-    /// </summary>
-    public bool AutostartOff { get; set; }
-
     private static string? Protect(string? value) => string.IsNullOrEmpty(value)
         ? null
         : Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy,
@@ -143,23 +137,6 @@ internal sealed class AgentSettings
             if (key == null) return;
             if (value != null) key.SetValue(RunValue, "\"" + value + "\"");
             else key.DeleteValue(RunValue, false);
-        }
-    }
-
-    /// <summary>Brakujący wpis autostartu wraca przy starcie agenta, o ile nikt go nie wyłączył w menu.</summary>
-    public void EnsureAutostart()
-    {
-        if (AutostartOff) return;
-        try
-        {
-            if (Autostart) return;
-            AutostartPath = System.Windows.Forms.Application.ExecutablePath;
-            if (Autostart) Log.Info("Autostart: nie było wpisu, włączono " + AutostartPath);
-            else Log.Warn("Autostart: Windows nie zapisał wpisu");
-        }
-        catch (Exception error)
-        {
-            Log.Warn("Autostart: " + error.Message);
         }
     }
 

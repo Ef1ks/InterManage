@@ -146,6 +146,16 @@ class AgentMacroIntegrationTests {
                 .andExpect(jsonPath("$.computer").value("Kasa"))
                 .andExpect(jsonPath("$.declined[0]").value("Biuro"));
         agentPost(biuro, "/macro-jobs/" + job + "/start", "").andExpect(status().isConflict());
+        // Strona po odświeżeniu: trwające makro na górze, z bonem i komputerem, wcześniejsza próba pod nim.
+        mvc.perform(get(base() + "/recent").cookie(owner)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.jobs.length()").value(2))
+                .andExpect(jsonPath("$.jobs[0].id").value(job))
+                .andExpect(jsonPath("$.jobs[0].status").value("OFFERED"))
+                .andExpect(jsonPath("$.jobs[0].reference").value("09516050082"))
+                .andExpect(jsonPath("$.jobs[0].computer").value("Kasa"))
+                .andExpect(jsonPath("$.jobs[0].declined[0]").value("Biuro"))
+                .andExpect(jsonPath("$.jobs[1].status").value("NO_COMPUTER"))
+                .andExpect(jsonPath("$.update").doesNotExist());
 
         String macro = JsonPath.read(agentPost(kasa, "/macro-jobs/" + job + "/start", "")
                 .andExpect(status().isOk())

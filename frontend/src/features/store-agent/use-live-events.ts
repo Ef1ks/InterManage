@@ -105,6 +105,7 @@ export function useLiveEvents() {
             }
             break
           case 'agent-macro':
+            invalidate('agent-macros', 'recent')
             if (message.kind === 'PRODUCT_FILES' && message.status === 'DRAFTS') {
               invalidate()
               emitDraftsChanged(messageStore, eansOf(message))

@@ -52,13 +52,14 @@ internal sealed class SettingsForm : Form
 
         server.Text = settings.ServerUrl;
         key.Text = "";
-        // Nieznane położenie agent od razu szuka (działający Mercalys, domyślne miejsce na N:, skrót).
+        // Nieznane położenie agent od razu szuka (działający Mercalys, domyślne miejsce na N:).
         mercalysPath.Text = MercalysPath.Ensure() ?? MercalysPath.Saved ?? "";
         browse.Click += (_, _) => Browse();
         updateOnStart.Checked = settings.UpdateOnStart;
         saveFiles.Checked = settings.SaveFiles;
         allowMacros.Checked = settings.AllowMacros;
-        autostart.Checked = !settings.AutostartOff;
+        // Przy pierwszym zapisie zaznaczone; potem to, co naprawdę jest w Windows.
+        autostart.Checked = AgentSettings.Autostart || !settings.HasKey;
 
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 13 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -174,8 +175,12 @@ internal sealed class SettingsForm : Form
             settings.UpdateOnStart = updateOnStart.Checked;
             settings.SaveFiles = saveFiles.Checked;
             settings.AllowMacros = allowMacros.Checked;
-            settings.AutostartOff = !autostart.Checked;
             settings.Save();
+            if (autostart.Checked != AgentSettings.Autostart)
+            {
+                try { AgentSettings.AutostartPath = autostart.Checked ? Application.ExecutablePath : null; }
+                catch (Exception error) { Log.Error("Autostart", error); }
+            }
             Log.Info("Zapisano ustawienia (sklep " + hello.StoreNumber + ")");
             MessageBox.Show(this, "Połączono ze sklepem " + hello.StoreNumber
                 + (string.IsNullOrEmpty(hello.StoreName) ? "" : " (" + hello.StoreName + ")")

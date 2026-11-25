@@ -21,7 +21,7 @@ namespace Intermanage.Agent;
 /// w pliku (<see cref="MacroPlayback"/>), więc nie zostaje na oknie błędu. Po nieudanej aktualizacji okno ma „Spróbuj
 /// ponownie” (tylko brakujące raporty), a w trakcie „Przerwij”.
 ///
-/// Makro wykonuje odtwarzacz (player.exe schowany w agencie, <see cref="PlayerHost"/>, albo osobny): agent wkłada makro do schowka i naciska lewy Alt+E, jak
+/// Makro wykonuje odtwarzacz (osobny player.exe, AutoJob): agent wkłada makro do schowka i naciska lewy Alt+E, jak
 /// pracownik. Hasło Mercalys z ustawień agenta trafia do pierwszego polecenia, więc odtwarzacz sam uruchamia i loguje
 /// wyłączony Mercalys.
 /// </summary>
@@ -315,9 +315,7 @@ internal sealed class DataUpdate
         form.Status("Szukam odtwarzacza makr (AutoJob)…");
         if (!await WaitForPlayerAsync(form, cancel).ConfigureAwait(false))
         {
-            return Nothing(macro, PlayerHost.Embedded
-                ? "Odtwarzacz makr agenta nie wystartował (szczegóły w dzienniku agenta)."
-                : "Nie działa odtwarzacz makr (AutoJob). Uruchom go i kliknij „Spróbuj ponownie”.");
+            return Nothing(macro, "Nie działa odtwarzacz makr (AutoJob). Uruchom go i kliknij „Spróbuj ponownie”.");
         }
         form.Status("Uruchamiam makro w Mercalys…");
         var version = MacroRunner.FindPlayer()?.Version;

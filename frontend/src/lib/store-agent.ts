@@ -20,10 +20,34 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
+const REMEMBERED_KEY = 'intermanage.agentStatus.'
+
+/**
+ * Ostatnio znany stan agenta sklepu: kropka w nagłówku jest od razu po odświeżeniu strony, zanim odpowie serwer.
+ * Tylko do pokazania; o zapisie i pilnowaniu folderów decyduje bieżący stan.
+ */
+export function rememberedAgentStatus(storeId: string): AgentStatus | null {
+  try {
+    const saved = localStorage.getItem(REMEMBERED_KEY + storeId)
+    return saved ? (JSON.parse(saved) as AgentStatus) : null
+  } catch {
+    return null
+  }
+}
+
+function remember(storeId: string, status: AgentStatus) {
+  try {
+    localStorage.setItem(REMEMBERED_KEY + storeId, JSON.stringify(status))
+  } catch {
+    // Bez localStorage kropka pojawi się po odpowiedzi serwera.
+  }
+}
+
 export function setAgentStatus(storeId: string | null, status: AgentStatus | null) {
   const next = storeId && status ? { storeId, status } : null
   if (JSON.stringify(next) === JSON.stringify(current)) return
   current = next
+  if (next) remember(next.storeId, next.status)
   listeners.forEach((listener) => listener())
 }
 

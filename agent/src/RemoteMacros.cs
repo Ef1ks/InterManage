@@ -81,7 +81,7 @@ internal sealed class RemoteMacros : IDisposable
         }
     }
 
-    private bool Locked => sessionLocked || MacroRunner.DesktopLocked();
+    private bool Locked => sessionLocked;
 
     private async Task LoopAsync(CancellationToken cancel)
     {

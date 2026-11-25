@@ -19,8 +19,6 @@ internal sealed class TrayApp : ApplicationContext
     private const string Title = "Intermanage – agent sklepu";
 
     private readonly AgentHost host = new();
-    private readonly PlayerHost player = new();
-    private readonly ToolStripMenuItem macros = new("Makra: uruchamiam odtwarzacz…") { Visible = false };
     private readonly NotifyIcon icon;
     private readonly ToolStripMenuItem status = new() { Enabled = false };
     private readonly ToolStripMenuItem activity = new() { Enabled = false, Visible = false };
@@ -66,7 +64,6 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(updateStatus);
         menu.Items.Add(showUpdate);
         menu.Items.Add(runNewer);
-        menu.Items.Add(macros);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Otwórz Intermanage", null, (_, _) => Open(settings.ServerUrl));
         menu.Items.Add("Ustawienia…", null, (_, _) => ShowSettings());
@@ -78,22 +75,19 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Zakończ", null, (_, _) => ExitThread());
         showUpdate.Click += (_, _) => selfUpdate.ShowReadyFile();
-        runNewer.Click += (_, _) => versions.Launch();
+        runNewer.Click += (_, _) => versions.ShowFile();
         versions.Changed += () =>
         {
             if (ui.IsHandleCreated) ui.BeginInvoke(new Action(UpdateIcon));
         };
         versions.Start();
         exitRequest = Handover.Listen(() => Task.Run(ExitForNewVersionAsync));
-        settings.EnsureAutostart();
         autostart.Checked = AgentSettings.Autostart;
         autostart.Click += (_, _) =>
         {
             try
             {
-                AgentSettings.AutostartPath = autostart.Checked ? versions.NewerPath ?? Application.ExecutablePath : null;
-                settings.AutostartOff = !autostart.Checked;
-                settings.Save();
+                AgentSettings.AutostartPath = autostart.Checked ? Application.ExecutablePath : null;
             }
             catch (Exception error) { Log.Error("Autostart", error); }
         };
@@ -123,19 +117,6 @@ internal sealed class TrayApp : ApplicationContext
         host.Connected += StartUpdate;
         host.LeadershipChanged += StartUpdate;
 
-        // Odtwarzacz makr jest w agencie: własnej ikony nie ma, jego wersja i pomoc są w menu agenta.
-        macros.Visible = PlayerHost.Embedded;
-        macros.Click += (_, _) => ShowMacroHelp();
-        player.Changed += () =>
-        {
-            if (ui.IsHandleCreated)
-            {
-                ui.BeginInvoke(new Action(() => macros.Text = player.Blocked != null
-                    ? "Makra: Windows zablokował odtwarzacz"
-                    : "Makra (Alt+E), odtwarzacz " + player.Version));
-            }
-        };
-        player.Start();
         remoteMacros.Start(closing.Token);
 
         UpdateIcon();
@@ -167,12 +148,12 @@ internal sealed class TrayApp : ApplicationContext
         var toUnpack = newer == null
             || (selfUpdate.ReadyVersion != null && SelfUpdate.IsNewer(selfUpdate.ReadyVersion, newer));
         updateStatus.Text = newer != null && !toUnpack
-            ? "Wersja " + newer + " wystartuje przy następnym logowaniu do Windows"
+            ? "Wersja " + newer + " czeka: uruchom ją dwuklikiem"
             : selfUpdate.Status ?? "";
         updateStatus.Visible = updateStatus.Text.Length > 0;
         showUpdate.Visible = toUnpack && selfUpdate.ReadyFile != null;
         runNewer.Visible = newer != null;
-        runNewer.Text = "Uruchom nową wersję " + newer;
+        runNewer.Text = "Pokaż nową wersję " + newer;
         // Podpowiedź ikony ma limit 63 znaków.
         var tip = Title + "\n" + host.StatusText;
         icon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
@@ -211,41 +192,11 @@ internal sealed class TrayApp : ApplicationContext
             {
                 settings = AgentSettings.Load();
                 host.Start(settings);
-                ApplyAutostart();
+                autostart.Checked = AgentSettings.Autostart;
             }
         }
         openSettings = null;
         UpdateIcon();
-    }
-
-    /// <summary>„Uruchamiaj z Windows” z okna ustawień: wpis w rejestrze i zaznaczenie w menu.</summary>
-    private void ApplyAutostart()
-    {
-        try
-        {
-            if (settings.AutostartOff) AgentSettings.AutostartPath = null;
-            else settings.EnsureAutostart();
-            autostart.Checked = AgentSettings.Autostart;
-        }
-        catch (Exception error) { Log.Error("Autostart", error); }
-    }
-
-    private void ShowMacroHelp()
-    {
-        if (player.Blocked != null)
-        {
-            MessageBox.Show("Windows nie pozwolił uruchomić odtwarzacza makr (" + player.Blocked + ").\n\n"
-                + "Komputer pozwala uruchamiać programy tylko z wybranych folderów. Odtwarzacz leży w folderze agenta:\n"
-                + Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "player", "player.exe")
-                + "\n\nPoproś informatyka o zgodę na ten plik albo przenieś cały folder agenta do dozwolonego folderu.",
-                "Intermanage – makra", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        MessageBox.Show("Odtwarzacz makr " + (player.Version ?? "") + " działa w agencie, nie trzeba go uruchamiać.\n\n"
-            + "Alt+E: wykonuje makro skopiowane ze strony Intermanage. Makro działa raz, potem Schowek jest pusty.\n"
-            + "Esc w trakcie makra: zatrzymuje makro.\n"
-            + "Alt+R nad oknem Mercalys: tryb skanowania, klik w okno daje listę przycisków strony w Schowku, Esc anuluje.",
-            "Intermanage – makra", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static void Open(string url)
@@ -300,7 +251,6 @@ internal sealed class TrayApp : ApplicationContext
         versions.Dispose();
         selfUpdate.Dispose();
         host.Dispose();
-        player.Dispose();
         icon.Visible = false;
         icon.Dispose();
         ui.Dispose();

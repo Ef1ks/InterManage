@@ -70,8 +70,9 @@ Robi:
 - usuwa **tylko** raporty Importu danych, które serwer wgrał przed dzisiejszym dniem, w ich folderze raportu;
 - zapisuje atomowo (`<nazwa>.intermanage-tmp`, potem zmiana nazwy) i nadpisuje plik o tej samej nazwie, jak
   przeglądarka (podmiana dopiero po zapisaniu całego pliku tymczasowego, więc program sklepu nie zobaczy połowy pliku);
-- uruchamia się z Windows przez `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (wyłączane w menu ikony; od 1.12.1
-  brakujący wpis wraca przy starcie agenta, chyba że ktoś odznaczył „Uruchamiaj z Windows”);
+- uruchamia się z Windows przez `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (wpisuje się przy
+  pierwszym zapisie ustawień, przełącznik jest w menu ikony i w ustawieniach). Od 1.12.3 agent nie przywraca usuniętego
+  wpisu i nie zmienia go w tle, bo tak zachowuje się złośliwy program;
 - przy starcie (od 1.2.0, wyłączane w Ustawieniach) sprawdza daty plików w folderach raportów Importu danych i gdy
   któryś nie jest z dzisiaj, pokazuje na wierzchu okno „AKTUALIZACJA DANYCH – POCZEKAJ DO POTWIERDZENIA”, pobiera
   z serwera makro zapisu raportów z Mercalys (to samo co „Zaktualizuj wszystkie pliki”), wkłada je do schowka
@@ -96,7 +97,7 @@ Robi:
   rozpocznie się za 5…” (pliki nowych artykułów 2 s) z „Anuluj”, które oddaje makro kolejnemu
   komputerowi (ruch myszy nie anuluje od 1.7.2). Wyłączony Mercalys makro uruchamia z położenia w ustawieniach agenta
   („Program Mercalys”), a nieznane agent bierze z działającego Mercalys,
-  z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3) albo ze skrótu na pulpicie. Treść
+  z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3). Treść
   składa serwer, agent wkłada ją do schowka i naciska Alt+E, a wynik odtwarzacz zapisuje w
   `%LOCALAPPDATA%\Intermanage\Agent\makra` (plik znika po odesłaniu). Komputer z zablokowanym ekranem makra nie dostanie.
   Od 1.8.0 po makrze „Wprowadź dostawę” agent wysyła też bony dostawy zapisane przez to makro w folderze z ustawień
@@ -105,8 +106,10 @@ Robi:
 Nie robi:
 
 - nie wymaga administratora (`asInvoker`), nie instaluje usługi, nie pisze do HKLM ani Program Files;
-- nie uruchamia PowerShella, cmd ani skryptów i nie uruchamia innego kodu niż odtwarzacz makr ze swojego exe i swoją
-  nowszą wersję z automatycznej aktualizacji (niżej), sprawdzoną sumą SHA-256 i podpisem;
+- nie uruchamia PowerShella, cmd, skryptów ani żadnego programu poza przeglądarką i Eksploratorem, otwieranymi
+  kliknięciem w menu ikony (od 1.12.3 także nowej wersji agenta nie uruchamia);
+- nie zamyka innych programów i nie przegląda ich: otwiera tylko proces odtwarzacza makr (po nazwie `player*`,
+  `autojob*`) i Mercalys, żeby odczytać ścieżkę pliku (od 1.12.3);
 - nie klika w Mercalys sam: makra wykonuje odtwarzacz, a agent tylko wkłada makro aktualizacji do schowka i naciska
   za pracownika Alt+E;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
@@ -128,34 +131,34 @@ reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „
 1. „Wyodrębnij wszystkie” przy ZIP-ie. Powstaje folder `agent-1.7.6` (w `aktualizacja` albo w folderze agenta; nazwa
    `1.7.6` też działa), więc żaden plik działającego agenta nie jest nadpisywany.
 2. Agent na każdym komputerze w ciągu ok. 2 minut zauważa nowszą wersję (`VersionWatch`, wersja z pliku exe, po dwóch
-   takich samych sprawdzeniach, żeby nie wziąć rozpakowywanego folderu), przestawia swój autostart i pokazuje w menu
-   ikony „Uruchom nową wersję”. Bez kliknięcia nowa wersja rusza przy następnym logowaniu do Windows.
-3. Uruchomiona nowa wersja (menu albo dwuklik) prosi działającą o zamknięcie (`Handover`); stara kończy makro oraz
+   takich samych sprawdzeniach, żeby nie wziąć rozpakowywanego folderu) i pokazuje w menu ikony „Pokaż nową wersję”
+   (plik w Eksploratorze). Autostartu nie zmienia i niczego nie uruchamia (od 1.12.3).
+3. Uruchomiona dwuklikiem nowa wersja prosi działającą o zamknięcie (`Handover`); stara kończy makro oraz
    trwający zapis i wysyłkę (do 10 min), a nowa startuje sama i ustawia autostart na siebie.
 
-Powrót: usuń folder nowej wersji i uruchom starą (autostart wskazujący usunięty plik działający agent sam cofa na
-siebie). Starego folderu nie usuwaj, dopóki któryś komputer z niego działa. Agenci do 1.7.4 nie znają prośby
+Powrót: usuń folder nowej wersji i uruchom starą dwuklikiem (ustawi autostart na siebie). Starego folderu nie usuwaj, dopóki któryś komputer z niego działa. Agenci do 1.7.4 nie znają prośby
 o zamknięcie: na nich trzeba ostatni raz kliknąć „Zakończ”.
 
 Agent celowo nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu (SentinelOne)
 traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 razem z jego odtwarzaczem makr (10023,
 23.11.2026). Samo pobranie pliku przez HTTPS i zapis do folderu jest dla niego zwykłą pracą agenta. **Z tego samego
 powodu paczka nie zawiera odtwarzacza makr** (niepodpisany `player.exe` z AutoHotkey jest kasowany przez SentinelOne):
-odtwarzacz AutoJob zostaje osobny, pobierany z „Do pobrania” przez przeglądarkę i uruchamiany ręcznie, a agent bez
-`player\player.exe` obok siebie go nie zamyka.
+odtwarzacz AutoJob zostaje osobny, pobierany z „Do pobrania” przez przeglądarkę i uruchamiany ręcznie, a agent go nie
+uruchamia ani nie zamyka.
 
-## Budowanie## Budowanie
+25.11.2026 w 10023 oba komputery zamilkły kilka minut po przejściu na 1.12.2 (1.10.0 w 09575 pracował dalej), dlatego
+1.12.3 nie ma już kodu uruchamiania i zamykania odtwarzacza (`PlayerHost`), przeglądania wszystkich programów, sprawdzania
+pulpitu, przeglądania skrótów, uruchamiania nowej wersji ani przywracania autostartu.
+1.12.0 działał, a 1.12.1 różnił się od niego tylko przywracaniem wpisu autostartu przy starcie (`EnsureAutostart`), więc
+to najpewniej ono. Trwałe rozwiązanie to podpis Authenticode i wyjątek ustawiony przez administratora
+programu ochronnego; nie omijamy go.
+
+## Budowanie
 
 Wymaga .NET SDK (8 albo nowszego); biblioteki .NET Framework 4.8 przychodzą z pakietu
 `Microsoft.NETFramework.ReferenceAssemblies`, bez Developer Packa.
 
-Najpierw odtwarzacz makr (z katalogu projektu), bo agent bierze `player.exe` do środka przy budowaniu; bez niego
-budowanie daje ostrzeżenie i agent jest bez odtwarzacza:
-
 ```powershell
-.\build-player.ps1
-# podpisz player.exe (niżej) PRZED budowaniem agenta: Smart App Control / zasady kontroli aplikacji blokują
-# niepodpisany exe wypakowany do %LOCALAPPDATA%
 cd agent
 dotnet build -c Release
 # wynik: agent\bin\Release\net48\ (IntermanageAgent.exe, IntermanageAgent.exe.config, biblioteki System.Text.Json)

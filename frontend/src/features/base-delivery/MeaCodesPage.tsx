@@ -19,7 +19,7 @@ import type { MeaOverview, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { useMeaChange, useMeaOverview } from './api'
-import { meaResult } from './mea-result'
+import { meaFiles, meaResult } from './mea-result'
 import { basePath } from './paths'
 
 /**
@@ -53,9 +53,19 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
   const change = useMeaChange(store.id)
   const canRunRemotely = useCan('DATA_ENTRY', 'EDIT')
   const { data: computers = [] } = useAgentComputers(store.id, canRunRemotely)
-  const remote = useRemoteMacro(store.id)
   // Zaznaczone kody; nowe kody z kolejnego dokumentu są zaznaczone od razu (lista to zwykle wszystko do wpisania).
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
+  const remote = useRemoteMacro(store.id, {
+    // Dopiero z wczytaną listą: wynik odznacza kody na niej.
+    matches: (job) => overview.data !== undefined && job.kind === 'MEA_CODES',
+    // Po odświeżeniu strony: odznaczone kody bez pliku, a po błędzie wszystkie, których makro na pewno nie wpisało.
+    onFinished: (job) => {
+      const { files } = meaFiles(job)
+      const codes = (overview.data?.pending ?? []).map((item) => item.code)
+      const left = codes.filter((code) => (job.status === 'DONE' ? files.get(code) === 0 : !files.get(code)))
+      if (job.status === 'DONE' || job.status === 'FAILED') setUnchecked((current) => new Set([...current, ...left]))
+    },
+  })
   const pending = useMemo(() => overview.data?.pending ?? [], [overview.data])
   const chosen = pending.filter((item) => !unchecked.has(item.code)).map((item) => item.code)
 
@@ -171,7 +181,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
         </header>
         {remote.job && (
           <div className="px-3 pt-3">
-            <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />
+            <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} onClose={remote.close} />
           </div>
         )}
         {overview.isPending ? (

@@ -6,14 +6,20 @@ import type { AgentMacroJob } from '@/lib/types'
  * się na limicie plików albo podsumowanie było za długie), a przy przerwanym nie wiadomo, więc nie jest.
  */
 export function meaResult(codes: string[], job: Pick<AgentMacroJob, 'status' | 'message'>) {
-  const files = new Map<string, number>()
-  for (const [, code, count] of (job.message ?? '').matchAll(/^\s*(\w+): obsłużone pliki: (\d+)/gm)) {
-    files.set(code, Number(count))
-  }
+  const { files } = meaFiles(job)
   const missing = codes.filter((code) => files.get(code) === 0)
   const entered = codes.filter((code) => {
     const count = files.get(code)
     return count === undefined ? job.status === 'DONE' : count > 0
   })
   return { entered, missing }
+}
+
+/** Liczba obsłużonych plików przy kodach wymienionych w podsumowaniu. */
+export function meaFiles(job: Pick<AgentMacroJob, 'message'>) {
+  const files = new Map<string, number>()
+  for (const [, code, count] of (job.message ?? '').matchAll(/^\s*(\w+): obsłużone pliki: (\d+)/gm)) {
+    files.set(code, Number(count))
+  }
+  return { files }
 }

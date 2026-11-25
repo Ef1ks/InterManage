@@ -130,8 +130,11 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
   const [task, setTask] = useState<TaskFilter>('all')
   const canEdit = useCan('DATA_ENTRY', 'EDIT')
   const { data: computers = [] } = useAgentComputers(storeId, canEdit)
-  const remote = useRemoteMacro(storeId)
   const refresh = useRefreshCadPriorities(storeId)
+  const remote = useRemoteMacro(storeId, {
+    matches: (job) => job.kind === 'CAD_PRIORITY',
+    onFinished: () => void refresh(),
+  })
   const automatic = useAutomaticCadPriorities(storeId)
   const run = useRunCadPriorities(storeId)
   const undo = useUndoCadPriorities(storeId)
@@ -344,7 +347,7 @@ function Priorities({ storeId, report }: { storeId: string; report: CadPriorityR
       </div>
       {remote.job && (
         <div className="mb-3">
-          <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} />
+          <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} onClose={remote.close} />
         </div>
       )}
 
