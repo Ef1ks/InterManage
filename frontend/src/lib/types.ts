@@ -5191,6 +5191,23 @@ export type StoreAgent = {
   key: string | null
 }
 
+export type AgentFeatureKey =
+  | 'FILE_SAVING'
+  | 'PRICE_FILES'
+  | 'PRICE_CONTROL_FILES'
+  | 'ATHOS'
+  | 'PRODUCT_FILE_CLEANUP'
+  | 'REPORTS'
+  | 'REPORT_CLEANUP'
+  | 'DATA_UPDATE'
+  | 'PRODUCT_FILE_MACRO'
+  | 'PRICE_CONTROL_MACRO'
+  | 'CAD_PRIORITY_MACRO'
+  | 'REMOTE_MACROS'
+
+/** Funkcja agenta włączona albo wyłączona w sklepie (AgentFeatureResponse). */
+export type AgentFeature = { feature: AgentFeatureKey; enabled: boolean }
+
 export type StoreAgents = {
   enabled: boolean
   agents: StoreAgent[]

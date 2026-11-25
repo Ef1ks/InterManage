@@ -322,7 +322,8 @@ internal sealed class FolderWatcher : IDisposable
     /// </summary>
     private static async Task CleanProductFilesAsync(HelloResponse config, CancellationToken cancel)
     {
-        if (!config.Enabled || !config.Folders.TryGetValue(FileSaver.ProductFileKey, out var folder)
+        if (!config.Enabled || config.CleanProductFiles == false
+            || !config.Folders.TryGetValue(FileSaver.ProductFileKey, out var folder)
             || string.IsNullOrWhiteSpace(folder)) return;
         try
         {

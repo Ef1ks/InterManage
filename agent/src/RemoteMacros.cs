@@ -198,6 +198,8 @@ internal sealed class RemoteMacros : IDisposable
         if (DateTime.UtcNow - playerCheckedAt < (playerReady ? PlayerCheckEvery : PlayerSearchEvery)) return;
         playerCheckedAt = DateTime.UtcNow;
         var version = MacroRunner.FindPlayer()?.Version;
+        // Makra wyłączone w ustawieniach komputera: serwer nie daje mu żadnego.
+        if (!settings().AllowMacros) version = null;
         playerReady = version != null && version >= NeededPlayer;
         playerVersion = version == null ? null : version.Major + "." + version.Minor;
     }

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { BarcodeIcon, XIcon } from 'lucide-react'
 
 import { CopyButton } from '@/components/CopyButton'
@@ -14,33 +15,38 @@ const shortItm8 = (itm8: string) => itm8.replace(/^0+/, '') || '0'
 
 /**
  * Kody artykułu w nagłówku statystyk: ITM8 i EAN w osobnych polach z kopiowaniem, a obok przycisk karty
- * „Przypisane kody” (EAN-y z kartoteki, multikodów i raportów).
+ * „Przypisane kody” (EAN-y z kartoteki, multikodów i raportów) i akcje artykułu, żeby w wąskim panelu łamały się razem.
  */
 export function ArticleCodeFields({
   itm8,
   ean,
   codesOpen,
   onToggleCodes,
+  actions,
 }: {
   itm8: string
   ean: string | null | undefined
   codesOpen: boolean
   onToggleCodes: () => void
+  actions?: ReactNode
 }) {
   return (
     <div className="flex flex-wrap items-stretch gap-2">
       <CodeField label="ITM8" value={shortItm8(itm8)} title={`ITM8 w bazie: ${itm8}`} />
       <CodeField label="EAN" value={ean || null} />
-      <Button
-        variant={codesOpen ? 'secondary' : 'outline'}
-        size="sm"
-        className="h-auto self-stretch"
-        aria-expanded={codesOpen}
-        onClick={onToggleCodes}
-      >
-        <BarcodeIcon />
-        Przypisane kody
-      </Button>
+      <div className="flex items-stretch gap-2">
+        <Button
+          variant={codesOpen ? 'secondary' : 'outline'}
+          size="sm"
+          className="h-auto min-h-8"
+          aria-expanded={codesOpen}
+          onClick={onToggleCodes}
+        >
+          <BarcodeIcon />
+          Przypisane kody
+        </Button>
+        {actions}
+      </div>
     </div>
   )
 }

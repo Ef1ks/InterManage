@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import com.intermanage.backend.dataentry.entity.DataEntryPriceControlFile;
@@ -92,6 +93,12 @@ public interface DataEntryPriceControlFileRepository extends JpaRepository<DataE
 
     @Query("select distinct f.storeId from DataEntryPriceControlFile f where " + WAITING_FOR_MACRO)
     List<UUID> findStoresWaitingForMacro(Instant since, Instant now);
+
+    /** Zmiany czekające na makro przestają czekać (automat wyłączony w sklepie). */
+    @Modifying
+    @Query("update DataEntryPriceControlFile f set f.macroRequestedAt = null, f.macroRetryAt = null "
+            + "where f.storeId = :storeId and f.macroRequestedAt is not null and f.macroJobId is null")
+    int cancelWaitingForMacro(UUID storeId);
 
     Optional<DataEntryPriceControlFile> findByIdAndStoreId(UUID id, UUID storeId);
 

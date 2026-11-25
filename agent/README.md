@@ -26,6 +26,10 @@ dysku sieciowego (`N:\…`), więc agent przejmuje styk z folderami sklepu:
   raz. Okno aktualizacji ma „Przerwij” w trakcie i „Spróbuj ponownie” po błędzie (tylko brakujące raporty). Z odtwarzaczem
   0.64-0.68 ponawia sam agent, nowym makrem od raportu z błędem. Raport wysyła dopiero, gdy Excel skończył go zapisywać.
 
+Każdą z tych rzeczy sklep włącza i wyłącza w Intermanage (Ustawienia sklepu → Agent sklepu, osoba z edycją wprowadzania
+danych), a na jednym komputerze w oknie ustawień agenta (od 1.12.2): zapis plików, makra, aktualizacja przy starcie
+i start z Windows.
+
 Agent działa tylko w sklepie, który w Intermanage wybrał **Ustawienia sklepu → Agent sklepu → Praca z folderami przez
 agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w przeglądarce.
 

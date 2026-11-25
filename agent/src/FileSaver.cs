@@ -34,7 +34,7 @@ internal sealed class FileSaver
         {
             var api = host.Api;
             var config = host.Config;
-            if (api == null || config == null)
+            if (api == null || config == null || !host.SaveFiles)
             {
                 await Delay(TimeSpan.FromSeconds(2), cancel);
                 continue;

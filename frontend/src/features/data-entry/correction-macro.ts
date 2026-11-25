@@ -344,13 +344,15 @@ export const isBaseProtocol = (supplierCode: string | null | undefined, sellerNi
 /**
  * Skrypt makra: nowy protokół, numer bonu pozycji i kroki osobno dla każdej pozycji (pozycje różnych bonów w jednym
  * protokole), po potwierdzeniu pracownika zakończenie; linie z `#` odtwarzacz pomija. `today`: termin płatności,
- * RRRR-MM-DD. `fromBase`: korekta od SCA PR (ITM8 zamiast EAN-u), `baseProtocol`: protokół typu 9. CRLF jak w Windows.
+ * RRRR-MM-DD. `fromBase`: korekta od SCA PR (ITM8 zamiast EAN-u), `baseProtocol`: protokół typu 9,
+ * `print`: wydruk PDF-a po zakończeniu. CRLF jak w Windows.
  */
 export function buildCorrectionMacro(
   items: CorrectionMacroItem[],
   today: string,
   fromBase = false,
   baseProtocol = fromBase,
+  print = false,
 ) {
   const bonNumbers = [...new Set(items.map((item) => item.bonNumber))].join(', ')
   const c = CORRECTION_MACRO_CONFIG
@@ -389,6 +391,6 @@ export function buildCorrectionMacro(
       `SLEEP|${c.afterPrice / 2}`,
     )
   }
-  out.push(...correctionFinishLines(bonNumbers, items.length))
+  out.push(...correctionFinishLines(bonNumbers, items.length, print))
   return out.join('\r\n') + '\r\n'
 }

@@ -29,11 +29,12 @@ public final class AgentApi {
      * sklepu, więc pilnuje folderów i aktualizuje dane z Mercalys (każda odpowiedź API niesie to też w nagłówku
      * {@code X-Agent-Leader}); {@code preferred}: agent preferowany, który odbiera tę rolę pozostałym.
      * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = bez automatycznej aktualizacji); agent
-     * nowszą pobiera z {@code /update/file} i instaluje sam.
+     * nowszą pobiera z {@code /update/file} i instaluje sam. {@code cleanProductFiles}: agent od 1.12.2 czyści folder nowych
+     * artykułów z plików z poprzednich dni.
      */
     public record HelloResponse(UUID storeId, String storeNumber, String storeName, String agentName, boolean enabled,
             Map<String, String> folders, List<Watch> watches, int longPollSeconds, boolean leader,
-            boolean preferred, AgentUpdateInfo update) {
+            boolean preferred, AgentUpdateInfo update, boolean cleanProductFiles) {
     }
 
     /**

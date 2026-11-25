@@ -24,6 +24,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.intermanage.backend.agent.dto.AgentMacroApi;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.agent.entity.AgentMacroJob;
 import com.intermanage.backend.agent.entity.AgentMacroKind;
 import com.intermanage.backend.agent.entity.AgentMacroStatus;
@@ -60,6 +61,7 @@ public class PriceControlMacroService {
     private final AgentMacroService macros;
     private final AgentMacroJobRepository jobs;
     private final StoreAgentService agents;
+    private final StoreAgentFeatureService features;
     private final StoreFileQueueRepository queue;
     private final DataEntryPriceControlFileRepository files;
     private final LiveEvents live;
@@ -68,6 +70,7 @@ public class PriceControlMacroService {
     private final Duration delay;
 
     public PriceControlMacroService(AgentMacroService macros, AgentMacroJobRepository jobs, StoreAgentService agents,
+            StoreAgentFeatureService features,
             StoreFileQueueRepository queue, DataEntryPriceControlFileRepository files, LiveEvents live,
             TransactionTemplate transaction,
             @Value("${app.agent.price-control-macro.enabled:true}") boolean enabled,
@@ -75,6 +78,7 @@ public class PriceControlMacroService {
         this.macros = macros;
         this.jobs = jobs;
         this.agents = agents;
+        this.features = features;
         this.queue = queue;
         this.files = files;
         this.live = live;
@@ -86,7 +90,8 @@ public class PriceControlMacroService {
     /** W transakcji zapisu agenta: zmiana cen czeka na makro (zostaje w bazie, więc restart serwera jej nie gubi). */
     @EventListener
     public void onSaved(StoreFileQueueService.FileSavedByAgent event) {
-        if (!enabled || !DefaultFolders.PROTO.equals(event.folderKey())) {
+        if (!enabled || !DefaultFolders.PROTO.equals(event.folderKey())
+                || !on(event.storeId())) {
             return;
         }
         StoreFileQueueItem item = queue.findById(event.id()).orElseThrow();
@@ -115,7 +120,7 @@ public class PriceControlMacroService {
             LocalDateTime time = PriceControlMacro.time(name);
             return time != null && time.atZone(StoreTime.ZONE).toInstant().isAfter(oldest);
         }).collect(Collectors.toSet());
-        if (!enabled || fresh.isEmpty() || !agents.enabled(storeId)) {
+        if (!enabled || fresh.isEmpty() || !agents.enabled(storeId) || !on(storeId)) {
             return;
         }
         Boolean requested = transaction.execute(status -> {
@@ -147,12 +152,24 @@ public class PriceControlMacroService {
                 transaction.executeWithoutResult(status -> {
                     Instant retryAt = Instant.now().plus(RETRY_AFTER);
                     files.findByMacroJobId(event.jobId()).forEach(file -> file.putOffMacro(retryAt));
+                    if (!on(event.storeId())) {
+                        files.cancelWaitingForMacro(event.storeId());
+                    }
                 });
                 live.publish(event.storeId(), "price-control", Map.of("action", "macro"));
             } catch (RuntimeException e) {
                 log.warn("Zmiany cen sklepu {} nie wróciły do czekania na makro", event.storeId(), e);
             }
         });
+    }
+
+    /** Automat wyłączony w sklepie: czekające zmiany zostają do wprowadzenia ręcznie. */
+    @EventListener
+    public void onSwitchedOff(StoreAgentFeatureService.SwitchedOff event) {
+        if (event.feature() == AgentFeature.PRICE_CONTROL_MACRO) {
+            files.cancelWaitingForMacro(event.storeId());
+            live.publish(event.storeId(), "price-control", Map.of("action", "macro"));
+        }
     }
 
     /** Zmiany, które czekają na komputer (włączony, odblokowany, bez innego makra). */
@@ -163,6 +180,10 @@ public class PriceControlMacroService {
             files.findStoresWaitingForMacro(now.minus(DataEntryPriceControlFile.MACRO_WAIT), now)
                     .forEach(this::tryDispatch);
         }
+    }
+
+    private boolean on(UUID storeId) {
+        return features.isOn(storeId, AgentFeature.PRICE_CONTROL_MACRO);
     }
 
     private void later(UUID storeId) {
@@ -190,7 +211,7 @@ public class PriceControlMacroService {
     private void dispatch(UUID storeId) {
         Instant now = Instant.now();
         // Najpierw komputer: w nocy zmiany czekają bez zakładania zleceń, których nikt nie weźmie.
-        if (!macros.canRun(storeId, AgentMacroKind.PRICE_CONTROL)) {
+        if (!on(storeId) || !macros.canRun(storeId, AgentMacroKind.PRICE_CONTROL)) {
             return;
         }
         List<DataEntryPriceControlFile> waiting = files.lockWaitingForMacro(storeId,

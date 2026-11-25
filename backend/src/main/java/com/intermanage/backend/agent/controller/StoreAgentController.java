@@ -1,5 +1,6 @@
 package com.intermanage.backend.agent.controller;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -14,8 +15,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.intermanage.backend.agent.dto.AgentFeatureResponse;
 import com.intermanage.backend.agent.dto.AgentStatusResponse;
 import com.intermanage.backend.agent.dto.StoreAgentsResponse;
+import com.intermanage.backend.agent.entity.AgentFeature;
+import com.intermanage.backend.agent.service.StoreAgentFeatureService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
@@ -29,11 +33,14 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 public class StoreAgentController {
 
     private static final String OWNER = Access.STORE_ADMIN;
+    private static final String FEATURES = "hasAuthority('DATA_ENTRY:EDIT') and " + Access.STORE;
 
     private final StoreAgentService service;
+    private final StoreAgentFeatureService features;
 
-    public StoreAgentController(StoreAgentService service) {
+    public StoreAgentController(StoreAgentService service, StoreAgentFeatureService features) {
         this.service = service;
+        this.features = features;
     }
 
     @GetMapping
@@ -77,6 +84,20 @@ public class StoreAgentController {
     public StoreAgentsResponse settings(@PathVariable UUID storeId, @RequestBody Map<String, Boolean> body,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return service.setEnabled(storeId, Boolean.TRUE.equals(body.get("enabled")), principal.getId());
+    }
+
+    /** Co agent robi w sklepie, każda funkcja osobno; przełącza każdy z edycją wprowadzania danych. */
+    @GetMapping("/features")
+    @PreAuthorize(FEATURES)
+    public List<AgentFeatureResponse> features(@PathVariable UUID storeId) {
+        return features.list(storeId);
+    }
+
+    @PutMapping("/features/{feature}")
+    @PreAuthorize(FEATURES)
+    public List<AgentFeatureResponse> feature(@PathVariable UUID storeId, @PathVariable AgentFeature feature,
+            @RequestBody Map<String, Boolean> body, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return features.set(storeId, feature, Boolean.TRUE.equals(body.get("enabled")), principal.getId());
     }
 
     @GetMapping("/status")

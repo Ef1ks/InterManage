@@ -211,6 +211,13 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
     Optional<StoreFileQueueItem> findFirstByStoreIdAndFolderKeyAndFileNameOrderByCreatedAtDesc(UUID storeId,
             String folderKey, String fileName);
 
+    /** Pliki czekające na makro przestają czekać (automat wyłączony w sklepie). */
+    @Modifying
+    @Query(nativeQuery = true, value = """
+            update store_file_queue set macro_requested_at = null
+            where store_id = :storeId and macro_requested_at is not null and macro_job_id is null""")
+    int cancelWaitingForMacro(UUID storeId);
+
     @Query(nativeQuery = true, value = """
             select count(*) from store_file_queue where id = :id and macro_requested_at is not null""")
     long countMacroRequested(UUID id);

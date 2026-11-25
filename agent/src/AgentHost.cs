@@ -56,9 +56,13 @@ internal sealed class AgentHost : IDisposable
     private bool serverDown;
     private bool diskDown;
 
+    /// <summary>Wyłączone w ustawieniach tego komputera: pliki zapisuje inny komputer albo przeglądarka.</summary>
+    public bool SaveFiles { get; private set; } = true;
+
     public void Start(AgentSettings settings)
     {
         Stop();
+        SaveFiles = settings.SaveFiles;
         var key = settings.Key;
         if (string.IsNullOrEmpty(key))
         {

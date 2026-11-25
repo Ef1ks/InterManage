@@ -33,6 +33,8 @@ import com.intermanage.backend.agent.service.AgentFileQueueService;
 import com.intermanage.backend.agent.service.AgentMacroService;
 import com.intermanage.backend.agent.service.AgentMacroWaitService;
 import com.intermanage.backend.agent.service.AgentReportService;
+import com.intermanage.backend.agent.entity.AgentFeature;
+import com.intermanage.backend.agent.service.StoreAgentFeatureService;
 import com.intermanage.backend.agent.service.StoreAgentService;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.download.entity.DownloadFile;
@@ -96,10 +98,13 @@ public class StoreAgentApiController {
     private final DownloadService downloads;
     private final AgentMacroService macroJobs;
     private final AgentMacroWaitService macroWait;
+    private final StoreAgentFeatureService features;
 
     public StoreAgentApiController(StoreAgentService agents, AgentFileQueueService waiting, AgentEventService events,
             StoreFileQueueService queue, AgentReportService reports, ReportMacroService macros,
-            DownloadService downloads, AgentMacroService macroJobs, AgentMacroWaitService macroWait) {
+            DownloadService downloads, AgentMacroService macroJobs, AgentMacroWaitService macroWait,
+            StoreAgentFeatureService features) {
+        this.features = features;
         this.macroWait = macroWait;
         this.macroJobs = macroJobs;
         this.downloads = downloads;
@@ -215,7 +220,11 @@ public class StoreAgentApiController {
             }
             kinds.add(parsed);
         }
-        agents.startUpdate(agent, !Boolean.FALSE.equals(request.automatic()));
+        boolean automatic = !Boolean.FALSE.equals(request.automatic());
+        if (automatic && !features.isOn(agent.storeId(), AgentFeature.DATA_UPDATE)) {
+            throw ApiException.conflict("Aktualizacja danych przy starcie komputera jest w tym sklepie wyłączona");
+        }
+        agents.startUpdate(agent, automatic);
         try {
             return macros.build(agent.storeId(), kinds);
         } catch (RuntimeException e) {

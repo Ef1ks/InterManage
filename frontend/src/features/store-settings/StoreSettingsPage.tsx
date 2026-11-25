@@ -39,6 +39,7 @@ import {
 } from '@/features/store-settings/api'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { useStoreAgents } from '@/features/store-agent/api'
+import { AgentFeatures } from '@/features/store-agent/AgentFeatures'
 import { StoreAgentSettings } from '@/features/store-agent/StoreAgentSettings'
 import { FolderPaths } from '@/features/store-settings/FolderPaths'
 import { NomenclatureMargins } from '@/features/store-settings/NomenclatureMargins'
@@ -290,7 +291,7 @@ export function StoreSettingsPage() {
             </section>
           }
         />
-        {owner && (
+        {(owner || canEditDataEntry) && (
           <Route
             path="agent"
             element={
@@ -306,8 +307,9 @@ export function StoreSettingsPage() {
                     ATHOS). Sklep wybiera, czy pracuje przez agenta, czy jak dotąd przez przeglądarkę.
                   </p>
                 </div>
-                <div className="max-w-2xl">
-                  <StoreAgentSettings key={store.id} storeId={store.id} />
+                <div className="grid max-w-2xl gap-4">
+                  {owner && <StoreAgentSettings key={store.id} storeId={store.id} />}
+                  {canEditDataEntry && <AgentFeatures key={`features-${store.id}`} storeId={store.id} />}
                 </div>
               </section>
             }
@@ -497,7 +499,7 @@ function SettingsGrid({
             : ' '
         }
       />
-      {me.owner && (
+      {(me.owner || canEditDataEntry) && (
         <SettingsTile
           to={paths.agent}
           icon={HardDriveIcon}

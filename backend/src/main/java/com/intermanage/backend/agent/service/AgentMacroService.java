@@ -22,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.intermanage.backend.agent.component.AgentMachineStates;
 import com.intermanage.backend.agent.component.ProductFileMacro;
 import com.intermanage.backend.agent.dto.AgentMacroApi;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.agent.entity.AgentMacroJob;
 import com.intermanage.backend.agent.entity.AgentMacroKind;
 import com.intermanage.backend.agent.entity.AgentMacroStatus;
@@ -102,10 +103,13 @@ public class AgentMacroService {
     private final BaseReceivingService receiving;
     private final LiveEvents live;
     private final ApplicationEventPublisher events;
+    private final StoreAgentFeatureService features;
 
     public AgentMacroService(AgentMacroJobRepository jobs, StoreAgentRepository agents, AgentMachineStates states,
             StoreRepository stores, AppUserRepository users, BaseDeliveryService deliveries, MeaCodeService meaCodes,
-            BaseReceivingService receiving, LiveEvents live, ApplicationEventPublisher events) {
+            BaseReceivingService receiving, LiveEvents live, ApplicationEventPublisher events,
+            StoreAgentFeatureService features) {
+        this.features = features;
         this.events = events;
         this.receiving = receiving;
         this.jobs = jobs;
@@ -271,6 +275,13 @@ public class AgentMacroService {
             String reference, int itemCount, UUID targetAgentId, UUID userId) {
         Instant now = Instant.now();
         sweep(storeId, now);
+        // Makra po zapisie pliku i po aktualizacji danych mają własne przełączniki.
+        boolean automatic = kind == AgentMacroKind.PRODUCT_FILES || kind == AgentMacroKind.PRICE_CONTROL
+                || userId == null;
+        if (!automatic && !features.isOn(storeId, AgentFeature.REMOTE_MACROS)) {
+            throw ApiException.conflict("Makra zlecane z przeglądarki są w tym sklepie wyłączone "
+                    + "(Ustawienia sklepu → Agent sklepu).");
+        }
         if (!jobs.findActiveForUpdate(storeId).isEmpty()) {
             throw ApiException.conflict("W sklepie trwa już makro na innym komputerze. Poczekaj, aż się skończy.");
         }
@@ -512,7 +523,7 @@ public class AgentMacroService {
             return "agent nie odpowiada (wyłączony komputer albo stara wersja agenta)";
         }
         if (!state.playerRunning()) {
-            return "nie działa odtwarzacz makr AutoJob w wersji 0.64 albo nowszej";
+            return "nie działa odtwarzacz makr AutoJob w wersji 0.64 albo nowszej (albo makra są wyłączone w agencie)";
         }
         if (kind != null && BASE_KINDS.contains(kind) && !state.playerAtLeast(BASE_PLAYER_MINOR)) {
             return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.67 albo nowsze";

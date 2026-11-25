@@ -14,6 +14,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import com.intermanage.backend.agent.dto.AgentApi;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.store.entity.StoreFileQueueItem;
 import com.intermanage.backend.store.service.StoreFileQueueService;
 
@@ -36,8 +37,11 @@ public class AgentFileQueueService {
     private final Map<UUID, Set<Waiter>> waiters = new ConcurrentHashMap<>();
     private final StoreFileQueueService queue;
     private final StoreAgentService agents;
+    private final StoreAgentFeatureService features;
 
-    public AgentFileQueueService(StoreFileQueueService queue, StoreAgentService agents) {
+    public AgentFileQueueService(StoreFileQueueService queue, StoreAgentService agents,
+            StoreAgentFeatureService features) {
+        this.features = features;
         this.queue = queue;
         this.agents = agents;
     }
@@ -82,7 +86,8 @@ public class AgentFileQueueService {
         List<StoreFileQueueItem> items;
         try {
             // Sklep pracuje z folderami przez przeglądarkę: agent tylko utrzymuje kontakt, plików nie bierze.
-            if (!agents.enabled(waiter.agent().storeId())) {
+            if (!agents.enabled(waiter.agent().storeId())
+                    || !features.isOn(waiter.agent().storeId(), AgentFeature.FILE_SAVING)) {
                 return;
             }
             List<String> folderKeys = List.copyOf(agents.folders(waiter.agent().storeId()).keySet());

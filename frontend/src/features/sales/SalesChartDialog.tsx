@@ -321,6 +321,7 @@ function ChartBody({
           ean={article.data?.ean ?? target.ean}
           codesOpen={codesOpen}
           onToggleCodes={() => setCodesOpen((open) => !open)}
+          actions={<ArticleTaskButton target={target} article={article.data ?? null} className="h-auto min-h-8" />}
         />
         {foreignItm8 && (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -387,32 +388,28 @@ function ChartBody({
   return (
     <>
       {inline ? (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="grid min-w-0 gap-1">
-            <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
-            {subtitle(target, article.data) && (
-              <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
-            )}
-            {codeFields && <div className="mt-1">{codeFields}</div>}
-          </div>
-          <div className="flex items-start gap-2">
-            {target.kind === 'article' && <ArticleTaskButton target={target} article={article.data ?? null} />}
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+            <div className="grid min-w-0 flex-1 basis-56 gap-1">
+              <h2 className="text-lg leading-snug font-semibold">{title(target, article.data)}</h2>
+              {subtitle(target, article.data) && (
+                <p className="text-sm text-muted-foreground">{subtitle(target, article.data)}</p>
+              )}
+            </div>
             {article.data?.cadencier && <CadencierBadge />}
           </div>
+          {codeFields && <div>{codeFields}</div>}
         </div>
       ) : (
         <DialogHeader className="pr-8">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="grid min-w-0 gap-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+            <div className="grid min-w-0 flex-1 basis-56 gap-1">
               <DialogTitle className="text-lg leading-snug">{title(target, article.data)}</DialogTitle>
               <DialogDescription>{subtitle(target, article.data) || 'Statystyki artykułu'}</DialogDescription>
-              {codeFields && <div className="pt-1">{codeFields}</div>}
             </div>
-            <div className="flex items-start gap-2">
-              {target.kind === 'article' && <ArticleTaskButton target={target} article={article.data ?? null} />}
-              {article.data?.cadencier && <CadencierBadge />}
-            </div>
+            {article.data?.cadencier && <CadencierBadge />}
           </div>
+          {codeFields && <div>{codeFields}</div>}
         </DialogHeader>
       )}
 

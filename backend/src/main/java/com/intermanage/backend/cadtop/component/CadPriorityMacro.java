@@ -126,10 +126,9 @@ public final class CadPriorityMacro {
         out.add("WEBIFVALUE|" + WINDOW + "|" + PRIORITY_CHECKBOX + "|^tak$|" + change + "|1000");
         out.add("WEBIFVALUE|" + WINDOW + "|" + ACTIVE_CHECKBOX + "|^nie$|" + back + "|1000");
         out.add("LABEL|" + change);
-        out.add("WEBCHECK|" + WINDOW + "|" + PRIORITY_CHECKBOX);
-        out.add("SLEEP|" + AFTER_CHECK_MS);
-        out.add("WEBCHECK|" + WINDOW + "|" + ACTIVE_CHECKBOX);
-        out.add("SLEEP|" + AFTER_CHECK_MS);
+        // Priorytet, który już jest, ma pole zablokowane, więc klika się tylko odznaczone. Najpierw priorytet.
+        out.addAll(tick(PRIORITY_CHECKBOX, "priorytet-" + card));
+        out.addAll(tick(ACTIVE_CHECKBOX, "aktywny-" + card));
         out.add("WEBVALUE|" + WINDOW + "|" + PRIORITY_CHECKBOX + "|^tak$");
         out.add("WEBVALUE|" + WINDOW + "|" + ACTIVE_CHECKBOX + "|^tak$");
         out.add("WEBVALUE|" + WINDOW + "|" + NEW_ITM8 + "|^0*" + top + "$");
@@ -172,6 +171,15 @@ public final class CadPriorityMacro {
         out.addAll(clearCard("pusta-" + card));
         out.add("LABEL|" + END + card);
         return out;
+    }
+
+    /** Zaznacza odznaczone pole; zaznaczone (także zablokowane) zostawia. */
+    private static List<String> tick(String checkbox, String ticked) {
+        return List.of(
+                "WEBIFVALUE|" + WINDOW + "|" + checkbox + "|^nie$|" + ticked + "|1000",
+                "WEBCLICK|" + WINDOW + "|" + checkbox,
+                "SLEEP|" + AFTER_CHECK_MS,
+                "LABEL|" + ticked);
     }
 
     /** Wczytana karta i jej EAN (lokalny ITM8 99… jest w innym sklepie innym towarem). */

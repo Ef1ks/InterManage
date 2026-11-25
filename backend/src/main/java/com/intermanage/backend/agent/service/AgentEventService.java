@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.dto.AgentApi;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.common.component.CompressedUploads;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.exception.ApiException;
@@ -60,10 +61,12 @@ public class AgentEventService {
     private final LiveEvents live;
     private final AgentReportService reports;
     private final PriceControlMacroService priceControlMacros;
+    private final StoreAgentFeatureService features;
 
     public AgentEventService(PriceFileService priceFiles, DataEntryPriceControlService priceControl,
             MeaAthosService athos, LiveEvents live, AgentReportService reports,
-            PriceControlMacroService priceControlMacros) {
+            PriceControlMacroService priceControlMacros, StoreAgentFeatureService features) {
+        this.features = features;
         this.priceControlMacros = priceControlMacros;
         this.priceFiles = priceFiles;
         this.priceControl = priceControl;
@@ -79,6 +82,8 @@ public class AgentEventService {
             return new AgentApi.EventsResponse(List.of(), List.of());
         }
         UUID storeId = agent.storeId();
+        // Agent zna nową konfigurację dopiero po następnym /hello, więc wyłączone rodzaje pomijamy od razu.
+        Set<AgentFeature> off = features.off(storeId);
         List<String> traceart = new ArrayList<>();
         List<AgentApi.Event> reportEvents = new ArrayList<>();
         Map<String, Integer> processed = new HashMap<>();
@@ -114,17 +119,20 @@ public class AgentEventService {
             }
         }
         List<AgentApi.FileRequest> requests = new ArrayList<>();
+        if (off.contains(AgentFeature.PRICE_FILES)) {
+            traceart.clear();
+        }
         for (int from = 0; from < traceart.size(); from += PENDING_CHUNK) {
             priceFiles.pending(storeId, traceart.subList(from, Math.min(traceart.size(), from + PENDING_CHUNK)))
                     .fileNames().forEach(name -> requests.add(
                             new AgentApi.FileRequest(StoreAgentService.TRACEART, name)));
         }
-        if (!processed.isEmpty()) {
+        if (!processed.isEmpty() && !off.contains(AgentFeature.PRICE_CONTROL_FILES)) {
             seenPriceControl(storeId, processed);
             priceControlMacros.seenWaiting(storeId, processed.entrySet().stream()
                     .filter(entry -> entry.getValue() == 0).map(Map.Entry::getKey).toList());
         }
-        if (athosName != null) {
+        if (athosName != null && !off.contains(AgentFeature.ATHOS)) {
             MeaAthosStatus status = athos.status(storeId);
             if (status.fileModified() == null || athosModified.isAfter(status.fileModified())) {
                 requests.add(new AgentApi.FileRequest(StoreAgentService.ATHOS, athosName));

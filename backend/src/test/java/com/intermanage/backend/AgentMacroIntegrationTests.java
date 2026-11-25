@@ -363,6 +363,16 @@ class AgentMacroIntegrationTests {
         Thread.sleep(600);
         assertThat(productJobs()).isEmpty();
 
+        // Automat wyłączony w sklepie: plik wczytuje człowiek, a po włączeniu stary plik nie rusza.
+        automatic("PRODUCT_FILE_MACRO", false);
+        saveFile(kasa, "data-entry-product-file", "00");
+        Thread.sleep(600);
+        assertThat(productJobs()).isEmpty();
+        expected("CADBEZP-GOBARTO-00.xls", false);
+        automatic("PRODUCT_FILE_MACRO", true);
+        Thread.sleep(600);
+        assertThat(productJobs()).isEmpty();
+
         saveFile(kasa, "data-entry-product-file", "1");
         saveFile(kasa, "data-entry-product-file", "2");
         String job = awaitProductJob(0);
@@ -457,6 +467,26 @@ class AgentMacroIntegrationTests {
         assertThat(priceJobs()).isEmpty();
         priceControl().andExpect(jsonPath("$.pending[0].macroWaiting").value(true));
 
+        // Wyłączenie automatu zdejmuje czekające zmiany i nie zmienia drugiego ustawienia.
+        automatic("PRICE_CONTROL_MACRO", false)
+                .andExpect(jsonPath("$[?(@.feature == 'PRODUCT_FILE_MACRO')].enabled").value(true))
+                .andExpect(jsonPath("$[?(@.feature == 'PRICE_CONTROL_MACRO')].enabled").value(false))
+                .andExpect(jsonPath("$[?(@.feature == 'CAD_PRIORITY_MACRO')].enabled").value(false));
+        priceControl().andExpect(jsonPath("$.pending[0].macroWaiting").value(false));
+        poll(biuro, 5, false, true);
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"CREATED","folderKey":"CTRLPRIX","fileName":"%s"}]}""".formatted(first))
+                .andExpect(status().isOk());
+        priceControlMacros.dispatchWaiting();
+        Thread.sleep(600);
+        assertThat(priceJobs()).isEmpty();
+        automatic("PRICE_CONTROL_MACRO", true);
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"PRESENT","folderKey":"CTRLPRIX","fileName":"%s"}]}""".formatted(first))
+                .andExpect(status().isOk());
+        for (int i = 0; i < 50 && priceJobs().isEmpty(); i++) {
+            Thread.sleep(100);
+        }
         poll(biuro, 5, false, true);
         priceControlMacros.dispatchWaiting();
         String job = priceJobs().getFirst();
@@ -568,6 +598,46 @@ class AgentMacroIntegrationTests {
     }
 
     /** Plik wydany przez serwer (dostawca po NIP-ie sprzedawcy), zapisany przez agenta. */
+    /** Każdą funkcję agenta sklep wyłącza osobno; zmienia ją osoba z edycją wprowadzania danych. */
+    @Test
+    void storeSwitchesAgentFeatures() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+        String kasa = addAgent("Kasa");
+        String features = "/api/stores/" + storeId + "/agents/features";
+        mvc.perform(get(features).cookie(employee("{\"DATA_ENTRY\":\"VIEW\"}"))).andExpect(status().isForbidden());
+        mvc.perform(get(features).cookie(employee("{\"DATA_ENTRY\":\"EDIT\"}"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(12));
+
+        automatic("PRICE_FILES", false);
+        automatic("PRICE_CONTROL_FILES", false);
+        automatic("PRODUCT_FILE_CLEANUP", false);
+        agentPost(kasa, "/hello", "{\"version\":\"1.12.2\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.watches[?(@.kind == 'TRACEART')]").isEmpty())
+                .andExpect(jsonPath("$.watches[?(@.kind == 'CTRLPRIX')]").isEmpty())
+                .andExpect(jsonPath("$.cleanProductFiles").value(false));
+        automatic("FILE_SAVING", false);
+        mvc.perform(get("/api/stores/" + storeId + "/agents/status").cookie(owner))
+                .andExpect(jsonPath("$.active").value(true)).andExpect(jsonPath("$.folders").isEmpty());
+        automatic("DATA_UPDATE", false);
+        agentPost(kasa, "/report-macro", "{\"kinds\":[],\"automatic\":true}").andExpect(status().isConflict());
+        agentPost(kasa, "/report-macro", "{\"kinds\":[],\"automatic\":false}").andExpect(status().isOk());
+        automatic("CAD_PRIORITY_MACRO", true)
+                .andExpect(jsonPath("$[?(@.feature == 'CAD_PRIORITY_MACRO')].enabled").value(true));
+        assertThat(jdbc.queryForObject("select automatic from cad_priority_settings where store_id = ?::uuid",
+                Boolean.class, storeId)).isTrue();
+    }
+
+    private org.springframework.test.web.servlet.ResultActions automatic(String name, boolean value)
+            throws Exception {
+        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/features/" + name).cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":" + value + "}"))
+                .andExpect(status().isOk());
+    }
+
     private void saveFile(String key, String folderKey, String invoice) throws Exception {
         byte[] content = mvc.perform(post("/api/stores/" + storeId + "/data-entry/export/product-file").cookie(owner)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(productFile(invoice)))

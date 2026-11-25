@@ -60,6 +60,12 @@ internal sealed class AgentSettings
     /// </summary>
     public bool UpdateOnStart { get; set; } = true;
 
+    /// <summary>Ten komputer zapisuje pliki dla programu sklepu (wyłączone: inny komputer albo przeglądarka).</summary>
+    public bool SaveFiles { get; set; } = true;
+
+    /// <summary>Ten komputer bierze makra zlecone z przeglądarki i automatyczne (aktualizacja danych osobno).</summary>
+    public bool AllowMacros { get; set; } = true;
+
     /// <summary>
     /// „Uruchamiaj z Windows” odznaczone ręcznie w menu. Bez tego brak wpisu w rejestrze to nie wybór człowieka (nie udał
     /// się zapis albo wpis usunął inny program), więc agent przy starcie wpisuje się z powrotem.

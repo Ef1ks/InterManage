@@ -211,10 +211,23 @@ internal sealed class TrayApp : ApplicationContext
             {
                 settings = AgentSettings.Load();
                 host.Start(settings);
+                ApplyAutostart();
             }
         }
         openSettings = null;
         UpdateIcon();
+    }
+
+    /// <summary>„Uruchamiaj z Windows” z okna ustawień: wpis w rejestrze i zaznaczenie w menu.</summary>
+    private void ApplyAutostart()
+    {
+        try
+        {
+            if (settings.AutostartOff) AgentSettings.AutostartPath = null;
+            else settings.EnsureAutostart();
+            autostart.Checked = AgentSettings.Autostart;
+        }
+        catch (Exception error) { Log.Error("Autostart", error); }
     }
 
     private void ShowMacroHelp()

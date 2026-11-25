@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import { setAgentStatus } from '@/lib/store-agent'
-import type { AgentStatus, StoreAgents } from '@/lib/types'
+import type { AgentFeature, AgentFeatureKey, AgentStatus, StoreAgents } from '@/lib/types'
 
 export const agentsKey = (storeId: string) => ['stores', storeId, 'agents'] as const
 const statusKey = (storeId: string) => [...agentsKey(storeId), 'status'] as const
@@ -44,6 +44,26 @@ function useAgentMutation<T>(storeId: string, request: (value: T) => Promise<Sto
       void queryClient.invalidateQueries({ queryKey: statusKey(storeId) })
     },
     meta: { invalidates: false },
+  })
+}
+
+const featuresKey = (storeId: string) => [...agentsKey(storeId), 'features'] as const
+
+/** Co agent robi w sklepie (funkcje do włączenia i wyłączenia). */
+export function useAgentFeatures(storeId: string) {
+  return useQuery({
+    queryKey: featuresKey(storeId),
+    queryFn: () => api<AgentFeature[]>(`/stores/${storeId}/agents/features`),
+  })
+}
+
+export function useSetAgentFeature(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ feature, enabled }: { feature: AgentFeatureKey; enabled: boolean }) =>
+      api<AgentFeature[]>(`/stores/${storeId}/agents/features/${feature}`, { method: 'PUT', json: { enabled } }),
+    // Stan agenta i przełącznik na stronie ITM8 z cadencier zależą od tych ustawień.
+    onSuccess: (data) => queryClient.setQueryData(featuresKey(storeId), data),
   })
 }
 

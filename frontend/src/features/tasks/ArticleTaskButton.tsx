@@ -10,9 +10,11 @@ import type { SalesArticle } from '@/lib/types'
 export function ArticleTaskButton({
   target,
   article,
+  className,
 }: {
   target: Extract<SalesChartTarget, { kind: 'article' }>
   article: SalesArticle | null
+  className?: string
 }) {
   const page = useTaskSource('ARTICLE')
   const name = article?.name ?? target.name ?? target.itm8.replace(/^0+/, '')
@@ -40,6 +42,7 @@ export function ArticleTaskButton({
       ]}
       source={source}
       label="Zleć"
+      className={className}
     />
   )
 }

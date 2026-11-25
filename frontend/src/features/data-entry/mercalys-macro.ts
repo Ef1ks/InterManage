@@ -1048,11 +1048,16 @@ export function correctionArticleLines(
 export const correctionLossLine = (timeoutMs: number) =>
   `WEBDIALOG|${CORRECTION_SCREEN.lossWindow}|${CORRECTION_SCREEN.lossText}|Oui|${timeoutMs}`
 
-/** Zakończenia nie da się cofnąć, więc decyduje pracownik; „Nie” zostawia otwarty dokument do sprawdzenia. */
-export function correctionFinishLines(bonNumber: string, count: number) {
+/**
+ * Zakończenia nie da się cofnąć, więc decyduje pracownik; „Nie” zostawia otwarty dokument do sprawdzenia. Z `print` PDF
+ * korekty idzie do drukarki domyślnej (PDFPRINTALL, odtwarzacz od wersji 0.51), a PDF-y otwarte wcześniej zamykają się
+ * przed zakończeniem, żeby nie poszły do drukarki razem z nim; bez `print` PDF-y są tylko zamykane.
+ */
+export function correctionFinishLines(bonNumber: string, count: number, print = false) {
   const screen = CORRECTION_SCREEN
   return [
     `ASK|Wpisano pozycji: ${count} (bon ${bonNumber}). Sprawdź dokument w Mercalys. Zakończyć korektę? Tego nie da się cofnąć.`,
+    ...(print ? [`WINCLOSEALL|${PDF_WINDOW}|0`] : []),
     `WEBCLICK|${WINDOW}|${screen.closeButton}`,
     `WEBWAIT|${DIALOG}|Oui|${screen.closeText}|${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${DIALOG}|Oui`,
@@ -1060,7 +1065,7 @@ export function correctionFinishLines(bonNumber: string, count: number) {
     `WEBWAIT|${DIALOG}|Oui||${PAGE_TIMEOUT_MS}`,
     `WEBCLICK|${DIALOG}|Oui`,
     `WINMIN|${PROGRAM_WINDOW}`,
-    `WINCLOSEALL|${PDF_WINDOW}|${PDF_TIMEOUT_MS}`,
+    `${print ? 'PDFPRINTALL' : 'WINCLOSEALL'}|${PDF_WINDOW}|${PDF_TIMEOUT_MS}`,
   ]
 }
 

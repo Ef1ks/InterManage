@@ -22,6 +22,17 @@ internal sealed class SettingsForm : Form
         Text = "Przy starcie komputera aktualizuj dane z Mercalys (pliki raportów nie z dzisiaj)",
         AutoSize = true,
     };
+    private readonly CheckBox saveFiles = new()
+    {
+        Text = "Zapisuj na tym komputerze pliki dla programu sklepu",
+        AutoSize = true,
+    };
+    private readonly CheckBox allowMacros = new()
+    {
+        Text = "Wykonuj na tym komputerze makra (z przeglądarki i automatyczne)",
+        AutoSize = true,
+    };
+    private readonly CheckBox autostart = new() { Text = "Uruchamiaj agenta z Windows", AutoSize = true };
     private readonly Label result = new() { Dock = DockStyle.Fill, AutoSize = false, Height = 48 };
     private readonly Button save = new() { Text = "Sprawdź i zapisz", AutoSize = true };
     private readonly Button cancel = new() { Text = "Anuluj", AutoSize = true, DialogResult = DialogResult.Cancel };
@@ -36,7 +47,7 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 420);
+        ClientSize = new Size(560, 510);
         Font = new Font("Segoe UI", 9f);
 
         server.Text = settings.ServerUrl;
@@ -45,8 +56,11 @@ internal sealed class SettingsForm : Form
         mercalysPath.Text = MercalysPath.Ensure() ?? MercalysPath.Saved ?? "";
         browse.Click += (_, _) => Browse();
         updateOnStart.Checked = settings.UpdateOnStart;
+        saveFiles.Checked = settings.SaveFiles;
+        allowMacros.Checked = settings.AllowMacros;
+        autostart.Checked = !settings.AutostartOff;
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 10 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 13 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label { Text = "Adres serwera", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -90,11 +104,14 @@ internal sealed class SettingsForm : Form
             ForeColor = SystemColors.GrayText,
         }, 1, 6);
         layout.Controls.Add(updateOnStart, 1, 7);
-        layout.Controls.Add(result, 1, 8);
+        layout.Controls.Add(saveFiles, 1, 8);
+        layout.Controls.Add(allowMacros, 1, 9);
+        layout.Controls.Add(autostart, 1, 10);
+        layout.Controls.Add(result, 1, 11);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(save);
-        layout.Controls.Add(buttons, 1, 9);
+        layout.Controls.Add(buttons, 1, 12);
         Controls.Add(layout);
         AcceptButton = save;
         CancelButton = cancel;
@@ -155,6 +172,9 @@ internal sealed class SettingsForm : Form
             if (newKey.Length > 0) settings.Key = newKey;
             if (newPassword.Length > 0) settings.MercalysPassword = newPassword;
             settings.UpdateOnStart = updateOnStart.Checked;
+            settings.SaveFiles = saveFiles.Checked;
+            settings.AllowMacros = allowMacros.Checked;
+            settings.AutostartOff = !autostart.Checked;
             settings.Save();
             Log.Info("Zapisano ustawienia (sklep " + hello.StoreNumber + ")");
             MessageBox.Show(this, "Połączono ze sklepem " + hello.StoreNumber

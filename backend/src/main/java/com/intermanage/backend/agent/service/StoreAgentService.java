@@ -12,6 +12,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import com.intermanage.backend.agent.dto.AgentStatusResponse;
 import com.intermanage.backend.agent.dto.StoreAgentResponse;
 import com.intermanage.backend.agent.dto.StoreAgentsResponse;
 import com.intermanage.backend.agent.entity.StoreAgent;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.agent.entity.StoreAgentSettings;
 import com.intermanage.backend.agent.mapper.StoreAgentMapper;
 import com.intermanage.backend.agent.repository.StoreAgentRepository;
@@ -85,11 +87,13 @@ public class StoreAgentService {
     private final AgentReportService reports;
 
     private final DownloadService downloads;
+    private final StoreAgentFeatureService features;
 
     public StoreAgentService(StoreAgentRepository agents, StoreAgentSettingsRepository settings,
             StoreRepository stores, AppUserRepository users, StoreFileLocationService locations,
             StoreProtoSettingsService protoSettings, StoreAgentMapper mapper, LiveEvents live,
-            AgentReportService reports, DownloadService downloads) {
+            AgentReportService reports, DownloadService downloads, StoreAgentFeatureService features) {
+        this.features = features;
         this.downloads = downloads;
         this.agents = agents;
         this.settings = settings;
@@ -202,7 +206,8 @@ public class StoreAgentService {
         boolean online = online(best, now);
         return new AgentStatusResponse(enabled, true, online, enabled && online, best.getName(),
                 best.getLastVersion(), best.getMachineName(), best.getLastSeenAt(),
-                List.copyOf(folders(storeId).keySet()), watches(storeId).stream().map(AgentApi.Watch::kind).toList());
+                features.isOn(storeId, AgentFeature.FILE_SAVING) ? List.copyOf(folders(storeId).keySet()) : List.of(),
+                watches(storeId).stream().map(AgentApi.Watch::kind).toList());
     }
 
     /**
@@ -228,7 +233,8 @@ public class StoreAgentService {
                 cut(request.user(), 100));
         return new AgentApi.HelloResponse(agent.storeId(), agent.storeNumber(), agent.storeName(), agent.agentName(),
                 enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS,
-                agent.leader(), agent.preferred(), downloads.agentUpdate().orElse(null));
+                agent.leader(), agent.preferred(), downloads.agentUpdate().orElse(null),
+                features.isOn(agent.storeId(), AgentFeature.PRODUCT_FILE_CLEANUP));
     }
 
     /**
@@ -277,14 +283,19 @@ public class StoreAgentService {
     public List<AgentApi.Watch> watches(UUID storeId) {
         Map<String, String> values = locations.get(storeId).locations();
         String proto = protoSettings.get(storeId).folderPath();
+        Set<AgentFeature> off = features.off(storeId);
         List<AgentApi.Watch> watches = new ArrayList<>();
         // Folder cen z kasy: ścieżka sklepu z ustawień (front zapisuje ją pod `folder:price-files`), bez niej folder PROTO.
         String traceart = firstFolder(values.get(FOLDER_PREFIX + "price-files"),
                 values.get(FOLDER_PREFIX + "price-files:" + storeId), proto);
-        watches.add(new AgentApi.Watch(TRACEART, traceart, true, "^TRACEART_\\d{8}_\\d{6}(_.*)?$"));
-        watches.add(new AgentApi.Watch(CTRLPRIX, proto, true, "^CTRLPRIX_.+\\.traite\\d+$"));
+        if (!off.contains(AgentFeature.PRICE_FILES)) {
+            watches.add(new AgentApi.Watch(TRACEART, traceart, true, "^TRACEART_\\d{8}_\\d{6}(_.*)?$"));
+        }
+        if (!off.contains(AgentFeature.PRICE_CONTROL_FILES)) {
+            watches.add(new AgentApi.Watch(CTRLPRIX, proto, true, "^CTRLPRIX_.+\\.traite\\d+$"));
+        }
         String athos = values.get(FOLDER_PREFIX + "mea-athos:" + storeId);
-        if (athos != null && looksLikeFolder(athos)) {
+        if (athos != null && looksLikeFolder(athos) && !off.contains(AgentFeature.ATHOS)) {
             watches.add(new AgentApi.Watch(ATHOS, athos.strip(), false, "^Histo\\.Log$"));
         }
         // Raporty Importu danych (tylko przy pracy przez agenta): agent wgrywa je sam i usuwa wgrane następnego dnia.

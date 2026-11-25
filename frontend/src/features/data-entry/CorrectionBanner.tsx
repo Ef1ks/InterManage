@@ -37,6 +37,25 @@ const toDelivery = (item: CorrectionDelivery): Delivery => ({
 
 const SHOWN_INVOICES = 3
 
+/** Wybór wydruku zostaje w przeglądarce, bo zależy od stanowiska (drukarka przy komputerze). */
+const PRINT_KEY = 'intermanage.correctionMacroPrint'
+
+function readPrint() {
+  try {
+    return localStorage.getItem(PRINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function savePrint(print: boolean) {
+  try {
+    localStorage.setItem(PRINT_KEY, print ? '1' : '0')
+  } catch {
+    // bez zapisu wybór działa do zamknięcia karty
+  }
+}
+
 /**
  * Korekta w tabeli: faktury, które koryguje (numer widać bez drukowania korekty), i bon, do którego należy. Bon faktury
  * korygowanej podpina się sam, gdy jest dokładnie jeden; inny wybiera się z wyszukiwarki albo wpisuje ręcznie (stara
@@ -63,6 +82,7 @@ export function CorrectionBanner({
   onLinkRow: (row: DataEntryRow) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [print, setPrint] = useState(readPrint)
   const { delivery, corrected, reason } = correction
   const extra = useMemo(() => correction.extraDeliveries ?? [], [correction.extraDeliveries])
   const undecided = delivery === undefined
@@ -158,14 +178,31 @@ export function CorrectionBanner({
         )}
       </div>
 
-      <Button
-        disabled={!delivery}
-        onClick={() => onMacroOpenChange(true)}
-        title={delivery ? undefined : 'Najpierw wybierz bon'}
-      >
-        <ClipboardCopyIcon />
-        Makro korekty
-      </Button>
+      <div className="grid gap-1.5">
+        <label
+          className="flex cursor-pointer items-center gap-2 text-xs"
+          title="Po zakończeniu korekty jej PDF pójdzie w Adobe Acrobat do drukarki domyślnej, potem się zamknie. PDF-y otwarte wcześniej makro zamknie bez drukowania."
+        >
+          <input
+            type="checkbox"
+            checked={print}
+            onChange={(event) => {
+              setPrint(event.target.checked)
+              savePrint(event.target.checked)
+            }}
+            className="size-4 accent-blue-600"
+          />
+          Drukuj po zakończeniu
+        </label>
+        <Button
+          disabled={!delivery}
+          onClick={() => onMacroOpenChange(true)}
+          title={delivery ? undefined : 'Najpierw wybierz bon'}
+        >
+          <ClipboardCopyIcon />
+          Makro korekty
+        </Button>
+      </div>
 
       <DeliveryPicker
         storeId={storeId}
@@ -187,6 +224,7 @@ export function CorrectionBanner({
           hasBeforeRows={correction.hasBeforeRows}
           fromBase={isBaseSeller(invoice.sellerNip)}
           baseProtocol={isBaseProtocol(delivery.supplierCode, invoice.sellerNip)}
+          print={print}
           rows={rows}
           open={macroOpen}
           onOpenChange={onMacroOpenChange}
@@ -338,6 +376,7 @@ function MacroDialog({
   hasBeforeRows,
   fromBase,
   baseProtocol,
+  print,
   rows,
   open,
   onOpenChange,
@@ -351,6 +390,8 @@ function MacroDialog({
   fromBase: boolean
   /** Bon dostawcy bazy (538, 88110): protokół typu 9 zamiast 8. */
   baseProtocol: boolean
+  /** Po zakończeniu PDF korekty idzie do drukarki domyślnej. */
+  print: boolean
   rows: DataEntryRow[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -371,15 +412,15 @@ function MacroDialog({
   const copy = async () => {
     if (!plan) return
     try {
-      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso(), fromBase, baseProtocol))
+      await navigator.clipboard.writeText(buildCorrectionMacro(plan.items, todayIso(), fromBase, baseProtocol, print))
     } catch {
       toast.error('Nie udało się skopiować makra do schowka')
       return
     }
     toast.success(`Makro w schowku: ${plan.items.length} poz.`, {
       description: `Naciśnij Alt+E, a odtwarzacz sam otworzy Mercalys i zapyta przed zakończeniem.${
-        plan.problems.length > 0 ? ` Pominięte: ${plan.problems.length}.` : ''
-      }`,
+        print ? ' Po zakończeniu wydrukuje PDF.' : ''
+      }${plan.problems.length > 0 ? ` Pominięte: ${plan.problems.length}.` : ''}`,
     })
     onOpenChange(false)
   }

@@ -48,6 +48,8 @@ internal sealed class HelloResponse
     public bool Preferred { get; set; }
     /// <summary>Obowiązująca wersja agenta z „Do pobrania” (brak = bez automatycznej aktualizacji).</summary>
     public AgentUpdateInfo? Update { get; set; }
+    /// <summary>Codzienne czyszczenie folderu nowych artykułów (brak = starszy serwer, tak).</summary>
+    public bool? CleanProductFiles { get; set; }
 }
 
 /// <summary>Paczka agenta do automatycznej aktualizacji: wersja, SHA-256 (hex) i rozmiar pliku ZIP.</summary>

@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.intermanage.backend.agent.component.ProductFileMacro;
 import com.intermanage.backend.agent.dto.AgentMacroApi;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.agent.entity.AgentMacroJob;
 import com.intermanage.backend.agent.entity.AgentMacroKind;
 import com.intermanage.backend.agent.entity.AgentMacroStatus;
@@ -57,6 +58,7 @@ public class ProductFileMacroService {
     private final AgentMacroService macros;
     private final AgentMacroJobRepository jobs;
     private final StoreAgentService agents;
+    private final StoreAgentFeatureService features;
     private final StoreFileQueueRepository queue;
     private final DataEntryProductFileService productFiles;
     private final LiveEvents live;
@@ -65,6 +67,7 @@ public class ProductFileMacroService {
     private final Duration delay;
 
     public ProductFileMacroService(AgentMacroService macros, AgentMacroJobRepository jobs, StoreAgentService agents,
+            StoreAgentFeatureService features,
             StoreFileQueueRepository queue, DataEntryProductFileService productFiles, LiveEvents live,
             TransactionTemplate transaction,
             @Value("${app.agent.product-file-macro.enabled:true}") boolean enabled,
@@ -72,6 +75,7 @@ public class ProductFileMacroService {
         this.macros = macros;
         this.jobs = jobs;
         this.agents = agents;
+        this.features = features;
         this.queue = queue;
         this.productFiles = productFiles;
         this.live = live;
@@ -87,6 +91,7 @@ public class ProductFileMacroService {
     @EventListener
     public void onSaved(StoreFileQueueService.FileSavedByAgent event) {
         if (!enabled || !DefaultFolders.PRODUCT_FILE.equals(event.folderKey())
+                || !on(event.storeId())
                 || !macros.anyPlayer(event.storeId(), ProductFileMacro.PLAYER_MINOR)) {
             return;
         }
@@ -127,6 +132,18 @@ public class ProductFileMacroService {
         }
     }
 
+    /** Automat wyłączony w sklepie: czekające pliki zostają do wczytania ręcznie. */
+    @EventListener
+    public void onSwitchedOff(StoreAgentFeatureService.SwitchedOff event) {
+        if (event.feature() == AgentFeature.PRODUCT_FILE_MACRO) {
+            queue.cancelWaitingForMacro(event.storeId());
+        }
+    }
+
+    private boolean on(UUID storeId) {
+        return features.isOn(storeId, AgentFeature.PRODUCT_FILE_MACRO);
+    }
+
     private void later(UUID storeId) {
         Thread.ofVirtual().name("product-file-macro-" + storeId).start(() -> {
             try {
@@ -142,6 +159,9 @@ public class ProductFileMacroService {
     }
 
     private void dispatch(UUID storeId) {
+        if (!on(storeId)) {
+            return;
+        }
         List<StoreFileQueueRepository.MacroFile> files = queue.lockWaitingForMacro(storeId,
                 (int) MAX_WAIT.toMinutes());
         if (files.isEmpty()) {
@@ -156,7 +176,8 @@ public class ProductFileMacroService {
      */
     @Transactional(readOnly = true)
     public boolean expected(UUID storeId, String fileName) {
-        if (!enabled || !agents.enabled(storeId) || !macros.anyPlayer(storeId, ProductFileMacro.PLAYER_MINOR)) {
+        if (!enabled || !agents.enabled(storeId) || !on(storeId)
+                || !macros.anyPlayer(storeId, ProductFileMacro.PLAYER_MINOR)) {
             return false;
         }
         StoreFileQueueItem item = queue.findFirstByStoreIdAndFolderKeyAndFileNameOrderByCreatedAtDesc(storeId,

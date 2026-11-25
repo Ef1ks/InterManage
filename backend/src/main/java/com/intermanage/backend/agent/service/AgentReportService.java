@@ -25,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.intermanage.backend.agent.dto.AgentApi;
 import com.intermanage.backend.agent.dto.AgentReportFileResponse;
+import com.intermanage.backend.agent.entity.AgentFeature;
 import com.intermanage.backend.agent.entity.AgentReportFile;
 import com.intermanage.backend.agent.entity.StoreAgentSettings;
 import com.intermanage.backend.agent.mapper.StoreAgentMapper;
@@ -102,6 +103,7 @@ public class AgentReportService {
     private final SalesImportService sales;
     private final DocumentService documents;
     private final CadencierService cadencier;
+    private final StoreAgentFeatureService features;
 
     /**
      * Start tego procesu: plik odrzucony przez wcześniejszą wersję serwera (np. przed poprawką odczytu raportu) dostaje
@@ -120,7 +122,9 @@ public class AgentReportService {
             StoreFileLocationService locations, ImportHistoryService history, ChunkedUploads uploads,
             LiveEvents live, StoreAgentMapper mapper, TransactionTemplate transaction, ProductImportService products,
             ProductCodeImportService productCodes, PromotionImportService promotions, SalesImportService sales,
-            DocumentService documents, CadencierService cadencier, ImportSlots slots) {
+            DocumentService documents, CadencierService cadencier, ImportSlots slots,
+            StoreAgentFeatureService features) {
+        this.features = features;
         this.slots = slots;
         this.files = files;
         this.settings = settings;
@@ -239,7 +243,8 @@ public class AgentReportService {
     }
 
     private boolean enabled(UUID storeId) {
-        return settings.findById(storeId).map(StoreAgentSettings::isEnabled).orElse(false);
+        return settings.findById(storeId).map(StoreAgentSettings::isEnabled).orElse(false)
+                && features.isOn(storeId, AgentFeature.REPORTS);
     }
 
     public static ImportReportKind kindOf(String folderKey) {
@@ -298,7 +303,8 @@ public class AgentReportService {
             decision.delete().forEach(file -> deletes.add(
                     new AgentApi.FileDelete(PREFIX + kind.name(), file.name(), file.modified())));
         }
-        return new AgentApi.EventsResponse(requests, deletes);
+        return new AgentApi.EventsResponse(requests,
+                features.isOn(storeId, AgentFeature.REPORT_CLEANUP) ? deletes : List.of());
     }
 
     record Decision(List<SeenFile> upload, List<SeenFile> delete) {
@@ -433,6 +439,9 @@ public class AgentReportService {
         ImportReportKind kind = kindOf(request.folderKey());
         if (kind == null) {
             throw ApiException.badRequest("Nieznany rodzaj raportu");
+        }
+        if (!features.isOn(agent.storeId(), AgentFeature.REPORTS)) {
+            throw ApiException.conflict("Wgrywanie raportów przez agenta jest w tym sklepie wyłączone");
         }
         String fileName = java.nio.file.Path.of(request.fileName()).getFileName().toString();
         if (!fileName.matches("(?i)" + pattern("", kind))) {
