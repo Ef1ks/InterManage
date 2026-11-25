@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -141,12 +142,17 @@ public class StockGapService {
         BigDecimal weeklyMargin = article.getSoldQuantity().signum() == 0 ? BigDecimal.ZERO
                 : article.getMarginValue().multiply(typicalWeek)
                         .divide(article.getSoldQuantity(), MONEY_SCALE, RoundingMode.HALF_UP);
+        boolean otherPrevious = receipts != null && receipts.getPreviousReceipt() != null
+                && !Objects.equals(receipts.getSupplierCode(), receipts.getPreviousSupplierCode());
         return new Item(kind, article.getItm8(), article.getEan(), article.getName(), article.getBrand(),
                 article.getSubfamilyCode(), article.getCadencier(), stock, typicalWeek, article.getWeeksSold(),
                 article.getLastSale(), silentDays, missed, cover, weeklyMargin,
                 receipts != null && receipts.getLastReceipt() != null ? receipts.getLastReceipt().toLocalDate() : null,
                 recentDeliveries, receipts != null ? receipts.getSupplierCode() : null,
-                receipts != null ? receipts.getSupplierName() : null);
+                receipts != null ? receipts.getSupplierName() : null,
+                otherPrevious ? receipts.getPreviousSupplierCode() : null,
+                otherPrevious ? receipts.getPreviousSupplierName() : null,
+                otherPrevious ? receipts.getPreviousReceipt().toLocalDate() : null);
     }
 
     private static StockGapKind kind(SellingArticle article, BigDecimal stock, BigDecimal missed, BigDecimal cover,

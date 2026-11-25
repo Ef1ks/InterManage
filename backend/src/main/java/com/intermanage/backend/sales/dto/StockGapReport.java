@@ -24,11 +24,13 @@ public record StockGapReport(
      * {@code missedQuantity}: ile by się sprzedało przez ten czas w typowym tempie. {@code coverDays}: na ile dni
      * wystarczy stan, puste przy stanie 0 albo ujemnym. {@code weeklyMargin}: typowy tydzień × marża na sztuce z tych
      * samych tygodni, czyli ile marży tygodniowo jest do stracenia. Ostatnia dostawa to przyjęcie PZ albo towar od
-     * innego sklepu, a dostawca z ostatniego PZ.
+     * innego sklepu, a dostawca z ostatniego PZ. {@code previousSupplier*}: dostawca przedostatniego PZ, o ile inny, bo
+     * ostatnia dostawa bywa jednorazowa (np. z bazy na gazetkę).
      */
     public record Item(StockGapKind kind, String itm8, String ean, String name, String brand, String subfamilyCode,
             boolean cadencier, BigDecimal stock, BigDecimal typicalWeek, int weeksSold, LocalDate lastSale,
             long silentDays, BigDecimal missedQuantity, BigDecimal coverDays, BigDecimal weeklyMargin,
-            LocalDate lastDeliveryDate, int recentDeliveries, String supplierCode, String supplierName) {
+            LocalDate lastDeliveryDate, int recentDeliveries, String supplierCode, String supplierName,
+            String previousSupplierCode, String previousSupplierName, LocalDate previousDeliveryDate) {
     }
 }

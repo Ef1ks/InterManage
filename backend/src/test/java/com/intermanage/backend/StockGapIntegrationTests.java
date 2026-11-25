@@ -3,6 +3,7 @@ package com.intermanage.backend;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -126,6 +127,23 @@ class StockGapIntegrationTests {
                 .andExpect(jsonPath("$.items[?(@.kind == 'ONE_OFF')].itm8", contains(ONE_OFF)))
                 .andExpect(jsonPath("$.items[?(@.kind == 'RUNNING_OUT')].itm8", contains(RUNNING_OUT)))
                 .andExpect(jsonPath("$.items[?(@.kind == 'WRONG_STOCK')].itm8", contains(WRONG_STOCK)));
+    }
+
+    @Test
+    void showsSuppliersOfTwoLastDeliveries() throws Exception {
+        // Ostatnia dostawa jednorazowo z bazy, poprzednie od zwykłego dostawcy.
+        jdbc.update("""
+                update document_lines set supplier_code = '538', supplier_name = 'BAZA'
+                where document_id in (select id from documents where store_id = ?::uuid and number = ?)""",
+                store, MISSING + "-0");
+        String missing = "$.items[?(@.itm8 == '" + MISSING + "')]";
+        mvc.perform(report())
+                .andExpect(jsonPath(missing + ".supplierCode").value("538"))
+                .andExpect(jsonPath(missing + ".previousSupplierCode").value("7"))
+                .andExpect(jsonPath(missing + ".previousDeliveryDate").value(last.minusDays(50).toString()))
+                // Ten sam dostawca w obu dostawach: jeden.
+                .andExpect(jsonPath("$.items[?(@.itm8 == '" + RUNNING_OUT + "')].previousSupplierCode",
+                        contains(nullValue())));
     }
 
     @Test

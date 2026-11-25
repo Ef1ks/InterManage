@@ -30,15 +30,15 @@ internal sealed class DataUpdate
     private const string ImportPrefix = "IMPORT_";
     private static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(10);
     /// <summary>Tyle makr najwyżej: pierwsze i ponowienia brakujących raportów.</summary>
-    private const int MaxRounds = 3;
+    private static int MaxRounds => Limits.Count("updateRounds", 3, 1, 10);
     /// <summary>Odtwarzacz, który sam ponawia plik; po nim agent drukuje niezapisane raporty już tylko raz.</summary>
     private static readonly Version RetryingPlayer = new(0, 69);
     /// <summary>Tyle bez żadnej zmiany (zapis pliku, wgrywanie) i okno kończy z listą tego, czego nie doczekało.</summary>
-    private static readonly TimeSpan GiveUpAfter = TimeSpan.FromMinutes(90);
+    private static TimeSpan GiveUpAfter => Limits.Seconds("updateGiveUpSeconds", 5400, 300, 28_800);
     private static readonly TimeSpan WaitForConfig = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan WaitForPlayer = TimeSpan.FromMinutes(3);
+    private static TimeSpan WaitForPlayer => Limits.Seconds("playerWaitSeconds", 180, 10, 3600);
     /// <summary>Tyle czekamy na część folderów, która nie odpowiada; potem aktualizacja idzie bez nich.</summary>
-    private static readonly TimeSpan WaitForFolders = TimeSpan.FromMinutes(10);
+    private static TimeSpan WaitForFolders => Limits.Seconds("updateFolderWaitSeconds", 600, 0, 7200);
 
     private readonly AgentHost host;
     private readonly Control ui;
@@ -187,19 +187,21 @@ internal sealed class DataUpdate
                 MacroRunner.PressEsc();
             }
             form?.Finish(false, "Aktualizacja przerwana. Brakujące raporty uruchomisz przyciskiem „Spróbuj ponownie”.");
+            run.End(false, "Przerwana przyciskiem na komputerze.");
             return true;
         }
         catch (Exception error)
         {
             Log.Error("Aktualizacja danych", error);
             form?.Finish(false, "Aktualizacja przerwana: " + error.Message);
+            run.End(false, error.Message);
             return true;
         }
         finally
         {
             if (gate) MacroRunner.Gate.Release();
             Interlocked.Exchange(ref running, 0);
-            if (locked != null) _ = FinishedAsync(locked);
+            if (locked != null) _ = FinishedAsync(locked, run);
         }
     }
 
@@ -209,6 +211,15 @@ internal sealed class DataUpdate
         /// <summary>Raporty, których jeszcze brakuje („Spróbuj ponownie”).</summary>
         public volatile List<string> Pending = new();
         public volatile MacroPlayback? Playback;
+        /// <summary>Wynik do powiadomienia w Intermanage (null = agent zamknięty w trakcie).</summary>
+        public bool? Ok { get; private set; }
+        public string? Message { get; private set; }
+
+        public void End(bool ok, string message)
+        {
+            Ok = ok;
+            Message = message.Length > 1500 ? message.Substring(0, 1500) + "…" : message;
+        }
     }
 
     /// <summary>„Spróbuj ponownie”: nowa aktualizacja brakujących raportów, gdy poprzednia już oddała bramkę.</summary>
@@ -268,6 +279,7 @@ internal sealed class DataUpdate
             {
                 Log.Info("Aktualizacja danych zakończona: " + done + " plików");
                 form.Finish(true, "Dane zaktualizowane (" + done + " plików).");
+                run.End(true, "Wgrane pliki: " + done);
                 return;
             }
             Log.Warn("Aktualizacja danych z błędami: " + string.Join("; ", outcome.Problems));
@@ -287,6 +299,7 @@ internal sealed class DataUpdate
                 }
             }
             form.Finish(false, "Nie wszystko się wgrało:\n" + string.Join("\n", outcome.Problems));
+            run.End(false, string.Join("\n", outcome.Problems));
             return;
         }
     }
@@ -393,11 +406,11 @@ internal sealed class DataUpdate
     }
 
     /// <summary>Koniec aktualizacji na serwerze (bez tego blokada wygasa sama po 4 godzinach).</summary>
-    private static async Task FinishedAsync(ApiClient api)
+    private static async Task FinishedAsync(ApiClient api, Run run)
     {
         try
         {
-            await api.ReportMacroFinishedAsync(CancellationToken.None).ConfigureAwait(false);
+            await api.ReportMacroFinishedAsync(run.Ok, run.Message, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception error)
         {

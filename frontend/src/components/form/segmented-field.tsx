@@ -11,6 +11,8 @@ type SegmentedFieldProps<T extends string> = {
   options: SegmentOption<T>[]
   value: T
   onChange: (value: T) => void
+  /** {@code field}: wysokość pola formularza (filtry w jednym rzędzie z polami tekstowymi). */
+  size?: 'default' | 'field'
   className?: string
 }
 
@@ -20,6 +22,7 @@ export function SegmentedField<T extends string>({
   options,
   value,
   onChange,
+  size = 'default',
   className,
 }: SegmentedFieldProps<T>) {
   return (
@@ -27,14 +30,21 @@ export function SegmentedField<T extends string>({
       value={value}
       onValueChange={(next) => onChange(next as T)}
       aria-label={label}
-      className={cn('inline-flex shrink-0 rounded-lg bg-muted p-0.5', className)}
+      className={cn(
+        'inline-flex max-w-full shrink-0 bg-muted',
+        size === 'field' ? 'h-12 w-fit rounded-xl p-1' : 'rounded-lg p-0.5',
+        className,
+      )}
     >
       {options.map((option) => (
         <Radio.Root
           key={option.value}
           value={option.value}
           disabled={option.disabled}
-          className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-[color,background-color,box-shadow,transform] duration-150 ease-snappy outline-none select-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 active:scale-[0.97] data-checked:bg-background data-checked:font-medium data-checked:text-foreground data-checked:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_1px_1px_rgb(0_0_0/0.04)] motion-reduce:active:scale-100 data-disabled:cursor-not-allowed data-disabled:opacity-40"
+          className={cn(
+            'rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-[color,background-color,box-shadow,transform] duration-150 ease-snappy outline-none select-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 active:scale-[0.97] data-checked:bg-background data-checked:font-medium data-checked:text-foreground data-checked:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_1px_1px_rgb(0_0_0/0.04)] motion-reduce:active:scale-100 data-disabled:cursor-not-allowed data-disabled:opacity-40',
+            size === 'field' && 'flex items-center rounded-lg py-0 whitespace-nowrap',
+          )}
         >
           {option.label}
         </Radio.Root>

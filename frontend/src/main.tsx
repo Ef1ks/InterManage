@@ -29,7 +29,8 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
           <App />
           <SplashScreen />
-          <Toaster position="top-right" richColors />
+          {/* Pod nagłówkiem (h-14), żeby powiadomienie nie zasłaniało jego przycisków. */}
+          <Toaster position="top-right" richColors offset={{ top: '4.25rem' }} mobileOffset={{ top: '4.25rem' }} />
           <ReactQueryDevtools buttonPosition="bottom-left" />
         </QueryClientProvider>
       </Provider>

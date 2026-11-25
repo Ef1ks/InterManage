@@ -32,13 +32,13 @@ internal sealed class RemoteMacros : IDisposable
     private static readonly TimeSpan StateCheckEvery = TimeSpan.FromSeconds(2);
     /// <summary>Odpowiedź bez makra szybciej niż w tyle: serwer nie czekał, więc następne żądanie idzie z przerwą.</summary>
     private static readonly TimeSpan ShortestWait = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan WaitAfterError = TimeSpan.FromSeconds(20);
+    private static TimeSpan WaitAfterError => Limits.Seconds("serverRetrySeconds", 20, 5, 600);
     private static readonly TimeSpan PlayerCheckEvery = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan PlayerSearchEvery = TimeSpan.FromSeconds(30);
     private static readonly Version NeededPlayer = MacroPlayback.ResultsFrom;
-    private const int InUseSeconds = 120;
+    private static int InUseSeconds => Limits.Count("inUseSeconds", 120, 10, 3600);
     /// <summary>Tyle najwyżej odliczanie czeka na chwilę bez ruchu (serwer czeka na start 30 s), potem makro odkładamy.</summary>
-    private static readonly TimeSpan LongestHold = TimeSpan.FromSeconds(20);
+    private static TimeSpan LongestHold => Limits.Seconds("holdSeconds", 20, 2, 25);
 
     private readonly AgentHost host;
     private readonly Control ui;

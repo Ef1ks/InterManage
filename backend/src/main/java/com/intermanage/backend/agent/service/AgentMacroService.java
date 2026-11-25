@@ -90,6 +90,8 @@ public class AgentMacroService {
     private static final String SERVER_REQUEST = "Intermanage, po aktualizacji danych";
     /** Po „Anuluj” na wszystkich komputerach zlecenie z kolejki wraca do nich dopiero po tym czasie. */
     public static final Duration DECLINED_RETRY = Duration.ofMinutes(10);
+    /** Tyle wyniku makra idzie w powiadomieniu na żywo; całość jest przy makrze. */
+    private static final int MESSAGE_LENGTH = 600;
     private static final String WAITS_FOR_EARLIER = "czeka na wcześniejsze makro sklepu";
     /** Zgłoszenie „wolny” liczy się jako koniec makra dopiero tyle po starcie (zgłoszenie sprzed startu w drodze). */
     private static final Duration RESULT_GRACE = Duration.ofSeconds(30);
@@ -720,8 +722,17 @@ public class AgentMacroService {
         fields.put("kind", job.getKind().name());
         // Powiadomienie o makrze zleconym przez serwer dostaje osoba, która zapisała plik.
         fields.put("userId", job.getCreatedBy() == null ? null : job.getCreatedBy().getId());
-        if (SERVER_KINDS.contains(job.getKind()) && job.getResultMessage() != null) {
-            fields.put("message", job.getResultMessage());
+        // Reszta jest do powiadomień o końcu makra dla pozostałych osób w sklepie.
+        fields.put("title", job.getTitle());
+        fields.put("computer", job.getAgentId() == null ? null
+                : agents.findById(job.getAgentId()).map(AgentMacroService::label).orElse(null));
+        if (job.getResultMessage() != null) {
+            String message = job.getResultMessage();
+            fields.put("message", message.length() > MESSAGE_LENGTH ? message.substring(0, MESSAGE_LENGTH) + "…"
+                    : message);
+        }
+        if (job.getStatus() == AgentMacroStatus.QUEUED && job.getRetryAt() != null) {
+            fields.put("postponed", job.getWaitReason());
         }
         live.publish(job.getStore().getId(), "agent-macro", fields);
         if (job.getStatus().ended()) {

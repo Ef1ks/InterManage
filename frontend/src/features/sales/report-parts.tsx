@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ChartColumnIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -40,6 +41,16 @@ export function ChartButton({
     >
       <ChartColumnIcon />
     </Button>
+  )
+}
+
+/** Grupa filtrów raportu z krótkim podpisem nad polami. */
+export function FilterGroup({ legend, children }: { legend: string; children: ReactNode }) {
+  return (
+    <fieldset className="grid min-w-0 grid-cols-1 content-start gap-2">
+      <legend className="mb-2 text-xs font-medium text-muted-foreground">{legend}</legend>
+      {children}
+    </fieldset>
   )
 }
 

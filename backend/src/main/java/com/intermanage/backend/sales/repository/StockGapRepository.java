@@ -90,7 +90,7 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
     List<SellingArticle> findSellingArticles(UUID storeId, LocalDate to, int minWeeks, double minWeekly,
             String[] codes);
 
-    /** Przyjęcia artykułu; dostawca z ostatniego przyjęcia PZ. */
+    /** Przyjęcia artykułu; dostawcy z dwóch ostatnich przyjęć PZ. */
     interface ArticleReceipts {
         String getItm8();
 
@@ -101,16 +101,24 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
         String getSupplierCode();
 
         String getSupplierName();
+
+        String getPreviousSupplierCode();
+
+        String getPreviousSupplierName();
+
+        LocalDateTime getPreviousReceipt();
     }
 
     /**
      * Przyjęcia PZ i ruchy międzymagazynowe z ilością na minus (towar od innego sklepu), także pod lokalnym ITM8
      * dostawcy, po EAN-ie. {@code recentDays} to liczba dni z przyjęciem od {@code regularSince}: mówi, czy towar
-     * przyjeżdża regularnie, czy był jednorazowo.
+     * przyjeżdża regularnie, czy był jednorazowo. Dostawcy z dwóch ostatnich przyjęć, bo ostatnie bywa jednorazowe, np.
+     * z bazy na gazetkę.
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
             , received as (
-                select coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8, d.type, d.document_date, l.supplier_code, l.supplier_name
+                select coalesce(mm.main_itm8, p.itm8, e.itm8) as itm8, d.id as document_id, d.type, d.document_date,
+                       max(l.supplier_code) as supplier_code, max(l.supplier_name) as supplier_name
                 from document_lines l
                 join documents d on d.id = l.document_id and d.error_marked_at is null
                 left join products p on p.store_id = :storeId and p.itm8 = l.itm8
@@ -118,6 +126,7 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
                 left join article_eans e on p.id is null and e.ean = ltrim(btrim(l.ean), '0')
                 where d.store_id = :storeId
                   and ((d.type = 'PZ' and l.quantity > 0) or (d.type = 'MM' and l.quantity < 0))
+                group by 1, 2, 3, 4
             )
             select itm8, max(document_date) as last_receipt,
                    count(distinct cast(document_date as date)) filter (where document_date >= :regularSince)
@@ -125,7 +134,13 @@ public interface StockGapRepository extends Repository<Sale, Sale.Key> {
                    (array_agg(supplier_code order by document_date desc) filter (where type = 'PZ'))[1]
                        as supplier_code,
                    (array_agg(supplier_name order by document_date desc) filter (where type = 'PZ'))[1]
-                       as supplier_name
+                       as supplier_name,
+                   (array_agg(supplier_code order by document_date desc) filter (where type = 'PZ'))[2]
+                       as previous_supplier_code,
+                   (array_agg(supplier_name order by document_date desc) filter (where type = 'PZ'))[2]
+                       as previous_supplier_name,
+                   (array_agg(document_date order by document_date desc) filter (where type = 'PZ'))[2]
+                       as previous_receipt
             from received
             where itm8 is not null
             group by itm8

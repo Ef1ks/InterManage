@@ -237,8 +237,8 @@ public class StoreAgentApiController {
     @PostMapping("/report-macro/finished")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reportMacroFinished(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)
-    String authorization) {
-        agents.finishUpdate(agent(authorization));
+    String authorization, @Valid @RequestBody(required = false) AgentApi.UpdateFinished request) {
+        agents.updateFinished(agent(authorization), request);
     }
 
     /** Ostatnie próby wgrania raportów (okno aktualizacji czeka, aż serwer potwierdzi wgranie). */

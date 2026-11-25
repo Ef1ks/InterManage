@@ -19,11 +19,12 @@ import { useProtoFolder } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import { addDays, formatShortDate } from '@/lib/dates'
 import { marginOf } from '@/lib/margin'
-import type { SalesArticle } from '@/lib/types'
+import type { CadencierPrice, SalesArticle } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store'
 import {
-  addBasketLine,
+  addBasketLines,
+  type BasketFileMode,
   type BasketLine,
   type ComparisonSettings,
   MAX_BASKET_SUPPLIERS,
@@ -40,10 +41,15 @@ const ALCOHOL_REGIONS = new Set(['70', '71', '72', '73'])
 /** Dostawcy z ostatniego roku. */
 const SUPPLIER_DAYS = 365
 
+const BASKET_FILES: { value: BasketFileMode; label: string }[] = [
+  { value: 'perSupplier', label: 'Plik na dostawcę' },
+  { value: 'single', label: 'Wszyscy w jednym pliku' },
+]
+
 const EMPTY: BasketLine[] = []
 
 const normalizeCode = (code: string | null) => (code ?? '').trim().replace(/^0+(?=\d)/, '')
-const supplierKey = (line: Pick<BasketLine, 'supplierCode' | 'supplierName'>) =>
+export const supplierKey = (line: Pick<BasketLine, 'supplierCode' | 'supplierName'>) =>
   line.supplierCode || `nazwa:${line.supplierName}`
 
 export function useBasket(storeId: string) {
@@ -54,21 +60,70 @@ export function useComparisonSettings() {
   return useAppSelector((state) => state.salesBasket.settings)
 }
 
-/** Artykuł z porównania, który dodajemy do koszyka. */
+/** Artykuł z raportu, który dodajemy do koszyka. */
 export type BasketArticle = { itm8: string; name: string | null; ean: string | null; brand: string | null }
 
-type SupplierOption = {
+export type SupplierOption = {
   key: string
   code: string
   name: string
   base: boolean
   price: number | null
   lastDate: string | null
+  /** Ilość z ostatniej dostawy od tego dostawcy. */
+  lastQuantity: number | null
   deliveries: number
   /** Baza z cadencier bez dostawy w ostatnim roku (cena z cadencier, a bez niej z kartoteki). */
   withoutDelivery: boolean
   /** Numer cadencier, z którego jest cena bazy; bez niego cena z ostatniej dostawy albo z kartoteki. */
   cadencier: string | null
+}
+
+/**
+ * Dostawcy artykułu razem z bazą: artykuł z cadencier zamawia się z bazy, nawet gdy w ostatnim roku przyszedł tylko od
+ * innych, po cenie z obowiązującego cadencier (ostatnia dostawa mogła mieć inną). Najpierw baza, potem od
+ * najświeższej dostawy.
+ */
+export function withBaseSupplier(
+  delivered: Omit<SupplierOption, 'base' | 'withoutDelivery' | 'cadencier'>[],
+  {
+    cadencier,
+    region,
+    catalogPrice,
+    current,
+  }: { cadencier: boolean; region: string; catalogPrice: number | null; current: CadencierPrice | null },
+): SupplierOption[] {
+  const list: SupplierOption[] = delivered.map((option) => ({
+    ...option,
+    base: BASE_CODES.has(option.code),
+    withoutDelivery: false,
+    cadencier: null,
+  }))
+  if (cadencier && !list.some((option) => option.base)) {
+    const code = ALCOHOL_REGIONS.has(region) ? '88110' : '538'
+    list.push({
+      key: code,
+      code,
+      name: BASE_NAMES[code],
+      base: true,
+      price: catalogPrice,
+      lastDate: null,
+      lastQuantity: null,
+      deliveries: 0,
+      withoutDelivery: true,
+      cadencier: null,
+    })
+  }
+  if (current?.purchasePrice != null) {
+    for (const option of list.filter((item) => item.base)) {
+      option.price = current.purchasePrice
+      option.cadencier = current.nrCad
+    }
+  }
+  return list.sort((a, b) => {
+    if (cadencier && a.base !== b.base) return a.base ? -1 : 1
+    return (b.lastDate ?? '').localeCompare(a.lastDate ?? '')
+  })
 }
 
 const daysAgo = (days: number) => {
@@ -222,7 +277,7 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
   const ean = catalog?.ean || article.ean
   const options = useMemo(() => {
     const since = daysAgo(SUPPLIER_DAYS)
-    const byKey = new Map<string, SupplierOption>()
+    const byKey = new Map<string, Omit<SupplierOption, 'base' | 'withoutDelivery' | 'cadencier'>>()
     for (const delivery of deliveries.data ?? []) {
       if (delivery.documentDate < since || (!delivery.supplierCode && !delivery.supplierName)) continue
       const code = normalizeCode(delivery.supplierCode)
@@ -237,42 +292,17 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
         key,
         code,
         name: delivery.supplierName ?? BASE_NAMES[code] ?? `Dostawca ${code}`,
-        base: BASE_CODES.has(code),
         price: delivery.purchasePrice,
         lastDate: delivery.documentDate,
+        lastQuantity: delivery.quantity,
         deliveries: 1,
-        withoutDelivery: false,
-        cadencier: null,
       })
     }
-    const list = [...byKey.values()]
-    // Artykuł z cadencier zamawia się z bazy, nawet gdy w ostatnim roku przyszedł tylko od innych.
-    if (cadencier && !list.some((option) => option.base)) {
-      const region = catalog?.nomenclaturePath[0]?.code.slice(0, 2) ?? ''
-      const code = ALCOHOL_REGIONS.has(region) ? '88110' : '538'
-      list.push({
-        key: code,
-        code,
-        name: BASE_NAMES[code],
-        base: true,
-        price: catalog?.purchasePrice ?? null,
-        lastDate: null,
-        deliveries: 0,
-        withoutDelivery: true,
-        cadencier: null,
-      })
-    }
-    // Baza sprzedaje po cenie z obowiązującego cadencier, ostatnia dostawa mogła mieć inną.
-    const current = catalog?.cadencierCurrent
-    if (current?.purchasePrice != null) {
-      for (const option of list.filter((item) => item.base)) {
-        option.price = current.purchasePrice
-        option.cadencier = current.nrCad
-      }
-    }
-    return list.sort((a, b) => {
-      if (cadencier && a.base !== b.base) return a.base ? -1 : 1
-      return (b.lastDate ?? '').localeCompare(a.lastDate ?? '')
+    return withBaseSupplier([...byKey.values()], {
+      cadencier,
+      region: catalog?.nomenclaturePath[0]?.code.slice(0, 2) ?? '',
+      catalogPrice: catalog?.purchasePrice ?? null,
+      current: catalog?.cadencierCurrent ?? null,
     })
   }, [deliveries.data, cadencier, catalog])
 
@@ -297,19 +327,21 @@ function SupplierChoice({ storeId, article, onDone }: { storeId: string; article
   const add = () => {
     if (!selected) return
     dispatch(
-      addBasketLine({
+      addBasketLines({
         storeId,
-        line: {
-          itm8: article.itm8,
-          ean: ean ?? null,
-          name: catalog?.name ?? article.name,
-          brand: catalog?.brand ?? article.brand,
-          supplierCode: selected.code,
-          supplierName: selected.name,
-          base: selected.base,
-          purchasePrice: selected.price,
-          quantity,
-        },
+        lines: [
+          {
+            itm8: article.itm8,
+            ean: ean ?? null,
+            name: catalog?.name ?? article.name,
+            brand: catalog?.brand ?? article.brand,
+            supplierCode: selected.code,
+            supplierName: selected.name,
+            base: selected.base,
+            purchasePrice: selected.price,
+            quantity,
+          },
+        ],
       }),
     )
     toast.success('Dodano do koszyka', {
@@ -667,9 +699,14 @@ function BasketContent({ storeId, onEmpty }: { storeId: string; onEmpty: () => v
             <p className="text-sm text-muted-foreground">
               {settings.basketFiles === 'single'
                 ? 'Wszyscy dostawcy w jednym pliku, każdy w swojej sekcji.'
-                : 'Osobny plik dla każdego dostawcy.'}{' '}
-              Zmienisz to w ustawieniach raportu.
+                : 'Osobny plik dla każdego dostawcy.'}
             </p>
+            <SegmentedField
+              label="Zamówienia dla dostawców spoza bazy"
+              options={BASKET_FILES}
+              value={settings.basketFiles}
+              onChange={(basketFiles) => dispatch(setComparisonSettings({ basketFiles }))}
+            />
             <Button
               size="lg"
               variant="outline"
@@ -790,10 +827,7 @@ export function ComparisonSettingsButton() {
           </p>
           <SegmentedField
             label="Zamówienia dla dostawców spoza bazy"
-            options={[
-              { value: 'perSupplier', label: 'Plik na dostawcę' },
-              { value: 'single', label: 'Wszyscy w jednym pliku' },
-            ]}
+            options={BASKET_FILES}
             value={settings.basketFiles}
             onChange={(basketFiles) => update({ basketFiles })}
           />

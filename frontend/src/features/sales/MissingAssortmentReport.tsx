@@ -1,5 +1,14 @@
 import { type FormEvent, type ReactElement, useMemo, useState } from 'react'
-import { CheckIcon, FolderInputIcon, PencilIcon, PlusIcon, SettingsIcon, Trash2Icon, XIcon } from 'lucide-react'
+import {
+  CheckIcon,
+  FolderInputIcon,
+  PencilIcon,
+  PlusIcon,
+  SettingsIcon,
+  ShoppingBasketIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
@@ -38,10 +47,13 @@ import {
   useSalesNomenclatures,
   useSalesReportsOverview,
 } from '@/features/sales/api'
+import { BulkBasketDialog } from '@/features/sales/BulkBasketDialog'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
-import { ChartButton, nomenclatureName, StatTile } from '@/features/sales/report-parts'
+import { ChartButton, FilterGroup, nomenclatureName, StatTile } from '@/features/sales/report-parts'
 import { lastCompleteDay, useReportParams } from '@/features/sales/report-period'
+import { BasketRowButton, SelectCell, SelectHead, useRowSelection } from '@/features/sales/row-selection'
+import { AddToBasketDialog, type BasketArticle, BasketButton, useBasket } from '@/features/sales/SalesBasket'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { ApiError } from '@/lib/api'
 import { compareSupplierCodes } from '@/lib/supplier-order'
@@ -58,6 +70,9 @@ import { LoadingPanel } from '@/components/LoadingPanel'
 const PAGE = 100
 const DEFAULT_MONTHS = '3'
 const DEFAULT_SILENT_DAYS = 7
+const DEFAULT_MAX_STOCK = 5
+/** Raport według stanu: wszystko, czego zostało najwyżej tyle, bez względu na sprzedaż. */
+const STOCK_MODE = 'stan'
 const ALL_SUPPLIERS = 'all'
 /** Zakładka artykułów bez kategorii (domyślna) i wszystkich artykułów; pozostałe to id kategorii. */
 const TO_CHECK = null
@@ -99,6 +114,8 @@ const DEFAULT_SORT: SortState<SortKey> = { key: 'value', direction: 'desc' }
 const money = (value: number) => `${formatMoney(value)} zł`
 const itm8Label = (itm8: string) => itm8.replace(/^0+/, '')
 const daysLabel = (days: number) => (days === 1 ? '1 dzień' : `${formatQuantity(days)} dni`)
+/** Na ile starczy stan ({@code weeks}: stan / sprzedaż tygodniowa). */
+const coverLabel = (weeks: number) => (weeks * 7 < 1 ? 'niecały dzień' : daysLabel(Math.floor(weeks * 7)))
 /**
  * Średnia z mniej niż tygodnia na stanie (cała dostawa zeszła w 1-3 dni, zwykle akcja) mówi niewiele: 50 szt. w dniu
  * dostawy to 350 na tydzień. Liczbę zostawiamy, ale przygaszoną i z liczbą dni.
@@ -125,18 +142,24 @@ export function MissingAssortmentReport({ storeId }: { storeId: string }) {
   const { params, update } = useReportParams()
 
   const silentField = useSearchParamText('cisza')
+  const stockField = useSearchParamText('stan')
   const searchField = useSearchParamText('szukaj')
+  const byStock = params.get('tryb') === STOCK_MODE
   const silentDays = silentField.debounced === '' ? DEFAULT_SILENT_DAYS : Number(silentField.debounced)
   const silentError =
     Number.isInteger(silentDays) && silentDays >= 0 && silentDays <= 365 ? undefined : 'Podaj liczbę dni.'
+  const maxStock = stockField.debounced === '' ? DEFAULT_MAX_STOCK : Number(stockField.debounced.replace(',', '.'))
+  const stockError = Number.isFinite(maxStock) && maxStock >= 0 && maxStock <= 1000 ? undefined : 'Od 0 do 1000.'
+  const filterError = byStock ? stockError : silentError
   const months = MONTHS.find((option) => option.value === params.get('okres'))?.value ?? DEFAULT_MONTHS
 
   const query: MissingAssortmentQuery = {
     months: Number(months),
-    silentDays,
+    silentDays: byStock || silentError ? DEFAULT_SILENT_DAYS : silentDays,
+    maxStock: byStock ? maxStock : null,
     nomenclatures: [...new Set(params.getAll('nom'))].sort(),
   }
-  const report = useMissingAssortment(storeId, query, !silentError)
+  const report = useMissingAssortment(storeId, query, !filterError)
   const lastSaleDate = lastCompleteDay(overview.data?.lastSaleDate)
   const categories = useMemo(() => report.data?.categories ?? [], [report.data])
 
@@ -206,58 +229,94 @@ export function MissingAssortmentReport({ storeId }: { storeId: string }) {
         {report.data && <ReportFreshness generatedAt={report.data.stockReportGeneratedAt} />}
       </div>
       <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
-        Artykuły kupione w wybranym okresie od dostawców spoza bazy ({baseCodes} pomijamy), których nie ma na stanie i
-        które się nie sprzedają. Sprzedaż na tydzień liczy się tylko z dni, w których towar był: od dostawy do ostatniej
-        sprzedaży przed kolejną. Bez produkcji, mięsa i garmażu.
+        Artykuły kupione w wybranym okresie od dostawców spoza bazy ({baseCodes} pomijamy),{' '}
+        {byStock
+          ? 'których zostało najwyżej tyle, ile podano, także te, które się sprzedają.'
+          : 'których nie ma na stanie i które się nie sprzedają.'}{' '}
+        Sprzedaż na tydzień liczy się tylko z dni, w których towar był: od dostawy do ostatniej sprzedaży przed kolejną.
+        Bez produkcji, mięsa i garmażu.
       </p>
 
       <Card className="mb-4 gap-4 p-4">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="grid gap-1.5">
-            <span className="text-sm font-medium">Zakupy z ostatnich</span>
+        <div className="grid gap-4 xl:grid-cols-[auto_minmax(0,1fr)]">
+          <FilterGroup legend="Zakupy z ostatnich">
             <SegmentedField
               label="Zakupy z ostatnich"
+              size="field"
               options={MONTHS}
               value={months}
               onChange={(next) => update({ okres: next === DEFAULT_MONTHS ? null : next })}
             />
-          </div>
-          <TextField
-            label={`Bez sprzedaży od (domyślnie ${DEFAULT_SILENT_DAYS} dni)`}
-            inputMode="numeric"
-            value={silentField.text}
-            onChange={(event) => silentField.setText(event.target.value)}
-            error={silentError}
-            className="w-full sm:w-72"
-          />
+          </FilterGroup>
+          <FilterGroup legend="Co pokazać">
+            <div className="flex flex-wrap items-start gap-2">
+              <SegmentedField
+                label="Co pokazać"
+                size="field"
+                options={[
+                  { value: 'missing', label: 'Brak na stanie' },
+                  { value: STOCK_MODE, label: 'Niski stan' },
+                ]}
+                value={byStock ? STOCK_MODE : 'missing'}
+                onChange={(next) => update({ tryb: next === STOCK_MODE ? STOCK_MODE : null })}
+              />
+              {byStock ? (
+                <TextField
+                  key="stock"
+                  label={`Stan najwyżej (domyślnie ${DEFAULT_MAX_STOCK})`}
+                  inputMode="decimal"
+                  value={stockField.text}
+                  onChange={(event) => stockField.setText(event.target.value)}
+                  error={stockError}
+                  className="w-full sm:w-64"
+                />
+              ) : (
+                <TextField
+                  key="silent"
+                  label={`Bez sprzedaży od (domyślnie ${DEFAULT_SILENT_DAYS} dni)`}
+                  inputMode="numeric"
+                  value={silentField.text}
+                  onChange={(event) => silentField.setText(event.target.value)}
+                  error={silentError}
+                  className="w-full sm:w-64"
+                />
+              )}
+            </div>
+          </FilterGroup>
         </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <MultiComboboxField
-            label="Nomenklatura"
-            description="Tylko wybrane rejony, rodziny albo podrodziny. Puste = wszystkie."
-            options={(nomenclatures.data ?? []).map((item) => ({
-              value: item.code,
-              label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
-              hint: LEVEL_STYLES[item.level].label,
-            }))}
-            value={query.nomenclatures}
-            onChange={(codes) => update({ nom: codes })}
-            placeholder={
-              nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
-            }
-          />
-          <SearchableSelectField
-            label="Dostawca (ostatni zakup)"
-            options={[
-              { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },
-              ...suppliers.map(([code, { name, count: itemCount }]) => ({
-                value: code,
-                label: `${code} ${name ?? ''} (${itemCount})`,
-              })),
-            ]}
-            value={supplier}
-            onChange={(next) => update({ dostawca: next === ALL_SUPPLIERS ? null : next })}
-          />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <FilterGroup legend="Nomenklatura">
+            <MultiComboboxField
+              label="Nomenklatura"
+              hideLabel
+              options={(nomenclatures.data ?? []).map((item) => ({
+                value: item.code,
+                label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
+                hint: LEVEL_STYLES[item.level].label,
+              }))}
+              value={query.nomenclatures}
+              onChange={(codes) => update({ nom: codes })}
+              placeholder={
+                nomenclatures.data?.length === 0
+                  ? 'Brak wgranej nomenklatury'
+                  : 'Wszystkie. Szukaj po kodzie albo nazwie…'
+              }
+            />
+          </FilterGroup>
+          <FilterGroup legend="Dostawca">
+            <SearchableSelectField
+              label="Ostatni zakup od"
+              options={[
+                { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },
+                ...suppliers.map(([code, { name, count: itemCount }]) => ({
+                  value: code,
+                  label: `${code} ${name ?? ''} (${itemCount})`,
+                })),
+              ]}
+              value={supplier}
+              onChange={(next) => update({ dostawca: next === ALL_SUPPLIERS ? null : next })}
+            />
+          </FilterGroup>
         </div>
       </Card>
 
@@ -305,7 +364,7 @@ export function MissingAssortmentReport({ storeId }: { storeId: string }) {
         className="mb-4 max-w-md"
       />
 
-      {silentError ? null : report.isError && !report.data ? (
+      {filterError ? null : report.isError && !report.data ? (
         <Card className="items-center px-6 py-10 text-center">
           <p className="font-medium">Nie udało się policzyć raportu</p>
           <Button variant="outline" onClick={() => report.refetch()}>
@@ -327,6 +386,7 @@ export function MissingAssortmentReport({ storeId }: { storeId: string }) {
             lastSaleDate={lastSaleDate}
             dataUntil={report.data.lastSaleDate}
             since={report.data.since}
+            byStock={byStock}
           />
         </div>
       )}
@@ -346,6 +406,7 @@ function Results({
   lastSaleDate,
   dataUntil,
   since,
+  byStock,
 }: {
   storeId: string
   items: MissingAssortmentItem[]
@@ -356,22 +417,21 @@ function Results({
   lastSaleDate: string
   dataUntil: string | null
   since: string
+  byStock: boolean
 }) {
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const [shown, setShown] = useState(PAGE)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const selection = useRowSelection(items)
+  const { selected, chosen } = selection
+  const [basketArticle, setBasketArticle] = useState<BasketArticle | null>(null)
+  const [bulk, setBulk] = useState(false)
+  const basket = useBasket(storeId)
+  const basketItm8s = useMemo(() => new Set(basket.map((line) => line.itm8)), [basket])
+  const bulkItems = chosen.map((item) => ({ itm8: item.itm8, weekly: item.weeklyInStock }))
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < items.length, shown)
   const sorting = { sort, onSort }
-  const chosen = items.filter((item) => selected.has(item.itm8))
   const supplierCount = new Set(items.map((item) => item.supplierCode)).size
   const taskSource = useTaskSource('MISSING_ASSORTMENT', 'Brakujący asortyment')
-  const toggle = (itm8: string) =>
-    setSelected((current) => {
-      const next = new Set(current)
-      if (next.has(itm8)) next.delete(itm8)
-      else next.add(itm8)
-      return next
-    })
 
   return (
     <>
@@ -390,12 +450,16 @@ function Results({
         <StatTile
           label="Sprzedaż na tydzień, gdy były"
           value={money(items.reduce((sum, item) => sum + (item.weeklyValue ?? 0), 0))}
-          detail="W cenach z kartoteki: tyle mniej więcej ucieka co tydzień"
+          detail={
+            byStock
+              ? 'W cenach z kartoteki, z dni na stanie'
+              : 'W cenach z kartoteki: tyle mniej więcej ucieka co tydzień'
+          }
         />
       </div>
 
       {items.length > 0 && (
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
           <AssignTaskButton
             title={`Brakujący asortyment: sprawdź ${formatQuantity(items.length)} art.`}
             items={() => items.map(missingTaskItem)}
@@ -412,30 +476,15 @@ function Results({
         </p>
       ) : (
         <Card className="overflow-clip p-0">
-          <div className="overflow-x-auto lg:overflow-x-visible">
+          <div className="overflow-x-auto min-[110rem]:overflow-x-visible">
             <table className="w-full caption-bottom text-sm">
-              <TableHeader className="bg-card lg:sticky lg:top-14 lg:z-10">
+              <TableHeader className="bg-card min-[110rem]:sticky min-[110rem]:top-14 min-[110rem]:z-10">
                 <TableRow>
-                  {canEdit && (
-                    <TableHead className="w-10 pl-4">
-                      <input
-                        type="checkbox"
-                        aria-label="Zaznacz wszystkie"
-                        className="size-4 accent-foreground"
-                        checked={chosen.length > 0 && chosen.length === items.length}
-                        ref={(element) => {
-                          if (element) element.indeterminate = chosen.length > 0 && chosen.length < items.length
-                        }}
-                        onChange={(event) =>
-                          setSelected(event.target.checked ? new Set(items.map((item) => item.itm8)) : new Set())
-                        }
-                      />
-                    </TableHead>
-                  )}
+                  <SelectHead selection={selection} />
                   <SortableHead column="itm8" {...sorting}>
                     ITM8
                   </SortableHead>
-                  <SortableHead column="name" {...sorting} className="min-w-72">
+                  <SortableHead column="name" {...sorting} className="min-w-56">
                     Nazwa
                   </SortableHead>
                   <SortableHead column="supplier" {...sorting}>
@@ -464,17 +513,11 @@ function Results({
                   const category = categories.find((option) => option.id === item.categoryId)
                   return (
                     <TableRow key={item.itm8} data-state={selected.has(item.itm8) ? 'selected' : undefined}>
-                      {canEdit && (
-                        <TableCell className="w-10 pl-4">
-                          <input
-                            type="checkbox"
-                            aria-label={`Zaznacz ${item.name ?? item.itm8}`}
-                            className="size-4 accent-foreground"
-                            checked={selected.has(item.itm8)}
-                            onChange={() => toggle(item.itm8)}
-                          />
-                        </TableCell>
-                      )}
+                      <SelectCell
+                        label={item.name ?? item.itm8}
+                        checked={selected.has(item.itm8)}
+                        onToggle={() => selection.toggle(item.itm8)}
+                      />
                       <TableCell className="tabular-nums">
                         {itm8Label(item.itm8)}
                         {item.ean && <div className="text-xs text-muted-foreground">{item.ean}</div>}
@@ -490,6 +533,12 @@ function Results({
                               cadencier
                             </span>
                           )}
+                          <BasketRowButton
+                            inBasket={basketItm8s.has(item.itm8)}
+                            onClick={() =>
+                              setBasketArticle({ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand })
+                            }
+                          />
                           <ChartButton
                             onClick={() =>
                               setChart({
@@ -503,7 +552,7 @@ function Results({
                           />
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-56 truncate" title={item.supplierName ?? undefined}>
+                      <TableCell className="max-w-40 truncate" title={item.supplierName ?? undefined}>
                         <span className="text-muted-foreground tabular-nums">{item.supplierCode}</span>{' '}
                         {item.supplierName ?? '–'}
                       </TableCell>
@@ -516,7 +565,14 @@ function Results({
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatQuantity(item.stock)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatQuantity(item.stock)}
+                        {item.stock > 0 && item.weeklyInStock != null && item.weeklyInStock > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            na {coverLabel(item.stock / item.weeklyInStock)}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="tabular-nums">
                         {item.lastSale ? (
                           <>
@@ -573,7 +629,7 @@ function Results({
                             categories={categories}
                             items={[item]}
                             trigger={
-                              <Button variant="ghost" size="sm" className="max-w-48 justify-start">
+                              <Button variant="ghost" size="sm" className="max-w-36 justify-start">
                                 <FolderInputIcon />
                                 <span className="truncate">{category ? categoryLabel(category) : 'Przenieś'}</span>
                               </Button>
@@ -590,27 +646,39 @@ function Results({
             </table>
           </div>
           <div ref={loadMore} />
-          {canEdit && chosen.length > 0 && (
-            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-t bg-card px-4 py-2.5">
+          {chosen.length > 0 && (
+            <div
+              className={cn(
+                'sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-t bg-card px-4 py-2.5',
+                // Miejsce na pływający przycisk koszyka.
+                basket.length > 0 && 'max-sm:pb-20 sm:pr-72',
+              )}
+            >
               <span className="text-sm font-medium tabular-nums">Zaznaczone: {formatQuantity(chosen.length)}</span>
-              <MoveMenu
-                storeId={storeId}
-                categories={categories}
-                items={chosen}
-                onDone={() => setSelected(new Set())}
-                trigger={
-                  <Button size="sm">
-                    <FolderInputIcon />
-                    Przenieś do kategorii
-                  </Button>
-                }
-              />
+              <Button size="sm" onClick={() => setBulk(true)}>
+                <ShoppingBasketIcon />
+                Dodaj do koszyka
+              </Button>
+              {canEdit && (
+                <MoveMenu
+                  storeId={storeId}
+                  categories={categories}
+                  items={chosen}
+                  onDone={selection.clear}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <FolderInputIcon />
+                      Przenieś do kategorii
+                    </Button>
+                  }
+                />
+              )}
               <AssignTaskButton
                 title="Brakujący asortyment: sprawdź zaznaczone artykuły"
                 items={() => chosen.map(missingTaskItem)}
                 source={taskSource}
               />
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <Button variant="ghost" size="sm" onClick={selection.clear}>
                 <XIcon />
                 Odznacz wszystko
               </Button>
@@ -618,6 +686,16 @@ function Results({
           )}
         </Card>
       )}
+
+      <AddToBasketDialog storeId={storeId} article={basketArticle} onClose={() => setBasketArticle(null)} />
+      <BulkBasketDialog
+        storeId={storeId}
+        items={bulkItems}
+        open={bulk}
+        onClose={() => setBulk(false)}
+        onAdded={selection.clear}
+      />
+      <BasketButton storeId={storeId} />
 
       <SalesChartDialog
         storeId={storeId}

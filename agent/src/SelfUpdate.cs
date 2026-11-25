@@ -85,7 +85,7 @@ internal sealed class SelfUpdate : IDisposable
             ReadyVersion = version;
             ReadyFile = file;
         }
-        SetStatus("Nowa wersja " + version + " pobrana – kliknij „Pokaż pobraną aktualizację” i wyodrębnij paczkę");
+        SetStatus("Nowa wersja " + version + " pobrana – kliknij „Pokaż pobraną aktualizację” i podmień IntermanageAgent.exe");
     }
 
     /// <summary>Otwiera Eksplorator z zaznaczoną pobraną paczką (menu ikony „Pokaż pobraną aktualizację”).</summary>

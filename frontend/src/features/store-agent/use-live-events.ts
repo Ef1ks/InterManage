@@ -3,7 +3,8 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { markLoadedByHand, retryMacro } from '@/features/agent-macros/api'
-import { useCurrentUser } from '@/features/auth/api'
+import { hasPermission, useCurrentUser } from '@/features/auth/api'
+import { REPORT_TITLES } from '@/features/imports/import-sources'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { api, ApiError } from '@/lib/api'
 import { emitDraftsChanged, productFilesToast } from '@/lib/draft-events'
@@ -47,10 +48,17 @@ function notify(title: string, body: string | undefined, tag: string) {
   }
 }
 
-function announce(title: string, body: string | undefined, tag: string) {
-  toast.message(title, { description: body, id: tag })
+type Tone = 'message' | 'success' | 'warning' | 'error'
+
+/** Błąd zostaje na ekranie dłużej, bo ktoś musi na niego zareagować. */
+const DURATION: Record<Tone, number> = { message: 6_000, success: 6_000, warning: 15_000, error: 30_000 }
+
+function announce(title: string, body: string | undefined, tag: string, tone: Tone = 'message') {
+  toast[tone](title, { description: body, id: tag, duration: DURATION[tone] })
   notify(title, body, tag)
 }
+
+const text = (value: unknown) => (typeof value === 'string' && value ? value : undefined)
 
 export function useLiveEvents() {
   const me = useCurrentUser()
@@ -58,6 +66,8 @@ export function useLiveEvents() {
   const queryClient = useQueryClient()
   const storeId = store?.id
   const userId = me?.id
+  // O pracy agenta dowiadują się osoby, które z niej korzystają, a nie każdy z dostępem do sklepu.
+  const hearsAgent = hasPermission(me, 'DATA_ENTRY') || hasPermission(me, 'IMPORTS') || hasPermission(me, 'STORE_AGENT')
   useAgentStatus(storeId)
 
   useEffect(() => {
@@ -76,8 +86,9 @@ export function useLiveEvents() {
             if (message.action === 'failed' && message.by === 'agent') {
               announce(
                 `Agent nie zapisał pliku ${String(message.fileName ?? '')}`,
-                typeof message.error === 'string' ? message.error : undefined,
+                text(message.error),
                 `file-queue:${String(message.id)}`,
+                'error',
               )
             }
             break
@@ -112,9 +123,10 @@ export function useLiveEvents() {
             }
             if (message.kind === 'PRODUCT_FILES' && message.userId === userId) {
               notifyProductFiles(messageStore, message)
-            }
-            if (message.kind === 'PRICE_CONTROL' && message.userId === userId) {
+            } else if (message.kind === 'PRICE_CONTROL' && message.userId === userId) {
               notifyPriceControl(messageStore, message)
+            } else if (hearsAgent) {
+              notifyMacro(message)
             }
             break
           case 'cad-priority':
@@ -127,29 +139,111 @@ export function useLiveEvents() {
             // Wgrany raport zmienia dane całego sklepu (raporty, kartoteka, dokumenty), w toku tylko listę agenta.
             if (message.action === 'imported') invalidate()
             else invalidate('imports', 'agent-files')
-            if (message.action === 'failed') {
+            if (hearsAgent && message.action === 'imported') notifyImported(messageStore, message)
+            if (hearsAgent && message.action === 'failed') {
               announce(
                 `Agent nie wgrał raportu ${String(message.fileName ?? '')}`,
-                typeof message.error === 'string' ? message.error : undefined,
+                text(message.error),
                 `imports:${String(message.id)}`,
+                'error',
               )
             }
             break
           case 'agent':
             void queryClient.invalidateQueries({ queryKey: agentsKey(messageStore) })
-            if (message.action === 'offline') {
-              announce(
-                'Agent sklepu jest offline',
-                'Zapis plików i pilnowanie folderów wróciły do przeglądarki.',
-                `agent:${messageStore}`,
-              )
-            } else if (message.action === 'online') {
-              toast.message('Agent sklepu jest znów online', { id: `agent:${messageStore}` })
-            }
+            if (message.action === 'update-finished') invalidate('agent-macros', 'recent')
+            if (hearsAgent) notifyAgent(messageStore, message)
             break
         }
       }),
-    [queryClient, userId],
+    [queryClient, userId, hearsAgent],
+  )
+}
+
+/** Agent albo odtwarzacz przestał działać, wrócił, albo skończyła się aktualizacja danych z Mercalys. */
+function notifyAgent(storeId: string, message: LiveMessage) {
+  const computer = text(message.computer) ?? 'komputer sklepu'
+  switch (message.action) {
+    case 'offline':
+      announce(
+        'Agent sklepu przestał działać',
+        'Zapis plików i pilnowanie folderów wróciły do przeglądarki.',
+        `agent:${storeId}`,
+        'error',
+      )
+      break
+    case 'online':
+      announce('Agent sklepu znów działa', undefined, `agent:${storeId}`, 'success')
+      break
+    case 'computer-offline':
+      announce(
+        `Agent przestał działać: ${computer}`,
+        'Pozostałe komputery sklepu pracują dalej. Wyłączony komputer też tak wygląda.',
+        `agent-computer:${String(message.agentId)}`,
+        'warning',
+      )
+      break
+    case 'player-stopped':
+      announce(
+        `AutoJob nie działa: ${computer}`,
+        'Makra nie ruszą na tym komputerze, dopóki ktoś nie uruchomi AutoJob (albo makra wyłączono w ustawieniach agenta).',
+        `agent-player:${String(message.agentId)}`,
+        'warning',
+      )
+      break
+    case 'update-finished': {
+      const tag = `agent-update:${storeId}`
+      if (message.ok === false) {
+        announce(`Aktualizacja danych nie doszła do końca: ${computer}`, text(message.message), tag, 'error')
+      } else {
+        const title = message.ok === true ? 'Dane z Mercalys zaktualizowane' : 'Koniec aktualizacji danych z Mercalys'
+        announce(`${title}: ${computer}`, text(message.message), tag, message.ok === true ? 'success' : 'message')
+      }
+      break
+    }
+  }
+}
+
+/** Koniec makra na komputerze sklepu; osoba, która zapisała plik makra serwera, ma własne powiadomienie z ponowieniem. */
+function notifyMacro(message: LiveMessage) {
+  const title = text(message.title) ?? 'Makro'
+  const tag = `agent-macro:${String(message.id)}`
+  const computer = text(message.computer)
+  switch (message.status) {
+    case 'DONE':
+      announce(`Zakończone: ${title}`, computer, tag, 'success')
+      break
+    case 'FAILED':
+      announce(`Błąd makra: ${title}`, [computer, text(message.message)].filter(Boolean).join('\n'), tag, 'error')
+      break
+    case 'NO_COMPUTER':
+      // Zmiana cen i ITM8 z cadencier ponawiają się same, więc nie ma na co reagować.
+      if (message.kind === 'PRODUCT_FILES') {
+        announce(`Makro nie ruszyło: ${title}`, text(message.message), tag, 'warning')
+      }
+      break
+    case 'QUEUED':
+      if (text(message.postponed)) announce(`Makro odłożone: ${title}`, text(message.postponed), tag)
+      break
+  }
+}
+
+/** Raporty wgrywane jeden po drugim (codzienna aktualizacja) to jedno powiadomienie z listą. */
+const IMPORTED_TOGETHER_MS = 10 * 60_000
+const imported = new Map<string, { at: number; names: string[] }>()
+
+function notifyImported(storeId: string, message: LiveMessage) {
+  const kind = String(message.kind)
+  const name = kind in REPORT_TITLES ? REPORT_TITLES[kind as keyof typeof REPORT_TITLES] : kind
+  const last = imported.get(storeId)
+  const names = last && Date.now() - last.at < IMPORTED_TOGETHER_MS ? last.names : []
+  const all = names.includes(name) ? names : [...names, name]
+  imported.set(storeId, { at: Date.now(), names: all })
+  announce(
+    all.length === 1 ? 'Agent wgrał raport' : `Agent wgrał raporty: ${all.length}`,
+    all.join(', '),
+    `agent-imports:${storeId}`,
+    'success',
   )
 }
 

@@ -21,7 +21,7 @@ public record BasketFileRequest(
     public record Supplier(
             @Size(max = 20) String code,
             @NotBlank @Size(max = 200) String name,
-            @NotNull @Size(min = 1, max = 500, message = "Od 1 do 500 artykułów") List<@Valid Line> lines) {
+            @NotNull @Size(min = 1, max = 2000, message = "Od 1 do 2000 artykułów") List<@Valid Line> lines) {
     }
 
     public record Line(

@@ -2397,6 +2397,10 @@ export type StockGapItem = {
   recentDeliveries: number
   supplierCode: string | null
   supplierName: string | null
+  /** Dostawca przedostatniego przyjęcia, o ile inny (ostatnia dostawa bywa jednorazowa, np. z bazy na gazetkę). */
+  previousSupplierCode: string | null
+  previousSupplierName: string | null
+  previousDeliveryDate: string | null
 }
 
 export type StockGapReport = {
@@ -2448,6 +2452,30 @@ export type MissingAssortmentItem = {
   categoryId: string | null
 }
 
+/** Artykuł do koszyka zakupowego z dostawcami z ostatniego roku, od najświeższej dostawy. */
+export type BasketArticleDetails = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  subfamilyCode: string | null
+  stock: number | null
+  caseSize: number | null
+  purchasePrice: number | null
+  cadencier: boolean
+  cadencierCurrent: CadencierPrice | null
+  suppliers: {
+    code: string
+    name: string | null
+    purchasePrice: number | null
+    lastQuantity: number | null
+    lastDate: string
+    deliveries: number
+    /** Która z ostatnich dostaw artykułu jest od tego dostawcy (1 = ostatnia). */
+    rank: number
+  }[]
+}
+
 export type MissingAssortmentReport = {
   storeNumber: string
   storeName: string
@@ -2455,7 +2483,9 @@ export type MissingAssortmentReport = {
   lastSaleDate: string | null
   since: string
   months: number
-  silentDays: number
+  /** Puste, gdy raport jest według stanu (`maxStock`). */
+  silentDays: number | null
+  maxStock: number | null
   baseSupplierCodes: string[]
   categories: MissingAssortmentCategory[]
   items: MissingAssortmentItem[]
@@ -5234,7 +5264,7 @@ export type AgentFeature = { feature: AgentFeatureKey; enabled: boolean }
 export type StoreAgents = {
   enabled: boolean
   agents: StoreAgent[]
-  /** Wersja z paczki agenta w „Do pobrania”: agenty aktualizują się do niej same (brak = bez aktualizacji). */
+  /** Wersja z paczki agenta w „Do pobrania”: agenty pobierają ją same, plik podmienia człowiek (brak = żadnej). */
   latestVersion: string | null
 }
 

@@ -156,6 +156,7 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
             </p>
           )}
         </div>
+        {data.latestVersion && <VersionSummary agents={active} latest={data.latestVersion} />}
         {active.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Brak agentów. Dodaj agenta, skopiuj klucz i uruchom program agenta na komputerze w sklepie (z „Do
@@ -192,9 +193,9 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
                     {agent.lastVersion && data.latestVersion && olderVersion(agent.lastVersion, data.latestVersion) && (
                       <Badge
                         className="bg-amber-200 text-amber-950 dark:bg-amber-900/70 dark:text-amber-100"
-                        title="Agent pobierze nową wersję sam i zainstaluje ją, gdy komputer będzie bezczynny"
+                        title="Nową wersję komputer weźmie przy następnym włączeniu, gdy plik w P:\Production\INTERMANAGE\AGENT jest już podmieniony"
                       >
-                        zaktualizuje się do {data.latestVersion}
+                        czeka na {data.latestVersion}
                       </Badge>
                     )}
                   </p>
@@ -264,6 +265,32 @@ export function StoreAgentSettings({ storeId }: { storeId: string }) {
           </div>
         )}
       </Card>
+    </div>
+  )
+}
+
+/** Ile komputerów ma już wersję agenta z „Do pobrania”; liczą się te, które się kiedyś połączyły. */
+function VersionSummary({ agents, latest }: { agents: StoreAgent[]; latest: string }) {
+  const connected = agents.filter((agent) => agent.lastVersion)
+  if (connected.length === 0) return null
+  const waiting = connected.filter((agent) => agent.lastVersion && olderVersion(agent.lastVersion, latest))
+  if (waiting.length === 0) {
+    return (
+      <p className="rounded-lg bg-emerald-200 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/60 dark:text-emerald-100">
+        Wszystkie komputery mają wersję {latest} albo nowszą.
+      </p>
+    )
+  }
+  return (
+    <div className="grid gap-1 rounded-lg bg-amber-200 px-3 py-2 text-sm text-amber-950 dark:bg-amber-900/60 dark:text-amber-100">
+      <p className="font-medium">
+        Wersję {latest} ma {connected.length - waiting.length} z {connected.length} komputerów
+      </p>
+      <p>
+        Czekają: {waiting.map((agent) => `${agent.name} (${agent.lastVersion})`).join(', ')}. Wystarczy raz podmienić
+        plik IntermanageAgent.exe w P:\Production\INTERMANAGE\AGENT (stary najpierw przenazwij), a każdy komputer weźmie
+        nowy przy następnym włączeniu.
+      </p>
     </div>
   )
 }

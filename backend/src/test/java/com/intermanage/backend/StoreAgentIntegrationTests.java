@@ -83,6 +83,7 @@ class StoreAgentIntegrationTests {
                 .andExpect(jsonPath("$.enabled").value(false))
                 .andExpect(jsonPath("$.folders['deli-order-proto']").value("N:\\AVISOCONFIG\\BACKUP"))
                 .andExpect(jsonPath("$.watches[0].kind").value("TRACEART"))
+                .andExpect(jsonPath("$.limits.updateGiveUpSeconds").value(5400))
                 .andExpect(jsonPath("$.longPollSeconds").value(25));
         hello("ima_zly-klucz").andExpect(status().isForbidden());
         mvc.perform(post("/api/store-agent/hello").contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -433,6 +434,37 @@ class StoreAgentIntegrationTests {
         // Bez dostępu do sklepu nie ma strumienia.
         mvc.perform(get("/api/stores/" + storeId + "/live")).andExpect(status().isUnauthorized());
         presence.check();
+    }
+
+    /** Powiadomienia: komputer, który zamilkł, gdy inny działa, i wynik aktualizacji danych z komputera. */
+    @Test
+    void storeHearsAboutSilentComputerAndFinishedUpdate() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        String biuro = addAgent(owner, storeId, "Biuro");
+        String kasa = addAgent(owner, storeId, "Kasa 1");
+        MvcResult stream = mvc.perform(get("/api/stores/" + storeId + "/live").cookie(owner))
+                .andExpect(request().asyncStarted()).andReturn();
+        hello(biuro);
+        hello(kasa);
+        presence.check();
+        jdbc.update("update store_agents set last_seen_at = now() - interval '5 minutes' where store_id = ?::uuid"
+                + " and name = 'Kasa 1'", storeId);
+        presence.check();
+        awaitContent(stream, "computer-offline");
+        presence.check();
+        String content = stream.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(content.split("computer-offline", -1)).hasSize(2);
+        assertThat(content).contains("\"computer\":\"Kasa 1\"").doesNotContain("\"action\":\"offline\"");
+
+        reportMacro(biuro, false).andExpect(status().isOk());
+        mvc.perform(post("/api/store-agent/report-macro/finished").header(HttpHeaders.AUTHORIZATION, "Bearer " + biuro)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ok\":false,\"message\":\"Multikody: Mercalys nie zapisał pliku\"}"))
+                .andExpect(status().isNoContent());
+        awaitContent(stream, "update-finished");
+        assertThat(stream.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .contains("\"ok\":false").contains("Multikody: Mercalys nie zapisał pliku");
     }
 
     @Test

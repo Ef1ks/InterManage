@@ -148,7 +148,10 @@ internal sealed class TrayApp : ApplicationContext
         var toUnpack = newer == null
             || (selfUpdate.ReadyVersion != null && SelfUpdate.IsNewer(selfUpdate.ReadyVersion, newer));
         updateStatus.Text = newer != null && !toUnpack
-            ? "Wersja " + newer + " czeka: uruchom ją dwuklikiem"
+            ? VersionWatch.Same(versions.NewerPath ?? "", Application.ExecutablePath)
+                // Plik podmieniony pod tą samą ścieżką: autostart weźmie go sam.
+                ? "Wersja " + newer + " ruszy po ponownym włączeniu komputera"
+                : "Wersja " + newer + " czeka: uruchom ją dwuklikiem"
             : selfUpdate.Status ?? "";
         updateStatus.Visible = updateStatus.Text.Length > 0;
         showUpdate.Visible = toUnpack && selfUpdate.ReadyFile != null;

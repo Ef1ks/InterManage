@@ -18,6 +18,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.agent.component.AgentLimits;
 import com.intermanage.backend.agent.dto.AgentApi;
 import com.intermanage.backend.agent.dto.AgentStatusResponse;
 import com.intermanage.backend.agent.dto.StoreAgentResponse;
@@ -237,7 +238,7 @@ public class StoreAgentService {
         return new AgentApi.HelloResponse(agent.storeId(), agent.storeNumber(), agent.storeName(), agent.agentName(),
                 enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS,
                 agent.leader(), agent.preferred(), downloads.agentUpdate().orElse(null),
-                features.isOn(agent.storeId(), AgentFeature.PRODUCT_FILE_CLEANUP));
+                features.isOn(agent.storeId(), AgentFeature.PRODUCT_FILE_CLEANUP), AgentLimits.VALUES);
     }
 
     /**
@@ -258,6 +259,20 @@ public class StoreAgentService {
     @Transactional
     public void finishUpdate(AgentContext agent) {
         agents.finishUpdate(agent.storeId(), agent.agentId());
+    }
+
+    /** To samo z wynikiem z komputera: powiadomienie dla osób w sklepie (agent sprzed 1.13.0 wyniku nie podaje). */
+    @Transactional
+    public void updateFinished(AgentContext agent, AgentApi.UpdateFinished result) {
+        if (agents.finishUpdate(agent.storeId(), agent.agentId()) == 0) {
+            return;
+        }
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("action", "update-finished");
+        fields.put("computer", agent.agentName());
+        fields.put("ok", result == null ? null : result.ok());
+        fields.put("message", result == null ? null : cut(result.message(), 600));
+        live.publish(agent.storeId(), "agent", fields);
     }
 
     /** Foldery zapisu sklepu: klucz folderu przeglądarki → ścieżka na dysku. */

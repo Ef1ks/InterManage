@@ -15,7 +15,7 @@ import com.intermanage.backend.sales.entity.Sale;
 /** Dane raportu brakującego asortymentu: zakupy spoza bazy, dostawy i sprzedaż dzienna artykułów. */
 public interface MissingAssortmentRepository extends Repository<Sale, Sale.Key> {
 
-    /** Artykuł kupiony w okresie od dostawcy spoza bazy, którego dziś nie ma na stanie. */
+    /** Artykuł kupiony w okresie od dostawcy spoza bazy, którego dziś nie ma na stanie albo jest go mało. */
     interface BoughtArticle {
         String getItm8();
 
@@ -50,7 +50,7 @@ public interface MissingAssortmentRepository extends Repository<Sale, Sale.Key> 
 
     /**
      * Artykuły z przyjęć PZ od {@code since} od dostawców spoza {@code baseCodes} (linia z lokalnym ITM8 dostawcy
-     * należy do artykułu po EAN-ie), ze stanem 0 albo ujemnym. Dostawca, ilość i wartość z ostatniego takiego przyjęcia,
+     * należy do artykułu po EAN-ie), ze stanem najwyżej {@code maxStock} (0 = brak). Dostawca, ilość i wartość z ostatniego takiego przyjęcia,
      * ostatnia sprzedaż w ogóle (pusta = artykuł nigdy się nie sprzedał).
      */
     @Query(value = DocumentLineRepository.STORE_ARTICLE_EANS + """
@@ -82,8 +82,9 @@ public interface MissingAssortmentRepository extends Repository<Sale, Sale.Key> 
                            where c.store_id = p.store_id and c.itm8 = p.itm8) as cadencier
             from last_bought b
             join products p on p.store_id = :storeId and p.itm8 = b.itm8
-            where coalesce(p.stock, 0) <= 0 and """ + SaleRepository.IN_CODES, nativeQuery = true)
-    List<BoughtArticle> findBoughtWithoutStock(UUID storeId, LocalDateTime since, String[] baseCodes, String[] codes);
+            where coalesce(p.stock, 0) <= :maxStock and """ + SaleRepository.IN_CODES, nativeQuery = true)
+    List<BoughtArticle> findBoughtWithStockUpTo(UUID storeId, LocalDateTime since, String[] baseCodes, String[] codes,
+            BigDecimal maxStock);
 
     /** Dzień, w którym do artykułu przyszedł towar. */
     interface DeliveryDay {

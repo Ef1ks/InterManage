@@ -26,7 +26,7 @@ namespace Intermanage.Agent;
 internal sealed class FolderWatcher : IDisposable
 {
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan FullScanEvery = TimeSpan.FromMinutes(5);
+    private static TimeSpan FullScanEvery => Limits.Seconds("folderScanSeconds", 300, 60, 3600);
     private const int MaxBuffered = 5000;
     private const int EventsPerRequest = 1000;
     private const int MaxSubfolderDepth = 3;
@@ -34,8 +34,8 @@ internal sealed class FolderWatcher : IDisposable
     /// Paczka cen z kasy: najwyżej 10 plików i 2 MB po spakowaniu, żeby przy wolnym łączu sklepu (200 kB/s) jedna
     /// wysyłka trwała kilkanaście sekund, a nie dłużej niż limit Cloudflare (ok. 100 s), i nie zatykała łącza na minuty.
     /// </summary>
-    private const int PriceFilesPerUpload = 10;
-    private const long PriceBytesPerUpload = 2L * 1024 * 1024;
+    private static int PriceFilesPerUpload => Limits.Count("priceFilesPerUpload", 10, 1, 20);
+    private static long PriceBytesPerUpload => Limits.Count("priceKilobytesPerUpload", 2048, 64, 20_480) * 1024L;
     /// <summary>Zakładka przy końcówce dziennika ATHOS: blok wysyłki mógł zacząć się przed poprzednim końcem pliku.</summary>
     private const int AthosOverlapBytes = 64 * 1024;
 

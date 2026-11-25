@@ -77,7 +77,7 @@ export function MultiComboboxField({
   const filtered = useMemo(() => rankOptions(options, query), [options, query])
 
   return (
-    <div className={cn('grid gap-2', className)}>
+    <div className={cn('grid min-w-0 grid-cols-1 gap-2', className)}>
       <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-medium'}>
         {label}
       </label>

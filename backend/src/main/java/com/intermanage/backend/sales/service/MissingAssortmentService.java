@@ -52,16 +52,17 @@ import com.intermanage.backend.store.repository.StorePartnerRepository;
 import com.intermanage.backend.store.repository.StoreRepository;
 
 /**
- * Brakujący asortyment: co sklep kupował od dostawców spoza bazy, a czego dziś nie ma i co się nie sprzedaje. Kierownik
- * widzi, czego brakuje od którego dostawcy, i odkłada artykuły do kategorii (np. „wycofane z produkcji”), żeby lista
- * „Do sprawdzenia” zawierała tylko to, czym trzeba się zająć. Kategorie są wspólne ze sklepami zaprzyjaźnionymi, a
- * przypisania każdy sklep robi u siebie.
+ * Brakujący asortyment: co sklep kupował od dostawców spoza bazy, a czego dziś nie ma i co się nie sprzedaje (albo, z
+ * progiem stanu, czego zostało mało, do zamówienia). Kierownik widzi, czego brakuje od którego dostawcy, i odkłada
+ * artykuły do kategorii (np. „wycofane z produkcji”), żeby lista „Do sprawdzenia” zawierała tylko to, czym trzeba się
+ * zająć. Kategorie są wspólne ze sklepami zaprzyjaźnionymi, a przypisania każdy sklep robi u siebie.
  */
 @Service
 public class MissingAssortmentService {
 
     public static final int DEFAULT_MONTHS = 3;
     public static final int DEFAULT_SILENT_DAYS = 7;
+    private static final BigDecimal MAX_STOCK_LIMIT = BigDecimal.valueOf(1000);
     /** Z ilu dni wstecz odtwarzamy okresy na stanie. */
     private static final int HISTORY_DAYS = 365;
     /** Mięso, garmaż i wyroby własne: stan nie mówi tu, ile jest towaru, bo schodzi na produkcję. */
@@ -106,17 +107,21 @@ public class MissingAssortmentService {
         if (silentDays < 0 || silentDays > 365) {
             throw ApiException.badRequest("Liczba dni bez sprzedaży to od 0 do 365.");
         }
+        BigDecimal maxStock = request.maxStock();
+        if (maxStock != null && (maxStock.signum() < 0 || maxStock.compareTo(MAX_STOCK_LIMIT) > 0)) {
+            throw ApiException.badRequest("Stan to liczba od 0 do " + MAX_STOCK_LIMIT + ".");
+        }
         List<String> nomenclatures = request.nomenclatures() != null ? request.nomenclatures() : List.of();
         LocalDate since = LocalDate.now(StoreTime.ZONE).minusMonths(months);
         LocalDate lastSaleDate = stockGaps.findLastSaleDate(storeId).orElse(null);
 
         sales.tuneForReport();
-        List<BoughtArticle> bought = report.findBoughtWithoutStock(storeId, since.atStartOfDay(),
+        List<BoughtArticle> bought = report.findBoughtWithStockUpTo(storeId, since.atStartOfDay(),
                         PriceCheckService.BASE_SUPPLIER_CODES.toArray(String[]::new),
-                        nomenclatures.toArray(String[]::new))
+                        nomenclatures.toArray(String[]::new), maxStock != null ? maxStock : BigDecimal.ZERO)
                 .stream()
                 .filter(article -> isGoods(article.getSubfamilyCode()))
-                .filter(article -> isSilent(article.getLastSale(), lastSaleDate, silentDays))
+                .filter(article -> maxStock != null || isSilent(article.getLastSale(), lastSaleDate, silentDays))
                 .toList();
 
         Map<String, InStockSales.Result> inStock = inStock(storeId, bought, lastSaleDate);
@@ -138,7 +143,7 @@ public class MissingAssortmentService {
 
         return new MissingAssortmentReport(store.getNumber(), store.getName(),
                 productImports.findNewestReportGeneratedAt(storeId).orElse(null), lastSaleDate, since, months,
-                silentDays, PriceCheckService.BASE_SUPPLIER_CODES, visible, items);
+                maxStock != null ? null : silentDays, maxStock, PriceCheckService.BASE_SUPPLIER_CODES, visible, items);
     }
 
     private static boolean isGoods(String subfamilyCode) {

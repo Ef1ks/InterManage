@@ -178,6 +178,7 @@ internal sealed class AgentHost : IDisposable
                 var first = Config == null;
                 // Starszy serwer bez dzierżawy: każdy agent pilnuje folderów jak dotąd.
                 SetLeader(config.Leader ?? true);
+                Limits.Use(config.Limits);
                 Config = config;
                 if (first)
                 {

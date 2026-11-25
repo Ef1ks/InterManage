@@ -28,13 +28,13 @@ public final class AgentApi {
      * wybrał pracę przez agenta (bez tego agent tylko utrzymuje kontakt). {@code leader}: ten agent jest głównym agentem
      * sklepu, więc pilnuje folderów i aktualizuje dane z Mercalys (każda odpowiedź API niesie to też w nagłówku
      * {@code X-Agent-Leader}); {@code preferred}: agent preferowany, który odbiera tę rolę pozostałym.
-     * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = bez automatycznej aktualizacji); agent
-     * nowszą pobiera z {@code /update/file} i instaluje sam. {@code cleanProductFiles}: agent od 1.12.2 czyści folder nowych
-     * artykułów z plików z poprzednich dni.
+     * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = bez pobierania); agent nowszą pobiera
+     * z {@code /update/file}, a podmienia ją człowiek. {@code cleanProductFiles}: agent od 1.12.2 czyści folder nowych
+     * artykułów z plików z poprzednich dni. {@code limits}: czasy i limity agenta od 1.13.0 ({@code AgentLimits}).
      */
     public record HelloResponse(UUID storeId, String storeNumber, String storeName, String agentName, boolean enabled,
             Map<String, String> folders, List<Watch> watches, int longPollSeconds, boolean leader,
-            boolean preferred, AgentUpdateInfo update, boolean cleanProductFiles) {
+            boolean preferred, AgentUpdateInfo update, boolean cleanProductFiles, Map<String, Integer> limits) {
     }
 
     /**
@@ -114,5 +114,9 @@ public final class AgentApi {
      */
     public record ReportMacroRequest(@Size(max = 20) List<@NotBlank @Size(max = 30) String> kinds,
             Boolean automatic) {
+    }
+
+    /** Wynik aktualizacji danych z Mercalys (agent od 1.13.0); {@code ok} puste = nieznany. */
+    public record UpdateFinished(Boolean ok, @Size(max = 4000) String message) {
     }
 }

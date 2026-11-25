@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.70.0.0
+;@Ahk2Exe-SetVersion 0.71.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.70" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.71" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
@@ -43,8 +43,9 @@ if AgentMode {
 } else {
     SetupTray()
     if A_IsCompiled {
-        SyncAutostart()
         SyncClipboardPrivacy()
+        if (A_Args.Length = 0 || A_Args[1] != "autostart")
+            SetTimer AskAutostart, -1000
     }
     ; Przy starcie z Windows bez komunikatu; po ręcznym uruchomieniu trzeba wiedzieć, że program już działa.
     if (A_Args.Length = 0 || A_Args[1] != "autostart")
@@ -93,29 +94,44 @@ ShowHelp(*) {
 
 AutostartEnabled() => RegRead(AutostartKey, AutostartName, "") != ""
 
-; Start z Windows jest domyślnie włączony, a ścieżka odświeża się po przeniesieniu programu. Wyłączenie zostaje zapamiętane.
-SyncAutostart() {
-    if (RegRead(SettingsKey, "AutostartOff", 0) = 1)
+; Od 0.71 wpis startu z Windows zmienia tylko człowiek (pytanie po ręcznym uruchomieniu albo menu ikony): program
+; zapisujący go sam przy każdym starcie zachowuje się jak złośliwy. Pyta raz dla miejsca, z którego go uruchomiono.
+AskAutostart() {
+    if (RegRead(SettingsKey, "AutostartOff", 0) = 1 || RegRead(SettingsKey, "AutostartAsked", "") = A_ScriptFullPath)
+        return
+    current := RegRead(AutostartKey, AutostartName, "")
+    if (current = AutostartCommand())
+        return
+    try RegWrite A_ScriptFullPath, "REG_SZ", SettingsKey, "AutostartAsked"
+    question := current = "" ? "Uruchamiać AutoJob razem z Windows?"
+        : "AutoJob startuje z Windows z innego miejsca:`n" current "`n`nUruchamiać go odtąd stąd?`n" A_ScriptFullPath
+    if (MsgBox(question, "Intermanage Makra " PlayerVersion, "YesNo Icon?" AlwaysOnTop) != "Yes")
         return
     try {
-        RegWrite "`"" A_ScriptFullPath "`" autostart", "REG_SZ", AutostartKey, AutostartName
+        SetAutostart(true)
         A_TrayMenu.Check("Uruchamiaj z Windows")
-    }
+    } catch as problem
+        MsgBox "Nie udało się zmienić startu z Windows: " problem.Message, "Intermanage Makra", "Icon!"
 }
+
+AutostartCommand() => "`"" A_ScriptFullPath "`" autostart"
 
 ; Makro skopiowane w przeglądarce trafia do Historii Schowka (Win+V) i do chmury Microsoftu, więc samo
 ; A_Clipboard := "" w odtwarzaczu go stamtąd nie usuwa. Na stacji wyłączamy jedno i drugie, żeby makro nie
 ; zostawało nigdzie poza jednym wklejeniem. Wyłączenie Historii czyści też wpisy już w niej zebrane.
 SyncClipboardPrivacy() {
     ClipKey := "HKCU\Software\Microsoft\Clipboard"
-    try RegWrite 0, "REG_DWORD", ClipKey, "EnableClipboardHistory"
-    try RegWrite 0, "REG_DWORD", ClipKey, "CloudClipboardAutomaticUpload"
+    for name in ["EnableClipboardHistory", "CloudClipboardAutomaticUpload"] {
+        ; Tylko gdy trzeba: bez zapisu do rejestru przy każdym starcie.
+        if (RegRead(ClipKey, name, "") != "0")
+            try RegWrite 0, "REG_DWORD", ClipKey, name
+    }
 }
 
 SetAutostart(enabled) {
     if enabled {
         RegWrite 0, "REG_DWORD", SettingsKey, "AutostartOff"
-        RegWrite "`"" A_ScriptFullPath "`" autostart", "REG_SZ", AutostartKey, AutostartName
+        RegWrite AutostartCommand(), "REG_SZ", AutostartKey, AutostartName
     } else {
         RegWrite 1, "REG_DWORD", SettingsKey, "AutostartOff"
         try RegDelete AutostartKey, AutostartName

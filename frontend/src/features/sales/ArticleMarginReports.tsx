@@ -34,7 +34,7 @@ import {
   OTHER_CATEGORY,
   regionInCategory,
 } from '@/features/sales/price-review'
-import { StatTile } from '@/features/sales/report-parts'
+import { FilterGroup, StatTile } from '@/features/sales/report-parts'
 import { storeSettingsPaths } from '@/features/store-settings/paths'
 import { ApiError } from '@/lib/api'
 import { matchesSearch } from '@/lib/search'
@@ -223,16 +223,6 @@ export function ArticleMarginsReport({ storeId }: { storeId: string }) {
         </div>
       }
     />
-  )
-}
-
-/** Grupa filtrów z krótkim podpisem nad polami. */
-function FilterGroup({ legend, children }: { legend: string; children: ReactNode }) {
-  return (
-    <fieldset className="grid min-w-0 content-start gap-2">
-      <legend className="mb-2 text-xs font-medium text-muted-foreground">{legend}</legend>
-      {children}
-    </fieldset>
   )
 }
 

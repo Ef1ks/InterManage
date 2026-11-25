@@ -50,6 +50,8 @@ internal sealed class HelloResponse
     public AgentUpdateInfo? Update { get; set; }
     /// <summary>Codzienne czyszczenie folderu nowych artykułów (brak = starszy serwer, tak).</summary>
     public bool? CleanProductFiles { get; set; }
+    /// <summary>Czasy i limity (<see cref="Agent.Limits"/>; brak = starszy serwer, domyślne).</summary>
+    public Dictionary<string, int>? Limits { get; set; }
 }
 
 /// <summary>Paczka agenta do automatycznej aktualizacji: wersja, SHA-256 (hex) i rozmiar pliku ZIP.</summary>
@@ -368,10 +370,15 @@ internal sealed class ApiClient : IDisposable
             TimeSpan.FromSeconds(60), cancel);
 
     /// <summary>Koniec aktualizacji danych na tym komputerze: inny komputer może ją znów uruchomić.</summary>
-    public async Task ReportMacroFinishedAsync(CancellationToken cancel)
+    /// <remarks>Od 1.13.0 z wynikiem, który serwer pokazuje w powiadomieniu (<paramref name="ok"/> puste = nieznany).</remarks>
+    public async Task ReportMacroFinishedAsync(bool? ok, string? message, CancellationToken cancel)
     {
-        using var _ = await SendAsync(new HttpRequestMessage(HttpMethod.Post,
-            server + "/api/store-agent/report-macro/finished"), TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Post, server + "/api/store-agent/report-macro/finished")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { ok, message }, Json), Encoding.UTF8,
+                "application/json"),
+        };
+        using var _ = await SendAsync(request, TimeSpan.FromSeconds(30), cancel).ConfigureAwait(false);
     }
 
     /// <summary>Ostatnie próby wgrania raportów (okno aktualizacji czeka na potwierdzenie serwera).</summary>

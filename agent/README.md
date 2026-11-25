@@ -37,8 +37,8 @@ agenta**. Bez tego (albo gdy agent jest offline) wszystko działa jak dotąd, w 
 
 1. W Intermanage: Ustawienia sklepu → Agent sklepu → wpisz nazwę (np. „Komputer biuro”) → **Dodaj agenta**. Skopiuj
    klucz (pokazuje się tylko raz).
-2. Rozpakuj folder agenta w dowolnym miejscu w profilu użytkownika (np. `%LOCALAPPDATA%\Programs\IntermanageAgent`)
-   i uruchom `IntermanageAgent.exe`. Bez instalatora i bez uprawnień administratora.
+2. Rozpakuj paczkę agenta raz na sklep do `P:\Production\INTERMANAGE\AGENT` (exe razem z plikami .dll i .config)
+   i uruchom stamtąd `IntermanageAgent.exe`. Bez instalatora i bez uprawnień administratora.
 3. W oknie ustawień zostaw adres `https://intermanage.pl`, wklej klucz i kliknij **Sprawdź i zapisz**.
 4. Przy zegarze pojawi się ikona „Intermanage – agent sklepu”: zielona = działa, bursztynowa = dysk albo serwer
    niedostępny (agent ponawia sam), czerwona = serwer odrzucił klucz (wklej nowy), szara = brak klucza.
@@ -81,15 +81,8 @@ Robi:
   próbuje co minutę, aż wróci (od 1.7.1; na część folderów czeka 10 min, potem aktualizuje pozostałe);
 - trzyma ustawienia w `%LOCALAPPDATA%\Intermanage\Agent\settings.json`, klucz i hasło Mercalys zaszyfrowane DPAPI
   dla bieżącego użytkownika; dziennik w `%LOCALAPPDATA%\Intermanage\Agent\logs` (plik na dzień, 14 dni, bez treści plików i klucza);
-- ma przy sobie odtwarzacz makr (`player\player.exe` obok agenta, z plikiem `player\agent-mode`, `PlayerHost`):
-  uruchamia go z folderu agenta i co 20 s sprawdza, czy działa. Odtwarzacz z `agent-mode` nie ma własnej ikony
-  (pokazuje ją tylko w trakcie makra i przy powiadomieniu), nie dopisuje się do startu Windows i usuwa dawny wpis
-  `IntermanageMakra`; agent zamyka osobny odtwarzacz (dawny `player.exe`, `AutoJob.exe`), bo dwa wykonałyby makro dwa
-  razy. Wersja i pomoc (Alt+E, Esc, Alt+R) są w menu ikony agenta, a „Zakończ” zamyka też odtwarzacz. Do 1.5.0
-  odtwarzacz był wypakowywany do `%LOCALAPPDATA%`, ale komputery sklepu nie pozwalają uruchamiać programów z AppData
-  („Odmowa dostępu”), więc od 1.5.1 leży w folderze agenta; gdy Windows i tak go zablokuje, agent zapisuje to raz
-  w dzienniku, nie ponawia i pokazuje w menu ikony. Agent bez `player\player.exe` działa jak dawniej z osobnym
-  odtwarzaczem.
+- bierze czasy i limity z serwera (od 1.13.0, `Limits`, `limits` w `/hello`: czekanie na raporty, odliczanie, paczki
+  wysyłki), w granicach zapisanych w kodzie, więc ich zmiana nie wymaga nowej wersji agenta;
 
 - wykonuje **makra zlecone z przeglądarki** (od 1.7.0, na razie „Zbierz brakujące ITM8” i „Uzupełnij ITM8” z dostawy
   z bazy): czeka na makro jednym długim żądaniem (od 1.9.0; wcześniej pytał co 3 s) i zgłasza serwerowi, ile sekund nikt nie ruszał myszy i klawiatury, czy ekran jest zablokowany, czy
@@ -125,6 +118,24 @@ Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (c
 **tylko pobiera** paczkę (ZIP) do folderu `aktualizacja` obok siebie (na dysku sieciowym pierwszy komputer pobiera,
 reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „Nowa wersja … pobrana”. W menu ikony
 „Pokaż pobraną aktualizację” otwiera ZIP w Eksploratorze.
+
+### Stała ścieżka (zalecane)
+
+Agent leży na dysku sieciowym w każdym sklepie w tym samym miejscu, `P:\Production\INTERMANAGE\AGENT`, a każdy komputer
+uruchamia się z Windows stamtąd (raz dwuklik na komputerze, agent wpisuje wtedy tę ścieżkę do autostartu). Nową wersję
+wgrywa człowiek raz na sklep, także przy działających agentach (sprawdzone na P: w 10023, 25.11.2026: nazwę działającego
+pliku da się zmienić):
+
+1. `IntermanageAgent.exe` → zmień nazwę na `IntermanageAgent-stary.exe` (zeszły stary plik najpierw usuń).
+2. Z pobranej paczki `aktualizacja\agent-….zip` skopiuj do folderu nowy `IntermanageAgent.exe`. Biblioteki DLL zmieniają się
+   rzadko; gdy opis wersji o tym mówi, podmień wszystkie pliki przy wyłączonych komputerach.
+3. Działające komputery pracują dalej na starym pliku (menu ikony: „Wersja … ruszy po ponownym włączeniu komputera”),
+   nową biorą przy następnym włączeniu. W Intermanage widać, które jeszcze czekają.
+
+Tak samo AutoJob, w tym samym folderze: `P:\Production\INTERMANAGE\AGENT\AutoJob.exe` (od 0.71 pyta raz, czy startować z Windows z tego
+miejsca, i nie zapisuje wpisu sam).
+
+### Foldery wersji
 
 **Rozpakowania i uruchomienia agent nie robi**, tylko człowiek, raz na sklep (od 1.7.5 bez zamykania agentów):
 

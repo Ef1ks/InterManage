@@ -16,6 +16,7 @@ import com.intermanage.backend.nomenclature.dto.NomenclatureOption;
 import com.intermanage.backend.product.entity.Product;
 import com.intermanage.backend.sales.dto.ArticleDeliveryResponse;
 import com.intermanage.backend.sales.dto.ArticleProtocolResponse;
+import com.intermanage.backend.sales.dto.BasketArticleResponse;
 import com.intermanage.backend.sales.dto.RegionBudgetResponse;
 import com.intermanage.backend.cadtop.dto.CadPrices;
 import com.intermanage.backend.sales.dto.SalesArticleResponse;
@@ -23,6 +24,7 @@ import com.intermanage.backend.sales.dto.SalesImportResponse;
 import com.intermanage.backend.sales.dto.ZeroStockReport;
 import com.intermanage.backend.sales.entity.RegionBudget;
 import com.intermanage.backend.sales.entity.SalesImport;
+import com.intermanage.backend.sales.repository.BasketRepository;
 
 @Mapper
 public interface SalesMapper {
@@ -53,6 +55,15 @@ public interface SalesMapper {
         java.time.LocalDate today = java.time.LocalDate.now(com.intermanage.backend.common.component.StoreTime.ZONE);
         return !today.isBefore(product.getPromoFrom()) && !today.isAfter(product.getPromoTo());
     }
+
+    @Mapping(target = "purchasePrice", source = "article.purchasePrice")
+    @Mapping(target = "cadencierCurrent", source = "cadencierPrice")
+    BasketArticleResponse toBasketArticle(BasketRepository.Article article, CadPrices.Price cadencierPrice,
+            List<BasketRepository.ArticleSupplier> suppliers);
+
+    @Mapping(target = "code", source = "supplierCode")
+    @Mapping(target = "name", source = "supplierName")
+    BasketArticleResponse.Supplier toBasketSupplier(BasketRepository.ArticleSupplier supplier);
 
     ZeroStockReport.Item toZeroStockItem(Product product);
 

@@ -128,9 +128,9 @@ function DownloadCard({
             {download.agentPackage && (
               <span
                 className="rounded-md bg-violet-200 px-2 py-0.5 text-xs font-semibold text-violet-950 dark:bg-violet-900/70 dark:text-violet-100"
-                title="Agenty w sklepach aktualizują się z tej pozycji same"
+                title="Agenty w sklepach same pobierają tę paczkę; plik w P:\Production\INTERMANAGE\AGENT podmienia człowiek"
               >
-                Aktualizuje agenty
+                Paczka agenta
               </span>
             )}
             {download.newVersion && (

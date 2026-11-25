@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ShoppingCartIcon } from 'lucide-react'
+import { ShoppingBasketIcon, ShoppingCartIcon, XIcon } from 'lucide-react'
 
 import { BackLink } from '@/components/BackLink'
 import { MultiComboboxField, SegmentedField, SearchableSelectField, TextField } from '@/components/form'
@@ -18,15 +18,19 @@ import {
   useSalesReportsOverview,
   useStockGaps,
 } from '@/features/sales/api'
+import { BulkBasketDialog } from '@/features/sales/BulkBasketDialog'
 import { displayCode, LEVEL_STYLES } from '@/features/sales/nomenclature-levels'
 import { salesPaths } from '@/features/sales/paths'
-import { ChartButton, nomenclatureName, StatTile } from '@/features/sales/report-parts'
+import { ChartButton, FilterGroup, nomenclatureName, StatTile } from '@/features/sales/report-parts'
 import { lastCompleteDay, useReportParams } from '@/features/sales/report-period'
+import { BasketRowButton, SelectCell, SelectHead, useRowSelection } from '@/features/sales/row-selection'
+import { AddToBasketDialog, type BasketArticle, BasketButton, useBasket } from '@/features/sales/SalesBasket'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { ZeroStockOrderDialog } from '@/features/sales/ZeroStockOrderDialog'
 import { AssignTaskButton } from '@/features/tasks/AssignTaskButton'
 import { taskMoney, taskNumber, useTaskSource } from '@/features/tasks/task-helpers'
 import { nextSort, type SortAccessors, sortRows, type SortState } from '@/lib/table-sort'
+import type { TaskItemDraft } from '@/features/tasks/api'
 import type { StockGapItem, StockGapKind } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { useSearchParamText } from '@/lib/use-search-param-text'
@@ -110,6 +114,14 @@ const money = (value: number) => `${formatMoney(value)} zł`
 const itm8Label = (itm8: string) => itm8.replace(/^0+/, '')
 const daysLabel = (days: number) => (days === 1 ? '1 dzień' : `${formatQuantity(days)} dni`)
 
+/** Dostawcy z dwóch ostatnich przyjęć: ostatnie bywa jednorazowe, np. z bazy na gazetkę. */
+function suppliersOf(item: StockGapItem) {
+  const found: { code: string; name: string | null }[] = []
+  if (item.supplierCode) found.push({ code: item.supplierCode, name: item.supplierName })
+  if (item.previousSupplierCode) found.push({ code: item.previousSupplierCode, name: item.previousSupplierName })
+  return found
+}
+
 function matches(item: StockGapItem, words: string[]) {
   const text = [item.name, item.brand, item.ean, item.itm8].join(' ').toLowerCase()
   return words.every((word) => text.includes(word))
@@ -161,7 +173,7 @@ export function StockGapReport({ storeId }: { storeId: string }) {
     const words = searchField.debounced.toLowerCase().split(/\s+/).filter(Boolean)
     return (report.data?.items ?? []).filter(
       (item) =>
-        (supplier === ALL_SUPPLIERS || item.supplierCode === supplier) &&
+        (supplier === ALL_SUPPLIERS || suppliersOf(item).some(({ code }) => code === supplier)) &&
         (cadencier.value === 'all' || item.cadencier === (cadencier.value === 'with')) &&
         matches(item, words),
     )
@@ -178,9 +190,9 @@ export function StockGapReport({ storeId }: { storeId: string }) {
   const suppliers = useMemo(() => {
     const found = new Map<string, { name: string | null; count: number }>()
     for (const item of report.data?.items ?? []) {
-      if (item.kind === tab.kind && item.supplierCode) {
-        const known = found.get(item.supplierCode)
-        found.set(item.supplierCode, { name: item.supplierName, count: (known?.count ?? 0) + 1 })
+      if (item.kind !== tab.kind) continue
+      for (const { code, name } of suppliersOf(item)) {
+        found.set(code, { name, count: (found.get(code)?.count ?? 0) + 1 })
       }
     }
     return [...found.entries()].sort(([a], [b]) => compareSupplierCodes(a, b))
@@ -202,65 +214,77 @@ export function StockGapReport({ storeId }: { storeId: string }) {
       </p>
 
       <Card className="mb-4 gap-4 p-4">
-        <div className="flex flex-wrap items-start gap-3">
-          <TextField
-            label={`Typowy tydzień od (domyślnie ${DEFAULT_MIN_WEEKLY} szt.)`}
-            inputMode="decimal"
-            value={minWeeklyField.text}
-            onChange={(event) => minWeeklyField.setText(event.target.value)}
-            error={minWeeklyError}
-            className="w-full sm:w-72"
-          />
-          <TextField
-            label={`Brak przy stanie do (domyślnie ${DEFAULT_MAX_STOCK})`}
-            inputMode="decimal"
-            value={maxStockField.text}
-            onChange={(event) => maxStockField.setText(event.target.value)}
-            error={maxStockError}
-            className="w-full sm:w-72"
-          />
-          <TextField
-            label={`Bez dostawy od (domyślnie ${DEFAULT_NO_DELIVERY_DAYS} dni)`}
-            inputMode="numeric"
-            value={noDeliveryField.text}
-            onChange={(event) => noDeliveryField.setText(event.target.value)}
-            error={noDeliveryError}
-            className="w-full sm:w-72"
-          />
-          <SegmentedField
-            label="Cadencier"
-            options={CADENCIER.map(({ value, label }) => ({ value, label }))}
-            value={cadencier.value}
-            onChange={(next) => update({ cadencier: CADENCIER.find((option) => option.value === next)?.param ?? null })}
-          />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <FilterGroup legend="Progi">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <TextField
+                label={`Typowy tydzień od (domyślnie ${DEFAULT_MIN_WEEKLY})`}
+                inputMode="decimal"
+                value={minWeeklyField.text}
+                onChange={(event) => minWeeklyField.setText(event.target.value)}
+                error={minWeeklyError}
+              />
+              <TextField
+                label={`Brak przy stanie do (domyślnie ${DEFAULT_MAX_STOCK})`}
+                inputMode="decimal"
+                value={maxStockField.text}
+                onChange={(event) => maxStockField.setText(event.target.value)}
+                error={maxStockError}
+              />
+              <TextField
+                label={`Bez dostawy od (domyślnie ${DEFAULT_NO_DELIVERY_DAYS} dni)`}
+                inputMode="numeric"
+                value={noDeliveryField.text}
+                onChange={(event) => noDeliveryField.setText(event.target.value)}
+                error={noDeliveryError}
+              />
+            </div>
+          </FilterGroup>
+          <FilterGroup legend="Cadencier">
+            <SegmentedField
+              label="Cadencier"
+              size="field"
+              options={CADENCIER.map(({ value, label }) => ({ value, label }))}
+              value={cadencier.value}
+              onChange={(next) =>
+                update({ cadencier: CADENCIER.find((option) => option.value === next)?.param ?? null })
+              }
+            />
+          </FilterGroup>
         </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <MultiComboboxField
-            label="Nomenklatura"
-            description="Tylko wybrane rejony, rodziny albo podrodziny. Puste = wszystkie."
-            options={(nomenclatures.data ?? []).map((item) => ({
-              value: item.code,
-              label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
-              hint: LEVEL_STYLES[item.level].label,
-            }))}
-            value={query.nomenclatures}
-            onChange={(codes) => update({ nom: codes })}
-            placeholder={
-              nomenclatures.data?.length === 0 ? 'Brak wgranej nomenklatury' : 'Szukaj po kodzie albo nazwie…'
-            }
-          />
-          <SearchableSelectField
-            label="Ostatni dostawca"
-            options={[
-              { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },
-              ...suppliers.map(([code, { name, count }]) => ({
-                value: code,
-                label: `${code} ${name ?? ''} (${count})`,
-              })),
-            ]}
-            value={supplier}
-            onChange={(next) => update({ dostawca: next === ALL_SUPPLIERS ? null : next })}
-          />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <FilterGroup legend="Nomenklatura">
+            <MultiComboboxField
+              label="Nomenklatura"
+              hideLabel
+              options={(nomenclatures.data ?? []).map((item) => ({
+                value: item.code,
+                label: `${displayCode(item.code)} ${nomenclatureName(item.name)}`,
+                hint: LEVEL_STYLES[item.level].label,
+              }))}
+              value={query.nomenclatures}
+              onChange={(codes) => update({ nom: codes })}
+              placeholder={
+                nomenclatures.data?.length === 0
+                  ? 'Brak wgranej nomenklatury'
+                  : 'Wszystkie. Szukaj po kodzie albo nazwie…'
+              }
+            />
+          </FilterGroup>
+          <FilterGroup legend="Dostawca">
+            <SearchableSelectField
+              label="Z dwóch ostatnich dostaw"
+              options={[
+                { value: ALL_SUPPLIERS, label: 'Wszyscy dostawcy' },
+                ...suppliers.map(([code, { name, count }]) => ({
+                  value: code,
+                  label: `${code} ${name ?? ''} (${count})`,
+                })),
+              ]}
+              value={supplier}
+              onChange={(next) => update({ dostawca: next === ALL_SUPPLIERS ? null : next })}
+            />
+          </FilterGroup>
         </div>
       </Card>
 
@@ -345,6 +369,13 @@ function Results({
 }) {
   const [chart, setChart] = useState<SalesChartTarget | null>(null)
   const [ordering, setOrdering] = useState(false)
+  const [basketArticle, setBasketArticle] = useState<BasketArticle | null>(null)
+  const [bulk, setBulk] = useState(false)
+  const selection = useRowSelection(items)
+  const { selected, chosen } = selection
+  const basket = useBasket(storeId)
+  const basketItm8s = useMemo(() => new Set(basket.map((line) => line.itm8)), [basket])
+  const bulkItems = chosen.map((item) => ({ itm8: item.itm8, weekly: item.typicalWeek }))
   const [shown, setShown] = useState(PAGE)
   const loadMore = useLoadMore<HTMLDivElement>(() => setShown((count) => count + PAGE), shown < items.length, shown)
   const sorting = { sort, onSort }
@@ -384,14 +415,7 @@ function Results({
         <div className="mb-3 flex justify-end">
           <AssignTaskButton
             title={`Braki towaru: sprawdź ${formatQuantity(items.length)} art.`}
-            items={() =>
-              items.map((item) => ({
-                itm8: item.itm8,
-                ean: item.ean,
-                name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
-                details: `stan ${taskNumber(item.stock, 3)} · typowy tydzień ${taskNumber(item.typicalWeek, 1)} · marża tyg. ${taskMoney(item.weeklyMargin)}`,
-              }))
-            }
+            items={() => items.map(gapTaskItem)}
             source={taskSource}
           >
             Zleć wszystkie ({formatQuantity(items.length)})
@@ -405,19 +429,20 @@ function Results({
         </p>
       ) : (
         <Card className="overflow-clip p-0">
-          <div className="overflow-x-auto lg:overflow-x-visible">
+          <div className="overflow-x-auto min-[110rem]:overflow-x-visible">
             <table className="w-full caption-bottom text-sm">
-              <TableHeader className="bg-card lg:sticky lg:top-14 lg:z-10">
+              <TableHeader className="bg-card min-[110rem]:sticky min-[110rem]:top-14 min-[110rem]:z-10">
                 <TableRow>
+                  <SelectHead selection={selection} />
                   <SortableHead column="itm8" {...sorting}>
                     ITM8
                   </SortableHead>
                   <TableHead>EAN</TableHead>
-                  <SortableHead column="name" {...sorting} className="min-w-72">
+                  <SortableHead column="name" {...sorting} className="min-w-56">
                     Nazwa
                   </SortableHead>
                   <SortableHead column="supplier" {...sorting}>
-                    Ostatni dostawca
+                    Ostatni dostawcy
                   </SortableHead>
                   <SortableHead column="delivery" {...sorting}>
                     Ostatnia dostawa
@@ -444,7 +469,12 @@ function Results({
               </TableHeader>
               <TableBody>
                 {items.slice(0, shown).map((item) => (
-                  <TableRow key={item.itm8}>
+                  <TableRow key={item.itm8} data-state={selected.has(item.itm8) ? 'selected' : undefined}>
+                    <SelectCell
+                      label={item.name ?? item.itm8}
+                      checked={selected.has(item.itm8)}
+                      onToggle={() => selection.toggle(item.itm8)}
+                    />
                     <TableCell className="tabular-nums">{itm8Label(item.itm8)}</TableCell>
                     <TableCell className="tabular-nums">{item.ean}</TableCell>
                     <TableCell className="whitespace-normal">
@@ -458,6 +488,12 @@ function Results({
                             cadencier
                           </span>
                         )}
+                        <BasketRowButton
+                          inBasket={basketItm8s.has(item.itm8)}
+                          onClick={() =>
+                            setBasketArticle({ itm8: item.itm8, name: item.name, ean: item.ean, brand: item.brand })
+                          }
+                        />
                         <ChartButton
                           onClick={() =>
                             setChart({
@@ -472,13 +508,21 @@ function Results({
                       </div>
                     </TableCell>
                     <TableCell
-                      className="max-w-56 truncate text-muted-foreground"
+                      className="max-w-40 truncate text-muted-foreground"
                       title={item.supplierName ?? undefined}
                     >
                       {item.supplierName ?? '–'}
+                      {item.previousSupplierCode && (
+                        <div className="truncate text-xs" title={item.previousSupplierName ?? undefined}>
+                          wcześniej {item.previousSupplierName ?? item.previousSupplierCode}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
                       {item.lastDeliveryDate ? formatDocumentDate(item.lastDeliveryDate) : 'brak'}
+                      {item.previousDeliveryDate && (
+                        <div className="text-xs">{formatDocumentDate(item.previousDeliveryDate)}</div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatQuantity(item.stock)}</TableCell>
                     <TableCell className="text-right tabular-nums" title={`Sprzedaż w ${item.weeksSold} z 8 tygodni`}>
@@ -503,10 +547,44 @@ function Results({
             </table>
           </div>
           <div ref={loadMore} />
+          {chosen.length > 0 && (
+            <div
+              className={cn(
+                'sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-t bg-card px-4 py-2.5',
+                // Miejsce na pływający przycisk koszyka.
+                basket.length > 0 && 'max-sm:pb-20 sm:pr-72',
+              )}
+            >
+              <span className="text-sm font-medium tabular-nums">Zaznaczone: {formatQuantity(chosen.length)}</span>
+              <Button size="sm" onClick={() => setBulk(true)}>
+                <ShoppingBasketIcon />
+                Dodaj do koszyka
+              </Button>
+              <AssignTaskButton
+                title="Braki towaru: sprawdź zaznaczone artykuły"
+                items={() => chosen.map(gapTaskItem)}
+                source={taskSource}
+              />
+              <Button variant="ghost" size="sm" onClick={selection.clear}>
+                <XIcon />
+                Odznacz wszystko
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
       <ZeroStockOrderDialog storeId={storeId} items={cadencierItems} open={ordering} onOpenChange={setOrdering} />
+      <AddToBasketDialog storeId={storeId} article={basketArticle} onClose={() => setBasketArticle(null)} />
+      <BulkBasketDialog
+        storeId={storeId}
+        items={bulkItems}
+        startWith="week"
+        open={bulk}
+        onClose={() => setBulk(false)}
+        onAdded={selection.clear}
+      />
+      <BasketButton storeId={storeId} />
       <SalesChartDialog
         storeId={storeId}
         kind="sales"
@@ -518,4 +596,14 @@ function Results({
       />
     </>
   )
+}
+
+/** Pozycja zadania z liczbami z chwili zlecenia. */
+function gapTaskItem(item: StockGapItem): TaskItemDraft {
+  return {
+    itm8: item.itm8,
+    ean: item.ean,
+    name: [item.name, item.brand].filter(Boolean).join(' · ') || item.itm8,
+    details: `stan ${taskNumber(item.stock, 3)} · typowy tydzień ${taskNumber(item.typicalWeek, 1)} · marża tyg. ${taskMoney(item.weeklyMargin)}`,
+  }
 }

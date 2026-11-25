@@ -1,6 +1,7 @@
 package com.intermanage.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -126,6 +127,52 @@ class MissingAssortmentIntegrationTests {
         mvc.perform(report().param("silentDays", "0"))
                 .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(MISSING, NEVER_SOLD, STILL_SELLING)));
         mvc.perform(report().param("months", "13")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void listsArticlesWithLowStockRegardlessOfSales() throws Exception {
+        mvc.perform(report().param("maxStock", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.silentDays").value(nullValue()))
+                .andExpect(jsonPath("$.items[*].itm8", containsInAnyOrder(MISSING, NEVER_SOLD, STILL_SELLING)));
+        mvc.perform(report().param("maxStock", "5"))
+                .andExpect(jsonPath("$.items[*].itm8",
+                        containsInAnyOrder(MISSING, NEVER_SOLD, STILL_SELLING, IN_STOCK)));
+        mvc.perform(report().param("maxStock", "-1")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void previewsSuppliersOfManyArticlesForBasket() throws Exception {
+        delivery("P7", last.minusDays(5), NEVER_SOLD, "7", "6", "15");
+        // Korekta przypięta do ostatniej dostawy obniża jej wartość z 15 do 12 zł.
+        String correction = jdbc.queryForObject("""
+                insert into documents (store_id, type, number, document_date, line_count, purchase_value,
+                    sale_value_gross, first_import_id, last_import_id)
+                values (?::uuid, 'WZ', 'K1', now(), 1, -3, 0, ?::uuid, ?::uuid) returning id""", String.class, store,
+                documentImport, documentImport);
+        jdbc.update("""
+                insert into document_lines (document_id, line_number, itm8, quantity, purchase_value, supplier_code)
+                values (?::uuid, 1, ?, 0, -3, '7')""", correction, NEVER_SOLD);
+        jdbc.update("""
+                insert into delivery_corrections (id, delivery_id, correction_id, linked_at)
+                select gen_random_uuid(), id, ?::uuid, now() from documents where store_id = ?::uuid and number = 'P7'""", correction, store);
+
+        mvc.perform(post("/api/stores/" + store + "/reports/basket/preview").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"itm8s\":[\"" + NEVER_SOLD + "\",\"" + MISSING + "\",\"0000000009999\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].itm8", contains(NEVER_SOLD, MISSING)))
+                .andExpect(jsonPath("$[0].cadencier").value(false))
+                .andExpect(jsonPath("$[0].suppliers", hasSize(1)))
+                .andExpect(jsonPath("$[0].suppliers[0].code").value("7"))
+                .andExpect(jsonPath("$[0].suppliers[0].purchasePrice").value(2.0))
+                .andExpect(jsonPath("$[0].suppliers[0].lastQuantity").value(6.0))
+                .andExpect(jsonPath("$[0].suppliers[0].deliveries").value(2))
+                .andExpect(jsonPath("$[1].suppliers[*].code", contains("7", "538")))
+                .andExpect(jsonPath("$[1].suppliers[*].rank", contains(1, 2)));
+        mvc.perform(post("/api/stores/" + store + "/reports/basket/preview").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"itm8s\":[]}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -8,7 +8,8 @@ import java.util.UUID;
 
 /**
  * Brakujący asortyment: artykuły kupione od {@code since} od dostawców spoza bazy, których nie ma na stanie i które nie
- * sprzedały się przez {@code silentDays} dni do {@code lastSaleDate} (ostatni dzień z wgraną sprzedażą). Zakładki
+ * sprzedały się przez {@code silentDays} dni do {@code lastSaleDate} (ostatni dzień z wgraną sprzedażą), a z
+ * {@code maxStock} te ze stanem najwyżej takim, bez względu na sprzedaż ({@code silentDays} jest puste). Zakładki
  * kategorii, dostawca, wyszukiwanie i sortowanie robi przeglądarka.
  */
 public record MissingAssortmentReport(
@@ -18,7 +19,8 @@ public record MissingAssortmentReport(
         LocalDate lastSaleDate,
         LocalDate since,
         int months,
-        int silentDays,
+        Integer silentDays,
+        BigDecimal maxStock,
         List<String> baseSupplierCodes,
         List<MissingAssortmentCategoryResponse> categories,
         List<Item> items) {

@@ -20,9 +20,9 @@ internal sealed class MacroPlayback
     /// <summary>Początek wyniku makra zatrzymanego klawiszem Esc (player.ahk).</summary>
     private const string StoppedByEsc = "Makro zatrzymane klawiszem Esc";
     /// <summary>Tyle odtwarzacz ma na podjęcie makra po Alt+E.</summary>
-    private static readonly TimeSpan PickUpTimeout = TimeSpan.FromSeconds(15);
+    private static TimeSpan PickUpTimeout => Limits.Seconds("macroPickUpSeconds", 15, 5, 300);
     /// <summary>Tyle bez procesu odtwarzacza w trakcie makra = ktoś go zamknął.</summary>
-    private static readonly TimeSpan PlayerGone = TimeSpan.FromSeconds(20);
+    private static TimeSpan PlayerGone => Limits.Seconds("playerGoneSeconds", 20, 10, 300);
 
     /// <summary>Folder wyników; ten sam składa odtwarzacz (player.ahk, WriteRemote).</summary>
     private static string ResultFolder => Path.Combine(AgentSettings.Folder, "makra");

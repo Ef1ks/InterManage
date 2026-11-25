@@ -16,8 +16,8 @@ namespace Intermanage.Agent;
 internal sealed class ReportUploader
 {
     private const int ChunkAttempts = 4;
-    private static readonly TimeSpan SteadyFor = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan SaveTimeout = TimeSpan.FromMinutes(1);
+    private static TimeSpan SteadyFor => Limits.Seconds("reportSteadySeconds", 2, 1, 120);
+    private static TimeSpan SaveTimeout => Limits.Seconds("reportSaveSeconds", 60, 10, 1800);
 
     private sealed class Item
     {

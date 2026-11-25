@@ -64,6 +64,7 @@ import type {
   LossControlSettlements,
   SlowMovingReport,
   StockGapReport,
+  BasketArticleDetails,
   MissingAssortmentCategory,
   MissingAssortmentReport,
   NegativeStockDelivery,
@@ -579,6 +580,8 @@ export function useStockGaps(storeId: string, query: StockGapQuery, enabled: boo
 export type MissingAssortmentQuery = {
   months: number
   silentDays: number
+  /** Zamiast braków artykuły ze stanem najwyżej takim, bez względu na sprzedaż. */
+  maxStock: number | null
   nomenclatures: string[]
 }
 
@@ -587,7 +590,9 @@ const missingAssortmentKey = (storeId: string) => [...reportsKey(storeId), 'miss
 
 /** Brakujący asortyment: kategorie, dostawcę, wyszukiwanie i sortowanie robi strona. */
 export function useMissingAssortment(storeId: string, query: MissingAssortmentQuery, enabled: boolean) {
-  const search = new URLSearchParams({ months: String(query.months), silentDays: String(query.silentDays) })
+  const search = new URLSearchParams({ months: String(query.months) })
+  if (query.maxStock == null) search.set('silentDays', String(query.silentDays))
+  else search.set('maxStock', String(query.maxStock))
   query.nomenclatures.forEach((code) => search.append('nomenclatures', code))
   return useQuery({
     queryKey: [...missingAssortmentKey(storeId), query],
@@ -595,6 +600,17 @@ export function useMissingAssortment(storeId: string, query: MissingAssortmentQu
     staleTime: REPORT_STALE_TIME,
     queryFn: () => api<MissingAssortmentReport>(`${missingAssortmentPath(storeId)}?${search}`),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Dostawcy i ceny wielu artykułów naraz do koszyka zakupowego (POST, bo zaznaczonych bywa kilkaset). */
+export function useBasketPreview(storeId: string, itm8s: string[]) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'basket-preview', itm8s],
+    enabled: itm8s.length > 0,
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () =>
+      api<BasketArticleDetails[]>(`${reportsPath(storeId)}/basket/preview`, { method: 'POST', json: { itm8s } }),
   })
 }
 

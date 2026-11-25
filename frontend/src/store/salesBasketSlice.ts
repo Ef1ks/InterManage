@@ -2,7 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import { isUuid } from '@/lib/uuid'
 
-/** Artykuł w koszyku zakupowym porównania sprzedaży: u jednego dostawcy, z ilością i ceną zakupu netto. */
+/** Artykuł w koszyku zakupowym raportów: u jednego dostawcy, z ilością i ceną zakupu netto. */
 export type BasketLine = {
   itm8: string
   ean: string | null
@@ -66,23 +66,24 @@ export function persistSalesBasket(state: BasketState) {
 }
 
 /**
- * Koszyki zakupowe z porównania sprzedaży, osobno dla każdego sklepu, i ustawienia raportu (kolejność wierszy, pliki
- * zamówień). Zostają po odświeżeniu strony (kopia w localStorage); usunięcie wraca toastem „Przywróć”.
+ * Koszyki zakupowe, po jednym na sklep, wspólne dla raportów (porównanie sprzedaży, braki towaru, brakujący
+ * asortyment), i ustawienia porównania (kolejność wierszy, pliki zamówień). Zostają po odświeżeniu strony (kopia w localStorage); usunięcie wraca toastem „Przywróć”.
  */
 const salesBasketSlice = createSlice({
   name: 'salesBasket',
   initialState: readStored(),
   reducers: {
-    /** Dodaje artykuł u dostawcy; ten sam artykuł u tego samego dostawcy dostaje ilość dodaną do dotychczasowej. */
-    addBasketLine(state, action: PayloadAction<{ storeId: string; line: BasketLine }>) {
-      const { storeId, line } = action.payload
-      const lines = (state.baskets[storeId] ??= [])
-      const known = lines.find((candidate) => sameLine(candidate, line))
-      if (known) {
-        known.quantity = Math.round((known.quantity + line.quantity) * 1000) / 1000
-        known.purchasePrice = line.purchasePrice
-      } else {
-        lines.push(line)
+    /** Dodaje artykuły u dostawców; ten sam artykuł u tego samego dostawcy dostaje ilość dodaną do dotychczasowej. */
+    addBasketLines(state, action: PayloadAction<{ storeId: string; lines: BasketLine[] }>) {
+      const lines = (state.baskets[action.payload.storeId] ??= [])
+      for (const line of action.payload.lines) {
+        const known = lines.find((candidate) => sameLine(candidate, line))
+        if (known) {
+          known.quantity = Math.round((known.quantity + line.quantity) * 1000) / 1000
+          known.purchasePrice = line.purchasePrice
+        } else {
+          lines.push(line)
+        }
       }
     },
     setBasketQuantity(
@@ -108,5 +109,5 @@ const salesBasketSlice = createSlice({
   },
 })
 
-export const { addBasketLine, setBasketQuantity, setBasket, setComparisonSettings } = salesBasketSlice.actions
+export const { addBasketLines, setBasketQuantity, setBasket, setComparisonSettings } = salesBasketSlice.actions
 export default salesBasketSlice.reducer
