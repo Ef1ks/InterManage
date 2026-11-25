@@ -5,7 +5,8 @@ import java.util.List;
 
 /**
  * Zawartość jednej albo kilku list razem, artykuł raz (ilości zsumowane). Ceny są z kartoteki z chwili odczytu:
- * {@code purchasePrice} netto, {@code salePrice} brutto na kasie (w promocji promocyjna), {@code marginPercent} od brutto.
+ * {@code purchasePrice} netto ({@code purchaseValue} razy ilość), {@code salePrice} brutto na kasie (w promocji
+ * promocyjna), {@code marginPercent} od brutto.
  */
 public record CollectorListDetails(List<CollectorListResponse> lists, List<Row> rows, BigDecimal totalQuantity,
         BigDecimal totalPurchaseValue, BigDecimal totalSaleValue) {
@@ -15,8 +16,8 @@ public record CollectorListDetails(List<CollectorListResponse> lists, List<Row> 
      * kodu puszki = 2 czteropaki). {@code known}: artykuł jest w kartotece sklepu.
      */
     public record Row(String itm8, String ean, String name, String brand, BigDecimal purchasePrice,
-            BigDecimal salePrice, BigDecimal saleValue, BigDecimal marginPercent, BigDecimal quantity,
-            List<Scan> scans, boolean known) {
+            BigDecimal purchaseValue, BigDecimal salePrice, BigDecimal saleValue, BigDecimal marginPercent,
+            BigDecimal quantity, List<Scan> scans, boolean known) {
     }
 
     public record Scan(String code, BigDecimal entered, BigDecimal quantity) {

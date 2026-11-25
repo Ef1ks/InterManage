@@ -50,11 +50,17 @@ pulpicie i w `\Application\Startup` (start z systemem). Ponowne uruchomienie nap
 
 ## Praca
 
-- **1 Skanowanie:** karta artykułu. **2 Protokoły:** skan, ilość, Enter; lista wysyła się na podstawce po 15 s bez pracy
-  i pojawia się w Intermanage (Kolektory → Dane z kolektorów), gdzie wybiera się protokół.
-- **Lewy dolny róg:** „24: zł” / „24: kg” (koniec kodu 24 to cena albo waga) i kosz listy (z potwierdzeniem, po
-  wyczyszczeniu w tym miejscu jest przywracanie).
+- **1 Skanowanie:** karta artykułu. **2 Protokoły:** skan, ilość, Enter. **3 Ustaw promocje:** skan, cena albo
+  przecena (−30/−50/−70%), koniec promocji w kalendarzu (jedno dotknięcie dnia).
+- **Na podstawce** program pyta, czy wysłać listę (protokół do Kolektory → Dane z kolektorów, promocje do Promocje
+  z kolektorów, z wyborem „ustaw w Mercalys” na komputerze sklepu). Lista zostaje na kolektorze; po wysyłce pytanie
+  o usunięcie, a wysłana i niezmieniona znika sama po 2 godzinach. Kolejna wysyłka to same zmiany.
+- **Lewy dolny róg:** w protokole „24: zł” / „24: kg” (koniec kodu 24 to cena albo waga) i kosz listy (z potwierdzeniem,
+  po wyczyszczeniu w tym miejscu jest przywracanie).
 - Artykuł z kodem sztuki i wielopaku (0,25 = 4-pak, 0,1666 = 6-pak) pyta, co liczysz; na protokół idzie główny kod.
+- **Menu → Drukarka:** drukarki Bluetooth sklepu z Intermanage (Kolektory → Urządzenia, Drukarki Bluetooth). Cyfra,
+  Enter albo skan kodu z adresem z wydruku konfiguracji drukarki łączy się z nią i pokazuje stan (papier, pokrywa,
+  bateria); udane połączenie zapamiętuje drukarkę. Bez parowania w ustawieniach Bluetooth kolektora.
 
 ## Jak to działa
 

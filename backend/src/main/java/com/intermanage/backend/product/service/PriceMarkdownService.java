@@ -2,6 +2,7 @@ package com.intermanage.backend.product.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.LabelFile;
@@ -105,20 +107,32 @@ public class PriceMarkdownService {
      * mają różne cenówki, więc jeden plik to jeden rodzaj), bez znacznika (stawia go zapis na dysku).
      */
     @Transactional(readOnly = true)
-    public ProtocolFile labels(UUID storeId, List<UUID> ids, UUID userId, String username) {
-        List<PriceMarkdown> chosen = markdowns.findByStoreIdAndCreatedByIdAndIdIn(storeId, userId, ids).stream()
+    /**
+     * Plik ETIQUETTE z wybranych wpisów: liczba cenówek z {@code counts} (wpis bez niej = 1), ten sam EAN raz,
+     * z największą liczbą. {@code name} (same litery i cyfry) zastępuje w nazwie pliku format rodzaju.
+     */
+    public ProtocolFile labels(UUID storeId, Map<UUID, Integer> counts, String name, UUID userId, String username) {
+        List<PriceMarkdown> chosen = markdowns
+                .findByStoreIdAndCreatedByIdAndIdIn(storeId, userId, List.copyOf(counts.keySet())).stream()
                 .filter(markdown -> markdown.getDeletedAt() == null).toList();
         Set<PriceLabelKind> kinds = chosen.stream().map(PriceMarkdown::getKind).collect(Collectors.toSet());
         if (kinds.size() > 1) {
             throw ApiException.badRequest("Przeceny i zmiany cen mają różne cenówki: utwórz osobny plik dla każdych");
         }
-        List<LabelFile.Line> lines = chosen.stream().map(PriceMarkdown::getEan).distinct()
-                .map(ean -> new LabelFile.Line(ean, 1)).toList();
+        Map<String, Integer> byEan = new LinkedHashMap<>();
+        for (PriceMarkdown markdown : chosen) {
+            int count = counts.getOrDefault(markdown.getId(), 1);
+            byEan.merge(markdown.getEan(), count, Math::max);
+        }
+        List<LabelFile.Line> lines = byEan.entrySet().stream()
+                .map(entry -> new LabelFile.Line(entry.getKey(), entry.getValue())).toList();
         byte[] content = LabelFile.content(lines);
         if (content.length == 0) {
             throw ApiException.badRequest("Brak artykułów z EAN-em do cenówek");
         }
-        return new ProtocolFile(LabelFile.fileName(username, kinds.iterator().next().labelFormat()), content);
+        String own = ProtoFile.namePart(name);
+        String format = own.isEmpty() ? kinds.iterator().next().labelFormat() : own;
+        return new ProtocolFile(LabelFile.fileName(username, format), content);
     }
 
     @Transactional

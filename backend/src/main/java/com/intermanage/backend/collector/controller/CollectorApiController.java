@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -22,8 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.collector.component.CollectorProgram;
 import com.intermanage.backend.collector.service.CollectorCatalogService;
+import com.intermanage.backend.collector.entity.CollectorPromotion;
 import com.intermanage.backend.collector.service.CollectorListService;
+import com.intermanage.backend.collector.service.CollectorPromotionService;
 import com.intermanage.backend.collector.service.StoreCollectorService;
+import com.intermanage.backend.collector.service.StorePrinterService;
 import com.intermanage.backend.collector.service.StoreCollectorService.CollectorContext;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
@@ -35,10 +39,12 @@ import com.intermanage.backend.common.exception.ApiException;
  *
  * <pre>
  * POST /api/collector/pair     code, device, version (formularz) → key, store, storeName, name, time
- * GET  /api/collector/status   → time, catalog (wersja danych), store, storeName, name
+ * GET  /api/collector/status   → time, catalog (wersja danych), printers (wersja listy drukarek), store, storeName, name
+ * GET  /api/collector/printers → printers (wersja), count, printer.N.mac|name|model|pin (drukarki Bluetooth sklepu)
  * GET  /api/collector/catalog  → plik kartoteki spakowany zlib; nagłówki X-Catalog-Version, X-Catalog-Size, X-Catalog-Sha256
  * POST /api/collector/synced   version (formularz): kolektor zapisał dane tej wersji
  * POST /api/collector/lists    id, started, lines (formularz): lista z Protokołów; ta sama drugi raz jest pomijana
+ * POST /api/collector/promotions id, started, start, macro (1 = ustaw makrem), lines: promocje → macro=ok|opis
  * GET  /api/collector/program  → version, files i przy każdym pliku .size i .sha256 (nowa wersja programu)
  * GET  /api/collector/program/{plik}?version=  plik tej wersji (409, gdy serwer ma już inną)
  * GET  /api/collector/setup    instalator, bez klucza (pobiera się go na komputerze, zanim kolektor jest połączony)
@@ -59,10 +65,15 @@ public class CollectorApiController {
     private final CollectorCatalogService catalog;
     private final CollectorProgram program;
     private final CollectorListService lists;
+    private final CollectorPromotionService promotions;
+    private final StorePrinterService printers;
 
     public CollectorApiController(StoreCollectorService collectors, CollectorCatalogService catalog,
-            CollectorProgram program, CollectorListService lists) {
+            CollectorProgram program, CollectorListService lists, CollectorPromotionService promotions,
+            StorePrinterService printers) {
+        this.printers = printers;
         this.lists = lists;
+        this.promotions = promotions;
         this.program = program;
         this.collectors = collectors;
         this.catalog = catalog;
@@ -84,7 +95,29 @@ public class CollectorApiController {
         CollectorContext collector = collector(authorization, version);
         Map<String, String> values = describe(collector);
         values.put("catalog", catalog.version(collector.storeId()));
+        values.put("printers", printers.version(collector.storeId()));
         program.version().ifPresent(latest -> values.put("program", latest));
+        return text(values);
+    }
+
+    /** Drukarki Bluetooth sklepu; kolektor pobiera listę, gdy zmieni się jej wersja w {@code /status}. */
+    @GetMapping("/printers")
+    public ResponseEntity<String> printers(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestHeader(value = VERSION_HEADER, required = false) String version) {
+        CollectorContext collector = collector(authorization, version);
+        List<StorePrinterService.CollectorPrinter> list = printers.forCollector(collector.storeId());
+        Map<String, String> values = describe(collector);
+        values.put("printers", StorePrinterService.version(list));
+        values.put("count", String.valueOf(list.size()));
+        for (int i = 0; i < list.size(); i++) {
+            StorePrinterService.CollectorPrinter printer = list.get(i);
+            String prefix = "printer." + (i + 1) + ".";
+            values.put(prefix + "mac", printer.mac());
+            values.put(prefix + "name", printer.name());
+            values.put(prefix + "model", printer.model());
+            values.put(prefix + "pin", printer.pin());
+        }
         return text(values);
     }
 
@@ -121,6 +154,36 @@ public class CollectorApiController {
         CollectorContext collector = collector(authorization, programVersion);
         lists.receive(collector, id, started, lines);
         return text(describe(collector));
+    }
+
+    /**
+     * Promocje z kolektora. Z {@code macro=1} od razu makro na komputerze sklepu; gdy nie ruszy, kolektor dostaje opis
+     * w {@code macro}, a promocje i tak czekają w Intermanage (Kolektory, Promocje z kolektorów).
+     */
+    @PostMapping("/promotions")
+    public ResponseEntity<String> promotion(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestHeader(value = VERSION_HEADER, required = false) String programVersion,
+            @RequestParam UUID id, @RequestParam(required = false) String started,
+            @RequestParam(required = false) String start, @RequestParam(required = false) String macro,
+            @RequestParam String lines) {
+        CollectorContext collector = collector(authorization, programVersion);
+        CollectorPromotion promotion = promotions.receive(collector, id, started, start, "1".equals(macro), lines);
+        String outcome = "";
+        if (CollectorPromotionService.macroPending(promotion)) {
+            try {
+                promotions.runMacro(collector.storeId(), id, null, null);
+                outcome = "ok";
+            } catch (ApiException e) {
+                promotions.macroFailed(collector.storeId(), id, e.getMessage());
+                outcome = e.getMessage();
+            }
+        } else if (promotion.isMacroRequested()) {
+            outcome = promotion.getMacroError() != null ? promotion.getMacroError() : "ok";
+        }
+        Map<String, String> values = describe(collector);
+        values.put("macro", outcome.replaceAll("\\s+", " "));
+        return text(values);
     }
 
     @GetMapping("/program")

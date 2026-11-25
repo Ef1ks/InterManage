@@ -38,10 +38,14 @@ namespace Intermanage.Collector
         /// <summary>Klucz przestał działać: kolektor trzeba połączyć nowym kodem.</summary>
         public event EventHandler Unpaired;
 
-        /// <summary>Lista protokołu została zamknięta albo wysłana.</summary>
+        /// <summary>Lista protokołu albo promocje zostały wysłane.</summary>
         public event EventHandler ListsChanged;
 
+        /// <summary>Przyszła nowa lista drukarek sklepu.</summary>
+        public event EventHandler PrintersChanged;
+
         private readonly ProtocolStore protocols;
+        private readonly PromoStore promos;
         private readonly AutoResetEvent wake = new AutoResetEvent(false);
         private volatile bool requested;
         private volatile bool stopping;
@@ -74,9 +78,10 @@ namespace Intermanage.Collector
             get { return Path.Combine(Settings.Folder, "katalog.new"); }
         }
 
-        public Sync(ProtocolStore protocols)
+        public Sync(ProtocolStore protocols, PromoStore promos)
         {
             this.protocols = protocols;
+            this.promos = promos;
         }
 
         public void Start(string currentVersion)
@@ -172,7 +177,7 @@ namespace Intermanage.Collector
                     cradleSince = Environment.TickCount;
                 }
                 bool due = onCradle && (!wasOnCradle || Environment.TickCount - nextAt >= 0);
-                due = due || (onCradle && Environment.TickCount - checkedAt > RetryEvery && protocols.Ready);
+                due = due || (onCradle && Environment.TickCount - checkedAt > RetryEvery && Outgoing);
                 wasOnCradle = onCradle;
                 if (Settings.Paired && (requested || due))
                 {
@@ -188,8 +193,8 @@ namespace Intermanage.Collector
                     }
                     busy = false;
                     bool early = Environment.TickCount - cradleSince < FirstRetries;
-                    // Lista uzupełniana na podstawce pójdzie chwilę po ostatnim skanie.
-                    bool lists = protocols.Count > 0 || ProtocolStore.Waiting.Length > 0;
+                    // Niewysłana lista ponawia się częściej.
+                    bool lists = Outgoing;
                     nextAt = Environment.TickCount
                         + (done && !lists ? CheckEvery : early || done ? FirstRetryEvery : RetryEvery);
                 }
@@ -215,6 +220,12 @@ namespace Intermanage.Collector
                 SetClock(answer);
                 Contacted();
                 SendLists();
+                string printers = Pairs.Get(answer, "printers");
+                if (printers.Length > 0 && printers != Printers.Version)
+                {
+                    Printers.Download();
+                    Raise(PrintersChanged);
+                }
                 // Najpierw program: dane w nowym układzie przeczyta dopiero nowa wersja.
                 string program = Pairs.Get(answer, "program");
                 if (readyVersion != program && Updater.Wanted(program))
@@ -309,17 +320,26 @@ namespace Intermanage.Collector
         }
 
         /// <summary>Na podstawce: zamyka bieżącą listę i wysyła wszystkie zamknięte.</summary>
+        /// <summary>Pracownik zatwierdził wysyłkę, a ona jeszcze nie doszła.</summary>
+        private bool Outgoing
+        {
+            get { return protocols.Waiting.Length > 0 || promos.Waiting.Length > 0; }
+        }
+
+        /// <summary>Wysyła tylko to, co pracownik zatwierdził na kolektorze (bez pytania nic nie wychodzi).</summary>
         private void SendLists()
         {
             bool changed = false;
-            if (Native.OnCradle && protocols.Count > 0)
-            {
-                changed = protocols.Close();
-            }
-            foreach (string file in ProtocolStore.Waiting)
+            foreach (string file in protocols.Waiting)
             {
                 Set("Wysyłam listę…", -1);
                 protocols.Send(file);
+                changed = true;
+            }
+            foreach (string file in promos.Waiting)
+            {
+                Set("Wysyłam promocje…", -1);
+                promos.Send(file);
                 changed = true;
             }
             if (changed)

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -39,7 +40,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.intermanage.backend.agent.entity.AgentMacroKind;
+import com.intermanage.backend.agent.entity.AgentMacroStatus;
+import com.intermanage.backend.agent.service.AgentMacroService;
 import com.intermanage.backend.auth.security.JwtService;
 import com.intermanage.backend.collector.component.CollectorCatalogFile;
 import com.jayway.jsonpath.JsonPath;
@@ -65,6 +70,12 @@ class CollectorIntegrationTests {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    ApplicationEventPublisher events;
+
+    @Autowired
+    TransactionTemplate transaction;
 
     private Cookie owner;
     private String storeId;
@@ -280,6 +291,72 @@ class CollectorIntegrationTests {
         mvc.perform(get(base + "/details?ids=" + id).cookie(owner)).andExpect(status().isNotFound());
         mvc.perform(post(base + "/" + id + "/restore").cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void promotionsFromCollectorGoToComputerAndLabels() throws Exception {
+        String report = productImport("2026-11-02 06:00:00");
+        product(BUTTER, "5900000000001", "MASLO EXTRA 200G", report, report);
+        jdbc.update("update products set vat_code = 1, purchase_price = 7, sale_price = 16.49 "
+                + "where store_id = ?::uuid and itm8 = ?", storeId, BUTTER);
+        String key = newCollector();
+        String id = UUID.randomUUID().toString();
+        String end = compact(today.plusDays(7));
+        String lines = BUTTER + "\t5900000000001\tMASLO EXTRA 200G\t\t11.54\t" + end + "\n";
+        // Sklep bez komputera z agentem: zlecenie czeka w kolejce, kolektor dostaje „ok”.
+        assertThat(lines(sendPromotion(key, id, "1", lines).andExpect(status().isOk()).andReturn().getResponse()))
+                .containsEntry("macro", "ok");
+        sendPromotion(key, id, "1", lines).andExpect(status().isOk());
+        sendPromotion(key, UUID.randomUUID().toString(), "0", "zepsute").andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select count(*) from agent_macro_jobs where store_id = ?::uuid and kind = "
+                + "'PROMO_ENTRY'", Integer.class, storeId)).isEqualTo(1);
+        String macro = jdbc.queryForObject("select macro from agent_macro_jobs where store_id = ?::uuid",
+                String.class, storeId);
+        assertThat(macro).contains("WEBKEY|Mercalys|txtZ8_CodeArticle_TxtBox|^a5900000000001{Enter}",
+                "WEBKEY|Mercalys|lstZ22_TVA_TxtBox|^a1{Tab}", "WEBKEY|Mercalys|txpZ25_PrixPromoPDV_TxtBox|^a11,54{Enter}");
+
+        String base = "/api/stores/" + storeId + "/collector-promotions";
+        mvc.perform(get(base).cookie(owner)).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].macroRequested").value(true))
+                .andExpect(jsonPath("$[0].macro.status").value("QUEUED"));
+        mvc.perform(get(base + "/" + id).cookie(owner))
+                .andExpect(jsonPath("$.rows[0].regularPrice").value(16.49))
+                .andExpect(jsonPath("$.rows[0].discountPercent").value(30))
+                // (11,54 / 1,23 - 7) / 11,54
+                .andExpect(jsonPath("$.rows[0].marginPercent").value(20.64));
+        mvc.perform(post(base + "/" + id + "/macro").cookie(owner).with(csrf())).andExpect(status().isConflict());
+
+        String other = UUID.randomUUID().toString();
+        sendPromotion(key, other, "0", lines).andExpect(status().isOk());
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(1));
+        mvc.perform(post(base + "/" + other + "/inserted").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.insertedBy").isNotEmpty());
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(0));
+
+        // Udane makro: cenówki do kolejki plików sklepu.
+        UUID job = jdbc.queryForObject("select macro_job_id from collector_promotions where id = ?::uuid",
+                UUID.class, id);
+        transaction.executeWithoutResult(status -> events.publishEvent(new AgentMacroService.MacroEnded(
+                UUID.fromString(storeId), job, AgentMacroKind.PROMO_ENTRY, AgentMacroStatus.DONE)));
+        String file = null;
+        for (int i = 0; i < 50 && file == null; i++) {
+            Thread.sleep(100);
+            file = jdbc.query("""
+                    select convert_from(q.content, 'UTF8') from collector_promotions p
+                    join store_file_queue q on q.id = p.labels_file_id where p.id = ?::uuid""",
+                    rs -> rs.next() ? rs.getString(1) : null, id);
+        }
+        assertThat(file).isEqualTo("59000000000010001\r\n");
+
+        mvc.perform(delete(base + "/" + id).cookie(owner).with(csrf())).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(post(base + "/" + id + "/restore").cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    private ResultActions sendPromotion(String key, String id, String macro, String lines) throws Exception {
+        return mvc.perform(post("/api/collector/promotions").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED).content("id=" + id + "&started=20261125081500"
+                        + "&start=&macro=" + macro + "&lines=" + URLEncoder.encode(lines, StandardCharsets.UTF_8)));
     }
 
     private ResultActions sendList(String key, String id, String lines) throws Exception {

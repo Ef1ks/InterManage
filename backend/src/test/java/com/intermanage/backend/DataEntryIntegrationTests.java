@@ -1856,6 +1856,13 @@ class DataEntryIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", containsString("_BIALFOR67_")))
                 .andExpect(content().bytes("59000000000120001\r\n".getBytes(StandardCharsets.US_ASCII)));
+        // Liczba cenówek przy wpisie i własna nazwa w miejscu formatu (same litery i cyfry).
+        mvc.perform(post(markdowns + "/labels-file").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":\"" + changeId + "\",\"count\":4}],\"name\":\"MOJE_CEN 1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("_MOJECEN1_")))
+                .andExpect(content().bytes("59000000000120004\r\n".getBytes(StandardCharsets.US_ASCII)));
 
         // Przecena i zmiana ceny razem: różne cenówki, więc osobne pliki.
         String both = mvc.perform(post(markdowns).cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)

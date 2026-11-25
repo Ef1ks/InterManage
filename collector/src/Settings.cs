@@ -70,6 +70,25 @@ namespace Intermanage.Collector
             get { return Value("name", ""); }
         }
 
+        /// <summary>Adres Bluetooth drukarki wybranej na tym kolektorze (bez dwukropków) albo pusty tekst.</summary>
+        public static string PrinterMac
+        {
+            get { return Value("printer", ""); }
+        }
+
+        /// <summary>Nazwa wybranej drukarki z chwili wyboru (dla drukarki spoza listy sklepu).</summary>
+        public static string PrinterName
+        {
+            get { return Value("printerName", ""); }
+        }
+
+        public static void ChoosePrinter(string mac, string name)
+        {
+            values["printer"] = mac;
+            values["printerName"] = name;
+            Save();
+        }
+
         public static void Load()
         {
             values = Pairs.Load(FileName);

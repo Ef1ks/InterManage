@@ -17,5 +17,7 @@ public enum AgentMacroKind {
     /** Zmiany cen, które pojawiły się w folderze sklepu (zleca je serwer, na preferowanym komputerze). */
     PRICE_CONTROL,
     /** ITM8 z cadencier jako priorytetowe i aktywne; zleca je osoba albo serwer po aktualizacji danych. */
-    CAD_PRIORITY
+    CAD_PRIORITY,
+    /** Promocje z kolektora: operacja w Wprowadzaniu promocji; zleca je kolektor albo osoba z przeglądarki. */
+    PROMO_ENTRY
 }

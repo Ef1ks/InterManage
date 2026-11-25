@@ -140,8 +140,8 @@ public class CollectorListService {
             CollectorListDetails.Row row = row(scanned, catalog.get(scanned.getFirst().getItm8()), today);
             rows.add(row);
             quantity = quantity.add(row.quantity());
-            if (row.purchasePrice() != null) {
-                purchase = purchase.add(row.purchasePrice().multiply(row.quantity()));
+            if (row.purchaseValue() != null) {
+                purchase = purchase.add(row.purchaseValue());
             }
             if (row.saleValue() != null) {
                 sale = sale.add(row.saleValue());
@@ -215,13 +215,15 @@ public class CollectorListService {
         List<XlsxWriter.Row> rows = new ArrayList<>();
         for (CollectorListDetails.Row row : details.rows()) {
             rows.add(XlsxWriter.Row.of(itm8(row.itm8()), row.ean(), row.name(), row.brand(), money(row.purchasePrice()),
-                    money(row.salePrice()), money(row.saleValue()), row.marginPercent(), row.quantity()));
+                    money(row.purchaseValue()), money(row.salePrice()), money(row.saleValue()), row.marginPercent(), row.quantity()));
         }
-        rows.add(XlsxWriter.Row.of(XlsxWriter.Cell.bold("Razem"), null, null, null, null, null,
+        rows.add(XlsxWriter.Row.of(XlsxWriter.Cell.bold("Razem"), null, null, null, null,
+                XlsxWriter.Cell.boldMoney(details.totalPurchaseValue()), null,
                 XlsxWriter.Cell.boldMoney(details.totalSaleValue()), null, XlsxWriter.Cell.bold(details.totalQuantity())));
         return xlsx.writeRows("Kolektor", List.of(new XlsxWriter.Column("ITM8", 12), new XlsxWriter.Column("EAN", 16),
                 new XlsxWriter.Column("Nazwa", 38), new XlsxWriter.Column("Marka", 18),
-                new XlsxWriter.Column("Cena zakupu netto", 18), new XlsxWriter.Column("Cena sprzedaży szt.", 18),
+                new XlsxWriter.Column("Cena zakupu netto", 18),
+                new XlsxWriter.Column("Wartość zakupu netto", 18), new XlsxWriter.Column("Cena sprzedaży szt.", 18),
                 new XlsxWriter.Column("Wartość sprzedaży", 18), new XlsxWriter.Column("Marża %", 10),
                 new XlsxWriter.Column("Ilość", 10)), rows);
     }
@@ -242,7 +244,8 @@ public class CollectorListService {
                         line.getEnteredQuantity().stripTrailingZeros(), line.getQuantity().stripTrailingZeros()))
                 .toList();
         return new CollectorListDetails.Row(first.getItm8(), ean, product == null ? first.getName() : product.getName(),
-                product == null ? first.getBrand() : product.getBrand(), purchase, sale,
+                product == null ? first.getBrand() : product.getBrand(), purchase,
+                purchase == null ? null : purchase.multiply(quantity).setScale(2, RoundingMode.HALF_UP), sale,
                 sale == null ? null : sale.multiply(quantity).setScale(2, RoundingMode.HALF_UP),
                 purchase == null || sale == null || sale.signum() <= 0 || vat == null ? null
                         : Margin.percent(sale, BigDecimal.valueOf(vat), purchase, 2),
@@ -308,11 +311,12 @@ public class CollectorListService {
     }
 
     private static BigDecimal quantity(String value) {
-        if (!value.matches("\\d{1,9}(\\.\\d{1,3})?")) {
+        // Ujemna: kolektor dosyła zmiany listy wysłanej wcześniej, także zmniejszone ilości.
+        if (!value.matches("-?\\d{1,9}(\\.\\d{1,3})?")) {
             throw ApiException.badRequest("Zła ilość na liście z kolektora: " + cut(value, 20));
         }
         BigDecimal quantity = new BigDecimal(value);
-        if (quantity.compareTo(MAX_QUANTITY) > 0) {
+        if (quantity.abs().compareTo(MAX_QUANTITY) > 0) {
             throw ApiException.badRequest("Za duża ilość na liście z kolektora: " + value);
         }
         return quantity;

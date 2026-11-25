@@ -5264,6 +5264,18 @@ export type StoreCollector = {
   deletedAt: string | null
 }
 
+/** Drukarka Bluetooth sklepu dla kolektorów (StorePrinterResponse); `mac` 12 znaków bez dwukropków. */
+export type StorePrinter = {
+  id: string
+  name: string
+  mac: string
+  model: string | null
+  pin: string | null
+  createdAt: string
+  createdBy: string | null
+  deletedAt: string | null
+}
+
 /** Lista zeskanowana na kolektorze (CollectorListResponse); bez protokołów = czeka na wybór. */
 export type CollectorList = {
   id: string
@@ -5289,6 +5301,8 @@ export type CollectorListDetails = {
     name: string
     brand: string | null
     purchasePrice: number | null
+    /** Zakup netto razy ilość. */
+    purchaseValue: number | null
     salePrice: number | null
     saleValue: number | null
     marginPercent: number | null
@@ -5300,6 +5314,44 @@ export type CollectorListDetails = {
   totalQuantity: number
   totalPurchaseValue: number
   totalSaleValue: number
+}
+
+/**
+ * Promocje ustawione na kolektorze (CollectorPromotionResponse). `startDate` puste = od dziś, `macro`: zlecenie makra na
+ * komputerze sklepu, `macroError`: dlaczego nie ruszyło, `labelsQueued`: cenówki po makrze czekają w kolejce plików.
+ */
+export type CollectorPromotion = {
+  id: string
+  collectorName: string
+  startedAt: string | null
+  receivedAt: string
+  startDate: string | null
+  endDate: string
+  lineCount: number
+  macroRequested: boolean
+  macro: { id: string; status: AgentMacroJob['status']; message: string | null; finishedAt: string | null } | null
+  macroError: string | null
+  labelsQueued: boolean
+  insertedAt: string | null
+  insertedBy: string | null
+}
+
+/** Promocje z kolektora z artykułami; ceny zwykłe, zakupu i marża z kartoteki z chwili odczytu. */
+export type CollectorPromotionDetails = {
+  promotion: CollectorPromotion
+  rows: {
+    itm8: string
+    ean: string
+    name: string
+    brand: string | null
+    regularPrice: number | null
+    price: number
+    discountPercent: number | null
+    lastPurchasePrice: number | null
+    marginPercent: number | null
+    dateTo: string
+    known: boolean
+  }[]
 }
 
 export type AgentFeatureKey =
@@ -5612,6 +5664,7 @@ export type AgentMacroJob = {
     | 'PRODUCT_FILES'
     | 'PRICE_CONTROL'
     | 'CAD_PRIORITY'
+    | 'PROMO_ENTRY'
   title: string
   /** `QUEUED`: czeka w kolejce sklepu (trwa inne makro albo żaden komputer nie jest wolny), rusza samo. */
   status: 'QUEUED' | 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'

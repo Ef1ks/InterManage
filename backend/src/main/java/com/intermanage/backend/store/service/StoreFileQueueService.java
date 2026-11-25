@@ -104,10 +104,20 @@ public class StoreFileQueueService {
         } catch (IOException e) {
             throw ApiException.badRequest("Nie udało się odczytać pliku");
         }
+        return add(storeId, folderKey, label, groupKey, groupLabel, name, content, userId);
+    }
+
+    /**
+     * Plik złożony przez serwer (np. cenówki po makrze promocji z kolektora); {@code userId} pusty = bez osoby. Agent
+     * sklepu zapisze go jak plik z przeglądarki.
+     */
+    @Transactional
+    public FileQueueItemResponse add(UUID storeId, String folderKey, String label, String groupKey,
+            String groupLabel, String name, byte[] content, UUID userId) {
         String group = trimmed(groupKey, 200);
         String groupName = group == null ? null : trimmed(groupLabel, 300);
         StoreFileQueueItem saved = queue.saveAndFlush(new StoreFileQueueItem(storeId, folderKey, label, group,
-                groupName == null ? group : groupName, name, content, user(userId)));
+                groupName == null ? group : groupName, name, content, userId == null ? null : user(userId)));
         publish(storeId, "added", saved.getId(), name, label, null, Map.of());
         events.publishEvent(new FileQueued(storeId, saved.getId()));
         return pending(storeId).stream().filter(item -> item.id().equals(saved.getId())).findFirst()

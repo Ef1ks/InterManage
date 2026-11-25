@@ -9,12 +9,12 @@ using System.Windows.Forms;
 namespace Intermanage.Collector
 {
     /// <summary>
-    /// Okno kolektora: ekran główny (1 Skanowanie, 2 Protokoły) i dwa narzędzia. W obu jest pole skanowania i szukania,
+    /// Okno kolektora: ekran główny (1 Skanowanie, 2 Protokoły, 3 Ustaw promocje) i trzy narzędzia. W obu jest pole skanowania i szukania,
     /// a fokus zawsze wraca do pola, więc kolejny skan działa z każdego miejsca. Treść wyższa niż ekran dostaje suwak.
     /// </summary>
-    internal class MainForm : Form
+    internal partial class MainForm : Form
     {
-        private enum Mode { Pair, Home, Scan, Protocol }
+        private enum Mode { Pair, Home, Scan, Protocol, Promo, Printer }
 
         private const int HeaderHeight = 28;
         private const int FooterHeight = 24;
@@ -82,7 +82,7 @@ namespace Intermanage.Collector
 
         public MainForm()
         {
-            sync = new Sync(protocols);
+            sync = new Sync(protocols, promos);
             Text = Native.ProgramTitle;
             BackColor = Theme.Paper;
             FormBorderStyle = FormBorderStyle.None;
@@ -98,6 +98,8 @@ namespace Intermanage.Collector
             quantityInput.MaxLength = 9;
             quantityInput.TextChanged += new EventHandler(OnQuantityTyped);
             quantity.Controls.Add(quantityInput);
+            SetUpLists();
+            SetUpPrinters();
 
             home.Chosen += new EventHandler(OnHomeChosen);
             unit.Chosen += new EventHandler(OnUnitChosen);
@@ -106,7 +108,7 @@ namespace Intermanage.Collector
             header.MouseDown += new MouseEventHandler(OnHeader);
             footer.MouseDown += new MouseEventHandler(OnFooter);
             scroll.ValueChanged += new EventHandler(OnScroll);
-            views = new Control[] { home, unit, list, card, protocol, message, quantity };
+            views = new Control[] { home, unit, list, card, protocol, message, quantity, promoList, price, calendar, ask, printerList };
             foreach (Control item in views)
             {
                 ScrollView scrolled = item as ScrollView;
@@ -133,6 +135,7 @@ namespace Intermanage.Collector
             install.Enabled = false;
             install.Click += new EventHandler(OnInstallVersion);
             menu.MenuItems.Add(install);
+            AddMenu("Drukarka", new EventHandler(OnPrinterMenu));
             AddMenu("Stan sieci", new EventHandler(OnNetwork));
             AddMenu("O programie", new EventHandler(OnAbout));
             AddMenu("Zamknij program", new EventHandler(OnCloseProgram));
@@ -181,6 +184,7 @@ namespace Intermanage.Collector
             }
             OpenCatalog();
             protocols.Load();
+            promos.Load();
             Arrange();
             GoHome();
             clock.Enabled = true;
@@ -241,7 +245,10 @@ namespace Intermanage.Collector
 
         private bool InputShown
         {
-            get { return (mode == Mode.Scan || mode == Mode.Protocol) && view != quantity && view != unit; }
+            get
+            {
+                return (mode == Mode.Scan || mode == Mode.Protocol || mode == Mode.Promo) && !Entering && view != ask;
+            }
         }
 
         private void Arrange()
@@ -256,6 +263,7 @@ namespace Intermanage.Collector
             pairCode.Bounds = new Rectangle(8, 118, width - 16, pairCode.Height);
             pairButton.Bounds = new Rectangle(8, 168, width - 16, 40);
             quantityInput.Bounds = new Rectangle(QuantityView.InputLeft, QuantityView.InputTop, 130, quantityInput.Height);
+            priceInput.Bounds = new Rectangle(PriceView.InputLeft, PriceView.InputTop, 130, priceInput.Height);
             PlaceView();
         }
 
@@ -342,6 +350,15 @@ namespace Intermanage.Collector
             {
                 quantityInput.Focus();
             }
+            else if (view == price)
+            {
+                priceInput.Focus();
+            }
+            else if (view == calendar || view == ask)
+            {
+                keys.Text = "";
+                keys.Focus();
+            }
             else if (InputShown)
             {
                 input.Focus();
@@ -373,13 +390,9 @@ namespace Intermanage.Collector
 
         private void RefreshHome()
         {
-            int count = protocols.Count;
-            int waiting = ProtocolStore.Waiting.Length;
-            string note = count > 0 ? "Na liście: " + count + " poz."
-                : waiting > 0 ? "Do wysłania: " + waiting + ", włóż na podstawkę"
-                : protocols.LastSent.Length > 0 ? "Wysłano " + protocols.LastSent : "Skanuj, wpisz ilość, Enter";
-            home.Show(new string[] { "Skanowanie", "Protokoły" }, new string[] {
-                catalog == null ? "Brak danych, zostaw na podstawce" : catalog.Count + " artykułów", note });
+            home.Show(new string[] { "Skanowanie", "Protokoły", "Ustaw promocje" }, new string[] {
+                catalog == null ? "Brak danych, zostaw na podstawce" : "Sprawdź informacje o produkcie",
+                "Stwórz dowolny protokół", "Cena promocji i koniec, potem Mercalys" });
         }
 
         private void OnHomeChosen(object sender, EventArgs e)
@@ -392,14 +405,18 @@ namespace Intermanage.Collector
             input.Text = "";
             searched = "";
             openedFromList = false;
-            mode = option == 0 ? Mode.Scan : Mode.Protocol;
+            mode = option == 0 ? Mode.Scan : option == 1 ? Mode.Protocol : Mode.Promo;
             if (mode == Mode.Scan)
             {
                 ShowScanStart();
             }
-            else
+            else if (mode == Mode.Protocol)
             {
                 ShowProtocol();
+            }
+            else
+            {
+                ShowPromo();
             }
         }
 
@@ -427,13 +444,8 @@ namespace Intermanage.Collector
                 ShowView(protocol);
                 return;
             }
-            string sent = protocols.LastSent.Length > 0 ? "Ostatnia lista wysłana: " + protocols.LastSent + ".\n" : "";
-            int waiting = ProtocolStore.Waiting.Length;
-            if (waiting > 0)
-            {
-                sent = "Do wysłania czeka list: " + waiting + ". Włóż kolektor na podstawkę.\n";
-            }
-            message.Show("Lista jest pusta", sent + "Zeskanuj artykuł, wpisz ilość i naciśnij Enter.", false);
+            message.Show("Lista jest pusta", "Zeskanuj artykuł, wpisz ilość i naciśnij Enter. Na podstawce kolektor "
+                + "zapyta, czy wysłać listę do Intermanage.", false);
             ShowView(message);
         }
 
@@ -452,6 +464,10 @@ namespace Intermanage.Collector
                 if (view == protocol)
                 {
                     OnLineChosen(protocol, EventArgs.Empty);
+                }
+                else if (view == promoList)
+                {
+                    OnPromoChosen(promoList, EventArgs.Empty);
                 }
                 return;
             }
@@ -497,9 +513,15 @@ namespace Intermanage.Collector
             if (mode == Mode.Scan)
             {
                 shownMatch = match;
-                card.Show(catalog, article, match.ScaleCode.Length == 0 ? ""
-                    : Catalog.ScaleNote(match.ScaleCode, article, weightIn24));
+                // Bez przełącznika kodów 24 karta nie zgaduje, czy koniec kodu 24 to cena, czy waga.
+                bool known = match.ScaleCode.Length > 0 && match.ScaleCode[1] != '4';
+                card.Show(catalog, article, known ? Catalog.ScaleNote(match.ScaleCode, article, false) : "");
                 ShowView(card);
+                return;
+            }
+            if (mode == Mode.Promo)
+            {
+                OpenPromo(article);
                 return;
             }
             // Etykieta wagi ma w kodzie cenę albo wagę, więc na listę idzie EAN artykułu z kartoteki.
@@ -523,7 +545,6 @@ namespace Intermanage.Collector
             pendingArticle = article;
             scaleCode = match.ScaleCode;
             editedLine = null;
-            protocols.Editing = true;
             if (article.Multipack > 1 && !label)
             {
                 AskUnit(line.Numerator == 1 && line.Denominator > 1);
@@ -618,7 +639,6 @@ namespace Intermanage.Collector
             pending = null;
             scaleCode = "";
             editedLine = line;
-            protocols.Editing = true;
             quantity.Show(null, line.Name, line.Brand, line.Numerator, line.Denominator, true);
             quantityInput.Text = ProtocolLine.Number(line.Entered).Replace('.', ',');
             ShowView(quantity);
@@ -716,7 +736,6 @@ namespace Intermanage.Collector
             pendingArticle = null;
             scaleCode = "";
             editedLine = null;
-            protocols.Editing = false;
             searched = "";
             input.Text = "";
             ShowProtocol();
@@ -749,6 +768,12 @@ namespace Intermanage.Collector
         protected override void OnKeyDown(KeyEventArgs e)
         {
             lastInput = Environment.TickCount;
+            if (mode != Mode.Pair && ListKeyDown(e))
+            {
+                e.Handled = true;
+                base.OnKeyDown(e);
+                return;
+            }
             ScrollView scrolled = view as ScrollView;
             if (mode != Mode.Pair && scrolled != null)
             {
@@ -802,6 +827,14 @@ namespace Intermanage.Collector
                 e.Handled = true;
                 Back();
             }
+            else if (ListKeyPress(e, enter))
+            {
+                // Promocje, kalendarz i pytania.
+            }
+            else if (PrinterKeyPress(e, enter))
+            {
+                // Wybór drukarki.
+            }
             else if (mode == Mode.Home)
             {
                 e.Handled = true;
@@ -809,7 +842,7 @@ namespace Intermanage.Collector
                 {
                     Open(home.Selected);
                 }
-                else if (e.KeyChar == '1' || e.KeyChar == '2')
+                else if (e.KeyChar >= '1' && e.KeyChar <= '3')
                 {
                     Open(e.KeyChar - '1');
                 }
@@ -853,7 +886,7 @@ namespace Intermanage.Collector
 
         private void Back()
         {
-            if (mode == Mode.Home || mode == Mode.Pair)
+            if (mode == Mode.Pair || BackInLists() || BackInPrinters() || mode == Mode.Home)
             {
                 return;
             }
@@ -877,6 +910,10 @@ namespace Intermanage.Collector
             else if (mode == Mode.Scan)
             {
                 ShowScanStart();
+            }
+            else if (mode == Mode.Promo)
+            {
+                ShowPromo();
             }
             else
             {
@@ -921,6 +958,15 @@ namespace Intermanage.Collector
                 }
                 return;
             }
+            if (mode == Mode.Printer)
+            {
+                OnPrinterScanned(code);
+                return;
+            }
+            if (!BeforeScan())
+            {
+                return;
+            }
             if (mode == Mode.Home)
             {
                 Open(0);
@@ -962,7 +1008,7 @@ namespace Intermanage.Collector
         {
             int battery = Native.Battery;
             string right = (battery < 0 ? "" : battery + "%  ") + "Menu";
-            bool inside = mode == Mode.Scan || mode == Mode.Protocol;
+            bool inside = mode == Mode.Scan || mode == Mode.Protocol || mode == Mode.Promo || mode == Mode.Printer;
             string title = Settings.StoreNumber.Length > 0 ? "Intermanage " + Settings.StoreNumber : "Intermanage";
             if (view == list)
             {
@@ -972,15 +1018,33 @@ namespace Intermanage.Collector
             {
                 title = "Skanowanie";
             }
+            else if (mode == Mode.Printer)
+            {
+                title = "Drukarka";
+            }
+            else if (view == ask)
+            {
+                title = "Na podstawce";
+            }
+            else if (view == calendar)
+            {
+                title = calendarFor == CalendarFor.Start ? "Początek promocji" : "Koniec promocji";
+            }
             else if (mode == Mode.Protocol)
             {
-                title = "Protokół: " + protocols.Count + " poz.";
+                title = "Protokół: " + protocols.Count + " poz." + Sent(protocols);
+            }
+            else if (mode == Mode.Promo)
+            {
+                title = "Promocje: " + promos.Count + " art." + Sent(promos);
             }
             header.Show(inside ? Bar.Icon.Back : Bar.Icon.None, title, right, Theme.Ink, Color.White, -1);
 
-            Bar.Icon icon = mode != Mode.Protocol || view == quantity || view == unit ? Bar.Icon.None
-                : protocols.Count > 0 ? Bar.Icon.Trash : protocols.CanRestore ? Bar.Icon.Undo : Bar.Icon.None;
-            footer.ShowToggle(inside ? weightIn24 ? "24: kg" : "24: zł" : "", weightIn24);
+            ListStore store = mode == Mode.Protocol ? (ListStore)protocols : mode == Mode.Promo ? promos : null;
+            Bar.Icon icon = store == null || Entering || view == ask ? Bar.Icon.None
+                : store.Count > 0 ? Bar.Icon.Trash : store.CanRestore ? Bar.Icon.Undo : Bar.Icon.None;
+            // Przełącznik kodów 24 tylko w protokole: tam koniec kodu daje ilość.
+            footer.ShowToggle(mode == Mode.Protocol && view != ask ? weightIn24 ? "24: kg" : "24: zł" : "", weightIn24);
             if (sync.Percent >= 0)
             {
                 footer.Show(icon, sync.Status, sync.Percent + "%", Theme.Panel, Theme.Ink, sync.Percent);
@@ -1006,6 +1070,12 @@ namespace Intermanage.Collector
             {
                 footer.Show(icon, "Dane aktualne", DataTime(), Theme.GoodBack, Theme.Good, -1);
             }
+        }
+
+        /// <summary>Dopisek w nagłówku listy: wysłana i od tej pory niezmieniona.</summary>
+        private static string Sent(ListStore store)
+        {
+            return store.SentAt != DateTime.MinValue && !store.Unsent && store.Count > 0 ? ", wysłana" : "";
         }
 
         private string DataTime()
@@ -1036,6 +1106,11 @@ namespace Intermanage.Collector
             if (footer.OnToggle(e.X))
             {
                 OnToggle24();
+                return;
+            }
+            if (footer.OnIcon(e.X) && mode == Mode.Promo)
+            {
+                OnResetPromo();
                 return;
             }
             if (footer.OnIcon(e.X))
@@ -1232,7 +1307,12 @@ namespace Intermanage.Collector
             {
                 ShowProtocol();
             }
+            else if (mode == Mode.Promo && view == promoList)
+            {
+                ShowPromo();
+            }
             UpdateBars();
+            CheckLists();
         }
 
         private void OnRolledBack(object sender, EventArgs e)
@@ -1337,7 +1417,8 @@ namespace Intermanage.Collector
                 return;
             }
             sync.RestartWhenStuck();
-            if (sync.ReadyVersion.Length > 0 && sync.Percent < 0 && Native.OnCradle && view != quantity && view != unit
+            CheckLists();
+            if (sync.ReadyVersion.Length > 0 && sync.Percent < 0 && Native.OnCradle && !Entering && view != ask
                 && Environment.TickCount - lastInput > IdleBeforeUpdate)
             {
                 OnInstallVersion(sender, e);

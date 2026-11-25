@@ -43,6 +43,8 @@ import {
   updatePromoTile,
 } from '@/store/promoSetupDraftSlice'
 
+import { markPromotionInserted } from '@/features/collectors/promotions-api'
+
 import { fetchPromoArticles, savePromoLabels } from './api'
 import { DiscountLevelsDialog } from './DiscountLevelsDialog'
 import type { PromoSetupHandoff } from './paths'
@@ -212,7 +214,7 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
   }
 
   /** Dopisuje artykuły do kafelka; artykuł, który już w nim jest, pomija, a nieznany kod zostaje wierszem z błędem. */
-  const addCodes = async (tileId: string, entered: string[]) => {
+  const addCodes = async (tileId: string, entered: string[], preset?: PromoSetupHandoff['promoItems']) => {
     // Krótki kod to ITM8 albo kod z etykiety wagi bez końca, więc szukamy obu.
     const keys = entered.flatMap((code) => [codeKey(code), codeKey(paddedScaleCode(code))])
     const articles = await fetchPromoArticles(store.id, [...new Set(keys)]).catch(() => null)
@@ -231,13 +233,17 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
       if (present.has(key)) repeated += 1
       else {
         present.add(key)
+        const given = preset?.[entry]
         rows.push({
           id: crypto.randomUUID(),
           code,
           article,
-          price: null,
-          discount: null,
-          ...(macro && { dateTo: tile?.dateTo ?? '' }),
+          price: given?.price ?? null,
+          // Cena z kolektora równa przecenie ze stopni sklepu (np. −30%) zostaje tą przeceną.
+          discount: given
+            ? (levels.find((level) => discountedPrice(article?.regularPrice ?? null, level) === given.price) ?? null)
+            : null,
+          ...(macro && { dateTo: given?.dateTo ?? tile?.dateTo ?? '' }),
         })
       }
     }
@@ -248,19 +254,34 @@ function StorePromoSetup({ store, mode }: { store: StoreSummary; mode: PromoMode
     return rows.length
   }
 
-  // Artykuły przeniesione z wprowadzania danych: do kafelka makra, ceny promocji uzupełnia się tutaj.
+  // Artykuły przeniesione z wprowadzania danych (ceny promocji uzupełnia się tutaj) albo z kolektora (z cenami
+  // i końcami): do kafelka makra.
   const location = useLocation()
   const navigate = useNavigate()
   const handedOff = useRef(false)
   useEffect(() => {
-    const codes = (location.state as PromoSetupHandoff | null)?.promoCodes
-    if (!macro || handedOff.current || !codes?.length) return
+    const handoff = location.state as PromoSetupHandoff | null
+    const codes = handoff?.promoCodes
+    if (!macro || handedOff.current || !handoff || !codes?.length) return
     handedOff.current = true
     navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
     const tileId = draftsOf(mode)[store.id]?.tiles[0]?.id
     if (!tileId) return
-    void addCodes(tileId, codes).then((added) => {
-      if (added) toast.success(`Dodano z wprowadzania danych: ${added}`, { description: 'Uzupełnij ceny promocji.' })
+    const start = handoff.promoStart
+    if (start && start > todayIso()) {
+      dispatch(updatePromoTile({ storeId: store.id, mode, tileId, changes: { macroStart: start } }))
+    }
+    const source = handoff.promoSource
+    void addCodes(tileId, codes, handoff.promoItems).then((added) => {
+      if (added === undefined) return
+      if (source?.collectorPromotionId) {
+        void markPromotionInserted(store.id, source.collectorPromotionId).catch(() => undefined)
+        toast.success(`Dodano ${source.label}: ${added}`, {
+          description: added < codes.length ? `Już w promocji: ${codes.length - added}` : undefined,
+        })
+      } else if (added) {
+        toast.success(`Dodano z wprowadzania danych: ${added}`, { description: 'Uzupełnij ceny promocji.' })
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- raz po wejściu z wprowadzania danych
   }, [location.state])

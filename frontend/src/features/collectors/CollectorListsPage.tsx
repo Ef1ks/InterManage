@@ -467,6 +467,7 @@ function Rows({ details }: { details: CollectorListDetails }) {
             <TableHead>Nazwa</TableHead>
             <TableHead>Marka</TableHead>
             <TableHead className="text-right">Zakup netto</TableHead>
+            <TableHead className="text-right">Zakup × ilość</TableHead>
             <TableHead className="text-right">Sprzedaż szt.</TableHead>
             <TableHead className="text-right">Sprz. × ilość</TableHead>
             <TableHead className="text-right">Marża %</TableHead>
@@ -503,6 +504,7 @@ function Rows({ details }: { details: CollectorListDetails }) {
               </TableCell>
               <TableCell>{row.brand}</TableCell>
               <TableCell className="text-right tabular-nums">{amount(row.purchasePrice)}</TableCell>
+              <TableCell className="text-right tabular-nums">{amount(row.purchaseValue)}</TableCell>
               <TableCell className="text-right tabular-nums">{amount(row.salePrice)}</TableCell>
               <TableCell className="text-right tabular-nums">{amount(row.saleValue)}</TableCell>
               <TableCell
@@ -521,9 +523,11 @@ function Rows({ details }: { details: CollectorListDetails }) {
         </TableBody>
         <TableFooter>
           <TableRow>
-            <TableCell colSpan={6}>
+            <TableCell colSpan={5}>
               Razem: {details.rows.length} {details.rows.length === 1 ? 'artykuł' : 'artykułów'}
             </TableCell>
+            <TableCell className="text-right tabular-nums">{amount(details.totalPurchaseValue)}</TableCell>
+            <TableCell />
             <TableCell className="text-right tabular-nums">{amount(details.totalSaleValue)}</TableCell>
             <TableCell />
             <TableCell className="text-right tabular-nums">{quantity.format(details.totalQuantity)}</TableCell>

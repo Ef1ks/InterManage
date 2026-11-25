@@ -241,6 +241,16 @@ public class AgentMacroService {
                 CadPriorityMacro.build(items), null, items.size(), agentId, userId);
     }
 
+    /**
+     * Promocje z kolektora ({@code CollectorPromotionService}). Zlecone z kolektora nie mają osoby ({@code userId}
+     * puste), ale czekają w kolejce jak zlecenia z przeglądarki i podlegają przełącznikowi makr z przeglądarki.
+     */
+    @Transactional
+    public AgentMacroApi.Job promotions(UUID storeId, String title, String macro, int itemCount, UUID agentId,
+            UUID userId) {
+        return create(storeId, AgentMacroKind.PROMO_ENTRY, title, macro, null, itemCount, agentId, userId);
+    }
+
     /** Czy któryś komputer sklepu może teraz dostać makro serwera (trwające makro sklepu odrzuci samo zlecenie). */
     @Transactional(readOnly = true)
     public boolean canRun(UUID storeId, AgentMacroKind kind) {
@@ -341,7 +351,7 @@ public class AgentMacroService {
         sweep(storeId, now);
         // Makra po zapisie pliku i po aktualizacji danych mają własne przełączniki.
         boolean automatic = kind == AgentMacroKind.PRODUCT_FILES || kind == AgentMacroKind.PRICE_CONTROL
-                || userId == null;
+                || userId == null && kind != AgentMacroKind.PROMO_ENTRY;
         if (!automatic && !features.isOn(storeId, AgentFeature.REMOTE_MACROS)) {
             throw ApiException.conflict("Makra zlecane z przeglądarki są w tym sklepie wyłączone "
                     + "(Ustawienia sklepu → Agent sklepu).");
@@ -386,7 +396,8 @@ public class AgentMacroService {
      * aktualizacji danych) czeka u siebie, więc bez komputera kończy się „Żaden komputer nie jest wolny”.
      */
     private static boolean queueable(AgentMacroJob job) {
-        return job.getCreatedBy() != null && !SERVER_KINDS.contains(job.getKind());
+        return (job.getCreatedBy() != null || job.getKind() == AgentMacroKind.PROMO_ENTRY)
+                && !SERVER_KINDS.contains(job.getKind());
     }
 
     /**

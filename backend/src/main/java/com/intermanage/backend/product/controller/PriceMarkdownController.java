@@ -1,7 +1,9 @@
 package com.intermanage.backend.product.controller;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
@@ -19,8 +21,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.intermanage.backend.auth.security.AppUserPrincipal;
+import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.dataentry.component.LabelFile;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService.ProtocolFile;
+import com.intermanage.backend.product.dto.PriceLabelsFileRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownBatchRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownIdsRequest;
 import com.intermanage.backend.product.dto.PriceMarkdownItem;
@@ -93,9 +97,15 @@ public class PriceMarkdownController {
     @PostMapping("/labels-file")
     @PreAuthorize(LABELS)
     public ResponseEntity<byte[]> labelsFile(@PathVariable UUID storeId,
-            @Valid @RequestBody PriceMarkdownIdsRequest request,
+            @Valid @RequestBody PriceLabelsFileRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        ProtocolFile file = markdowns.labels(storeId, request.ids(), principal.getId(), principal.getUsername());
+        Map<UUID, Integer> counts = new LinkedHashMap<>();
+        request.chosen().forEach(item -> counts.merge(item.id(), item.count(), Math::max));
+        if (counts.isEmpty()) {
+            throw ApiException.badRequest("Wybierz cenówki do pliku");
+        }
+        ProtocolFile file = markdowns.labels(storeId, counts, request.name(), principal.getId(),
+                principal.getUsername());
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

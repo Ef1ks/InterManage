@@ -44,9 +44,9 @@ public class CollectorListPdf {
     private static final float MARGIN = 24;
     private static final float MARGIN_BOTTOM = 40;
 
-    private static final String[] HEADERS = {"Lp.", "ITM8", "EAN", "Nazwa", "Marka", "Zakup netto", "Sprzedaż szt.",
-        "Wartość sprzedaży", "Marża %", "Ilość"};
-    private static final float[] WIDTHS = {22, 48, 72, 220, 96, 58, 60, 72, 46, 50};
+    private static final String[] HEADERS = {"Lp.", "ITM8", "EAN", "Nazwa", "Marka", "Zakup netto", "Wartość zakupu",
+        "Sprzedaż szt.", "Wartość sprzedaży", "Marża %", "Ilość"};
+    private static final float[] WIDTHS = {22, 48, 72, 196, 88, 54, 64, 56, 64, 44, 46};
     private static final int TEXT_COLUMNS = 5;
 
     private final BaseFont regular;
@@ -116,6 +116,7 @@ public class CollectorListPdf {
             table.addCell(cell(row.name(), text, false));
             table.addCell(cell(row.brand(), text, false));
             table.addCell(cell(money(row.purchasePrice()), text, true));
+            table.addCell(cell(money(row.purchaseValue()), text, true));
             table.addCell(cell(money(row.salePrice()), text, true));
             table.addCell(cell(money(row.saleValue()), text, true));
             table.addCell(cell(row.marginPercent() == null ? "" : money(row.marginPercent()), text, true));
@@ -123,8 +124,10 @@ public class CollectorListPdf {
         }
         Font total = font(bold, 8, INK);
         PdfPCell label = cell("Razem", total, false);
-        label.setColspan(7);
+        label.setColspan(6);
         table.addCell(label);
+        table.addCell(cell(money(details.totalPurchaseValue()), total, true));
+        table.addCell(cell("", total, true));
         table.addCell(cell(money(details.totalSaleValue()), total, true));
         table.addCell(cell("", total, true));
         table.addCell(cell(quantity(details.totalQuantity()), total, true));

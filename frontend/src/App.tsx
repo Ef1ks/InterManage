@@ -12,6 +12,7 @@ import { BakeryCheckPage } from '@/features/bakery-check/BakeryCheckPage'
 import { bakeryPath } from '@/features/bakery-check/paths'
 import { CollectorDevicesPage } from '@/features/collectors/CollectorDevicesPage'
 import { CollectorListsPage } from '@/features/collectors/CollectorListsPage'
+import { CollectorPromotionsPage } from '@/features/collectors/CollectorPromotionsPage'
 import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { ProtocolEntryPage } from '@/features/protocol-entry/ProtocolEntryPage'
@@ -162,6 +163,14 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <CollectorListsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: collectorPaths.promotions,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <CollectorPromotionsPage />
           </RequireAuth>
         ),
       },

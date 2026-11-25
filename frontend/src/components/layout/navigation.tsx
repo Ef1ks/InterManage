@@ -36,6 +36,7 @@ import { cadPriorityPath } from '@/features/cad-priority/paths'
 import { meaOnlinePath } from '@/features/mea/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
 import { CollectorListsBadge } from '@/features/collectors/CollectorListsBadge'
+import { CollectorPromotionsBadge } from '@/features/collectors/CollectorPromotionsBadge'
 import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
 import { promoSetupPath } from '@/features/promo-setup/paths'
@@ -296,7 +297,7 @@ const GROUPS: GroupSpec[] = [
     key: 'collectors',
     path: collectorPaths.group,
     label: 'Kolektory',
-    description: 'Listy zeskanowane na kolektorach, protokoły z nich i urządzenia sklepu.',
+    description: 'Listy i promocje z kolektorów, protokoły z nich i urządzenia sklepu.',
     icon: ScanBarcodeIcon,
     items: [
       {
@@ -309,10 +310,19 @@ const GROUPS: GroupSpec[] = [
         badge: () => <CollectorListsBadge />,
       },
       {
+        key: 'collector-promotions',
+        path: collectorPaths.promotions,
+        label: 'Promocje z kolektorów',
+        description: 'Promocje ustawione na kolektorze: do Ustaw promocje albo od razu w Mercalys z cenówkami.',
+        icon: BadgePercentIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+        badge: () => <CollectorPromotionsBadge />,
+      },
+      {
         key: 'collector-devices',
         path: collectorPaths.devices,
         label: 'Urządzenia',
-        description: 'Instalator, kod do połączenia i stan danych na kolektorach.',
+        description: 'Instalator, kod do połączenia, stan danych na kolektorach i drukarki Bluetooth.',
         icon: ScanBarcodeIcon,
         visible: (me) => hasPermission(me, 'INVENTORY', 'EDIT'),
       },

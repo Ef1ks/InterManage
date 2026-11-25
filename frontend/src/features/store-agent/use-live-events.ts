@@ -103,6 +103,16 @@ export function useLiveEvents() {
                 'success',
               )
             }
+            if (message.action === 'promotion' && hearsCollectors) {
+              announce(
+                `Promocje z kolektora: ${text(message.collector) ?? ''}`,
+                message.macro
+                  ? `Artykułów: ${String(message.lines)}. Komputer sklepu ustawi je w Mercalys, potem cenówki.`
+                  : `Artykułów: ${String(message.lines)}. Wstaw je w Kolektory, Promocje z kolektorów.`,
+                `collector-promotion:${String(message.id)}`,
+                'success',
+              )
+            }
             break
           case 'price-files':
             invalidate('price-files')

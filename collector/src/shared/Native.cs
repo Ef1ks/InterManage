@@ -86,6 +86,15 @@ namespace Intermanage.Collector
             }
         }
 
+        /// <summary>Zwykły dźwięk (pytanie na ekranie).</summary>
+        public static void Beep()
+        {
+            if (OnDevice)
+            {
+                MessageBeep(0x20);
+            }
+        }
+
         public static void ErrorBeep()
         {
             if (OnDevice)

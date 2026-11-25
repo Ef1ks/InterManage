@@ -60,6 +60,20 @@ namespace Intermanage.Collector
             return day == DateTime.MinValue ? "–" : day.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture);
         }
 
+        private static readonly string[] DayNames = new string[] { "Nd", "Pn", "Wt", "Śr", "Cz", "Pt", "So" };
+
+        /// <summary>„Nd 07.12.2026”; brak daty → kreska.</summary>
+        public static string DayName(DateTime day)
+        {
+            return day == DateTime.MinValue ? "–" : DayNames[(int)day.DayOfWeek] + " " + Day(day);
+        }
+
+        /// <summary>„07.12”; brak daty → kreska.</summary>
+        public static string Short(DateTime day)
+        {
+            return day == DateTime.MinValue ? "–" : day.ToString("dd.MM", CultureInfo.InvariantCulture);
+        }
+
         public static bool IsNegativeOrZero(string value)
         {
             return value.Length == 0 || decimal.Parse(value, CultureInfo.InvariantCulture) <= 0;

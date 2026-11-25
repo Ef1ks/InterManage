@@ -57,6 +57,15 @@ namespace Intermanage.Collector
             return HasPromotion && PromoFrom <= day && day <= PromoTo;
         }
 
+        /// <summary>
+        /// Cena zwykła tego dnia (od niej liczą się przeceny): w trwającej promocji cena zwykła z niej, inaczej cena
+        /// z kartoteki. Pusta, gdy artykuł nie ma ceny.
+        /// </summary>
+        public string RegularOn(DateTime day)
+        {
+            return PromotionOn(day) && PromoRegular.Length > 0 ? PromoRegular : SalePrice;
+        }
+
         /// <summary>Cena na kasie tego dnia: w promocji promocyjna, inaczej zwykła.</summary>
         public string PriceOn(DateTime day)
         {
