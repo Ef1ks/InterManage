@@ -96,7 +96,7 @@ public class RequestLimits {
         return switch (method) {
             case "POST" -> path.equals("/api/auth/login") || path.equals("/api/auth/mobile/login")
                     || path.equals("/api/auth/activate") || path.equals("/api/auth/password/setup")
-                    || path.equals("/api/auth/accounts") || SWITCH.matcher(path).matches();
+                    || path.equals("/api/auth/accounts") || path.equals("/api/collector/pair") || SWITCH.matcher(path).matches();
             case "PUT" -> path.equals("/api/auth/pin") || path.equals("/api/auth/pin/required")
                     || path.equals("/api/auth/password");
             default -> false;

@@ -57,6 +57,7 @@ public class SecurityConfig {
                 // Aplikacja mobilna wysyła token w nagłówku Authorization, którego przeglądarka sama nie dołącza
                 // (a bez CORS strona z innego originu nie może go ustawić), więc CSRF jej nie dotyczy.
                 .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/time-clock/**", "/api/store-agent/**",
+                                "/api/collector/**",
                                 "/api/auth/mobile/login")
                         .ignoringRequestMatchers(request -> JwtService.bearerToken(request) != null))
                 .authorizeHttpRequests(auth -> auth
@@ -79,6 +80,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/time-clock/**").permitAll()
                         // Agent sklepu przedstawia się własnym kluczem (StoreAgentApiController).
                         .requestMatchers("/api/store-agent/**").permitAll()
+                        // Kolektor przedstawia się własnym kluczem (CollectorApiController).
+                        .requestMatchers("/api/collector/**").permitAll()
                         // Jedyne endpointy dostępne, zanim użytkownik ustawi własne hasło.
                         .requestMatchers("/api/auth/me", "/api/auth/password/setup").authenticated()
                         .requestMatchers("/api/settings/**").hasAuthority(AppUserPrincipal.OWNER_AUTHORITY)

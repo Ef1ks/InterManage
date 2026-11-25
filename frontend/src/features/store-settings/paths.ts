@@ -13,4 +13,5 @@ export const storeSettingsPaths = {
   aiUsage: `${base}/zuzycie-ai`,
   agent: `${base}/agent`,
   folders: `${base}/sciezki`,
+  collectors: `${base}/kolektory`,
 }

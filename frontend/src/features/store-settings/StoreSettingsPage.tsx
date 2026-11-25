@@ -10,6 +10,7 @@ import {
   PanelLeftIcon,
   PercentIcon,
   ScaleIcon,
+  ScanBarcodeIcon,
   SparklesIcon,
   StoreIcon,
   TagIcon,
@@ -29,6 +30,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCan, useCurrentUser } from '@/features/auth/api'
+import { useCollectors } from '@/features/collectors/api'
+import { CollectorSettings } from '@/features/collectors/CollectorSettings'
 import { countFormat } from '@/features/documents/format'
 import { usePriceCheckSettings, useRegionBudgets } from '@/features/sales/api'
 import {
@@ -82,6 +85,7 @@ export function StoreSettingsPage() {
   const canEditMeat = useCan('MEAT_PURCHASES', 'EDIT')
   const canUseAi = canEditDataEntry || canEditMeat
   const canSeeAgents = useCan('STORE_AGENT')
+  const canEditInventory = useCan('INVENTORY', 'EDIT')
   // Ścieżki folderów i menu boczne zmienia każdy, kto ma tu jakieś ustawienie poza samym agentem.
   const hasOtherSettings = canEditSales || canEditDocuments || canEditProto || canUseAi
   if (!store) {
@@ -92,13 +96,13 @@ export function StoreSettingsPage() {
       </>
     )
   }
-  if (!hasOtherSettings && !canSeeAgents) {
+  if (!hasOtherSettings && !canSeeAgents && !canEditInventory) {
     return (
       <>
         <PageHeader title="Ustawienia sklepu" description={storeLabel(store)} />
         <FullPageMessage
           title="Brak uprawnień"
-          description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych albo zamówień garmażu, albo dostępu do agenta sklepu."
+          description="Ustawienia sklepu wymagają edycji sprzedaży, dokumentów, wprowadzania danych, magazynu albo zamówień garmażu, albo dostępu do agenta sklepu."
           inline
         />
       </>
@@ -120,6 +124,7 @@ export function StoreSettingsPage() {
               canEditDataEntry={canEditDataEntry}
               canUseAi={canUseAi}
               canSeeAgents={canSeeAgents}
+              canEditInventory={canEditInventory}
               hasOtherSettings={hasOtherSettings}
             />
           }
@@ -321,6 +326,28 @@ export function StoreSettingsPage() {
             }
           />
         )}
+        {canEditInventory && (
+          <Route
+            path="kolektory"
+            element={
+              <section aria-labelledby="collectors-heading" className="grid gap-4">
+                <BackToSettings />
+                <div>
+                  <h2 id="collectors-heading" className="text-lg font-semibold tracking-tight">
+                    Kolektory
+                  </h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground">
+                    Magazyn artykułów na kolektorze, także bez sieci: cena, promocja, stan, rotacja i dostawa po
+                    zeskanowaniu kodu. Nowe dane kolektor pobiera sam, gdy stoi na podstawce.
+                  </p>
+                </div>
+                <div className="max-w-2xl">
+                  <CollectorSettings key={store.id} storeId={store.id} />
+                </div>
+              </section>
+            }
+          />
+        )}
         {hasOtherSettings && (
           <Route
             path="menu-boczne"
@@ -374,6 +401,7 @@ function SettingsGrid({
   canEditDataEntry,
   canUseAi,
   canSeeAgents,
+  canEditInventory,
   hasOtherSettings,
 }: {
   storeId: string
@@ -383,6 +411,7 @@ function SettingsGrid({
   canEditDataEntry: boolean
   canUseAi: boolean
   canSeeAgents: boolean
+  canEditInventory: boolean
   hasOtherSettings: boolean
 }) {
   const me = useCurrentUser()
@@ -394,6 +423,9 @@ function SettingsGrid({
   const supplierPrices = useSupplierSalePrices(storeId, canEditDataEntry)
   const aiUsage = useAiUsage(storeId, { from: `${currentMonth()}-01`, to: todayIso() }, canUseAi)
   const agents = useStoreAgents(storeId, canSeeAgents)
+  const collectors = useCollectors(storeId, { enabled: canEditInventory })
+  const activeCollectors = collectors.data?.filter((collector) => !collector.deletedAt) ?? []
+  const currentCollectors = activeCollectors.filter((collector) => collector.catalogCurrent).length
   const locations = useStoreLocations(storeId)
   const activeAgents = agents.data?.agents.filter((agent) => !agent.deletedAt) ?? []
   const visibleProtocols = proto.data && PROTOCOLS.length - proto.data.hiddenProtocols.length
@@ -528,6 +560,21 @@ function SettingsGrid({
                   : activeAgents.length
                     ? 'Przez agenta · offline, działa przeglądarka'
                     : 'Przez agenta · brak agenta'
+              : ' '
+          }
+        />
+      )}
+      {canEditInventory && (
+        <SettingsTile
+          to={paths.collectors}
+          icon={ScanBarcodeIcon}
+          title="Kolektory"
+          description="Magazyn artykułów na kolektorach, dane pobierane na podstawce."
+          status={
+            collectors.data
+              ? activeCollectors.length
+                ? `Aktualne dane: ${currentCollectors} z ${activeCollectors.length}`
+                : 'Brak kolektorów'
               : ' '
           }
         />

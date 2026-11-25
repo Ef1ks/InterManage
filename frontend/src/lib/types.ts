@@ -5244,6 +5244,26 @@ export type StoreAgent = {
   key: string | null
 }
 
+/** Kolektor sklepu (StoreCollectorResponse); `pairCode` tylko w odpowiedzi, która go utworzyła. */
+export type StoreCollector = {
+  id: string
+  name: string
+  createdAt: string
+  createdBy: string | null
+  pairedAt: string | null
+  pairExpiresAt: string | null
+  pairCode: string | null
+  lastSeenAt: string | null
+  lastVersion: string | null
+  deviceName: string | null
+  catalogSyncedAt: string | null
+  /** Ma dane z ostatnich importów sklepu. */
+  catalogCurrent: boolean
+  /** Nowsza wersja programu, którą kolektor pobierze na podstawce (brak = ma najnowszą). */
+  newVersion: string | null
+  deletedAt: string | null
+}
+
 export type AgentFeatureKey =
   | 'FILE_SAVING'
   | 'PRICE_FILES'

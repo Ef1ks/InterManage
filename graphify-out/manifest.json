@@ -258,9 +258,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1795610324.071779,
-    "seen": 1795610539.513455,
-    "ast_hash": "d6c44a8a0dddc60efa7847bc36a12bb6",
+    "mtime": 1795624809.1181996,
+    "seen": 1795625328.658507,
+    "ast_hash": "6703947e9f7a1248fd5089819bbdce92",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795611329.4507024,
-    "seen": 1795611401.3201106,
-    "ast_hash": "b16f1acae4ebdb628ed5289be0a3e9b4",
+    "mtime": 1795625249.60296,
+    "seen": 1795625328.700623,
+    "ast_hash": "762a2edc534d8bc6ea03886a33c55b73",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -1662,9 +1662,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/auth/config/SecurityConfig.java": {
-    "mtime": 1795513465.759283,
-    "seen": 1795513715.1584375,
-    "ast_hash": "11df80f372a968c6306a58bf9a7129c9",
+    "mtime": 1795622961.543381,
+    "seen": 1795624332.7769363,
+    "ast_hash": "1e3f2d6d30f38b927191f7a28fe26f9d",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/auth/controller/AuthController.java": {
@@ -3672,9 +3672,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/StoreSettingsPage.tsx": {
-    "mtime": 1795606039.3543384,
-    "seen": 1795606232.9360666,
-    "ast_hash": "a827db5d16aaa2f86d05353574b30142",
+    "mtime": 1795624059.943616,
+    "seen": 1795624333.138602,
+    "ast_hash": "c2255848c61cf8fd09006c386c54f82e",
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/api.ts": {
@@ -3996,9 +3996,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/store-settings/paths.ts": {
-    "mtime": 1795156930.5338092,
-    "seen": 1795157118.8674204,
-    "ast_hash": "634c0a8a649b4a906338326dc0ec212a",
+    "mtime": 1795624059.9415975,
+    "seen": 1795624333.138602,
+    "ast_hash": "839c1ddaf5b37542e421f3dc55d29672",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/pricecheck/component/CadencierReportParser.java": {
@@ -6012,9 +6012,9 @@
     "semantic_hash": ""
   },
   "frontend/src/components/layout/navigation.tsx": {
-    "mtime": 1795606015.7092547,
-    "seen": 1795606232.8750665,
-    "ast_hash": "060ab46327ceae20817f82eafc23429a",
+    "mtime": 1795624059.9431021,
+    "seen": 1795624333.069116,
+    "ast_hash": "44ee9af6e6923429bdbb38ca9bf586a9",
     "semantic_hash": ""
   },
   "frontend/src/features/tools/NavGroupPage.tsx": {
@@ -12960,9 +12960,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/auth/security/RequestLimits.java": {
-    "mtime": 1795535253.7135606,
-    "seen": 1795535745.8179562,
-    "ast_hash": "4b32a420719c2509ecd3d43c98504751",
+    "mtime": 1795622961.5443802,
+    "seen": 1795624332.7895885,
+    "ast_hash": "903c061505355ee0ff5d90dbeaf98364",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/dto/ProductImportJobResponse.java": {
@@ -13110,15 +13110,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/activity/component/StoreEventCatalog.java": {
-    "mtime": 1795521159.8770545,
-    "seen": 1795521335.9081216,
-    "ast_hash": "cc0bc4734e90f5ba1f07a2dd17f615dc",
+    "mtime": 1795623019.1839857,
+    "seen": 1795624332.765875,
+    "ast_hash": "8812ba27434054838679b006e502651a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/activity/component/StoreEventFilter.java": {
-    "mtime": 1795386039.0402431,
-    "seen": 1795387732.2021475,
-    "ast_hash": "012bf62c7ca7df13140578ca6415df5c",
+    "mtime": 1795622961.5443802,
+    "seen": 1795624332.765875,
+    "ast_hash": "6819eb983443ef0914417f90594abb63",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/activity/component/StoreEventLogAppender.java": {
@@ -15171,6 +15171,186 @@
     "mtime": 1795609608.034375,
     "seen": 1795610223.3935833,
     "ast_hash": "4e703b14badddbe7880e92afd1ede754",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/component/CollectorCatalogFile.java": {
+    "mtime": 1795623950.366498,
+    "seen": 1795624332.8175519,
+    "ast_hash": "bcc7a0e49820c88df88f8ff36c5b3e65",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/controller/CollectorApiController.java": {
+    "mtime": 1795624809.1151826,
+    "seen": 1795625328.3546762,
+    "ast_hash": "dfc12edc3da8cf81295f4d34655d7d74",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/controller/StoreCollectorController.java": {
+    "mtime": 1795622960.971919,
+    "seen": 1795624332.8175519,
+    "ast_hash": "5d65e5f09b10a5b1dcfa790e3c538350",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/dto/StoreCollectorResponse.java": {
+    "mtime": 1795624809.1161823,
+    "seen": 1795625328.3546762,
+    "ast_hash": "0731e47013c2f19e79f58361af898fff",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/entity/StoreCollector.java": {
+    "mtime": 1795622895.6259787,
+    "seen": 1795624332.8175519,
+    "ast_hash": "93ae16c65472de4e0cc8e468f7f24902",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/mapper/StoreCollectorMapper.java": {
+    "mtime": 1795624809.1161823,
+    "seen": 1795625328.3546762,
+    "ast_hash": "2fce40a94f22f7daea985b223b4d99d1",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/repository/CollectorCatalogRepository.java": {
+    "mtime": 1795622895.711191,
+    "seen": 1795624332.8175519,
+    "ast_hash": "41420a7fd4fb5a6334faf17fd2f9f64a",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/repository/StoreCollectorRepository.java": {
+    "mtime": 1795622895.663504,
+    "seen": 1795624332.8175519,
+    "ast_hash": "d2d389e7759f2c989747b8c90173891e",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/service/CollectorCatalogService.java": {
+    "mtime": 1795623950.366498,
+    "seen": 1795624332.8175519,
+    "ast_hash": "c36be678043c7933e7ebf6a3f50f5503",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/service/StoreCollectorService.java": {
+    "mtime": 1795624809.1166875,
+    "seen": 1795625328.3546762,
+    "ast_hash": "638f69e3423efc8088d86f3a1f630322",
+    "semantic_hash": ""
+  },
+  "backend/src/test/java/com/intermanage/backend/CollectorIntegrationTests.java": {
+    "mtime": 1795624809.1171925,
+    "seen": 1795625328.5615716,
+    "ast_hash": "521e8cc64cc2236513a6b2320a6d4adf",
+    "semantic_hash": ""
+  },
+  "collector/build.ps1": {
+    "mtime": 1795624904.8971064,
+    "seen": 1795625328.578621,
+    "ast_hash": "42d7f019da93a2793c00f1384d3dfcb5",
+    "semantic_hash": ""
+  },
+  "collector/src/Catalog.cs": {
+    "mtime": 1795623300.2761755,
+    "seen": 1795624333.0620856,
+    "ast_hash": "9e9f847c4d5c170d07400cc533b92d65",
+    "semantic_hash": ""
+  },
+  "collector/src/Certificates.cs": {
+    "mtime": 1795623300.2040074,
+    "seen": 1795624333.0620856,
+    "ast_hash": "337c9fe096d9bb35d0a79f2830731e49",
+    "semantic_hash": ""
+  },
+  "collector/src/Http.cs": {
+    "mtime": 1795623649.9955716,
+    "seen": 1795624333.0620856,
+    "ast_hash": "74aa7341c74c6157f289b436d75a60ad",
+    "semantic_hash": ""
+  },
+  "collector/src/MainForm.cs": {
+    "mtime": 1795624754.3378656,
+    "seen": 1795625328.5796206,
+    "ast_hash": "5a4e07f0d9e33936db93c2163ba078d3",
+    "semantic_hash": ""
+  },
+  "collector/src/Program.cs": {
+    "mtime": 1795624754.3378656,
+    "seen": 1795625328.5796206,
+    "ast_hash": "398ef9217a54bc24fd00e6c35d504161",
+    "semantic_hash": ""
+  },
+  "collector/src/Settings.cs": {
+    "mtime": 1795624754.3363533,
+    "seen": 1795625328.5796206,
+    "ast_hash": "db1664d973d8f4d240ca96a523c46100",
+    "semantic_hash": ""
+  },
+  "collector/src/Sync.cs": {
+    "mtime": 1795624809.1151826,
+    "seen": 1795625328.5796206,
+    "ast_hash": "dc614f15ea3ae8414adca299e83d354b",
+    "semantic_hash": ""
+  },
+  "collector/src/Theme.cs": {
+    "mtime": 1795623415.7481816,
+    "seen": 1795624333.0620856,
+    "ast_hash": "73c921e4d295994eac655bacb23a3908",
+    "semantic_hash": ""
+  },
+  "collector/src/Views.cs": {
+    "mtime": 1795623950.3654919,
+    "seen": 1795624333.0620856,
+    "ast_hash": "2294df728ae2390b3941484c37ad683c",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/collectors/CollectorSettings.tsx": {
+    "mtime": 1795624809.1181996,
+    "seen": 1795625328.599671,
+    "ast_hash": "89311accef93a0d5f3d54d16bf57e993",
+    "semantic_hash": ""
+  },
+  "frontend/src/features/collectors/api.ts": {
+    "mtime": 1795624058.4125962,
+    "seen": 1795624333.0816343,
+    "ast_hash": "171ea407b233a49febcfc34c87849174",
+    "semantic_hash": ""
+  },
+  "collector/README.md": {
+    "mtime": 1795625249.6009605,
+    "seen": 1795625328.701622,
+    "ast_hash": "bfc38870e0c3a1ca2dbea4b9abfc82e1",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/component/CollectorProgram.java": {
+    "mtime": 1795624808.6704628,
+    "seen": 1795625328.3546762,
+    "ast_hash": "b0eb28ca56d7197ea03b2979af6130c2",
+    "semantic_hash": ""
+  },
+  "collector/src/Updater.cs": {
+    "mtime": 1795624753.8611536,
+    "seen": 1795625328.5796206,
+    "ast_hash": "5075ae091ee761255586c57d3057bea5",
+    "semantic_hash": ""
+  },
+  "collector/src/launcher/Launcher.cs": {
+    "mtime": 1795624753.7802513,
+    "seen": 1795625328.5796206,
+    "ast_hash": "b33622a322eec1af817366877d3c1f5b",
+    "semantic_hash": ""
+  },
+  "collector/src/setup/Setup.cs": {
+    "mtime": 1795624753.8224022,
+    "seen": 1795625328.5796206,
+    "ast_hash": "c66942ea6442ea410b38cd616c45e432",
+    "semantic_hash": ""
+  },
+  "collector/src/shared/Native.cs": {
+    "mtime": 1795624809.1151826,
+    "seen": 1795625328.5796206,
+    "ast_hash": "3ca3a9a12fad2cfc91bff1015c3a277a",
+    "semantic_hash": ""
+  },
+  "collector/src/shared/Versions.cs": {
+    "mtime": 1795624753.7183933,
+    "seen": 1795625328.5796206,
+    "ast_hash": "8ac07be099b1cf7e061f5e28bdb3a9f4",
     "semantic_hash": ""
   }
 }

@@ -44,7 +44,7 @@ public class StoreEventFilter extends OncePerRequestFilter {
      * to nie są zdarzenia sklepu.
      */
     private static final List<String> SKIPPED_PREFIXES = List.of("/api/auth/", "/api/me/", "/api/time-clock/",
-            "/api/gus/", "/api/store-agent/", "/api/chat/");
+            "/api/gus/", "/api/store-agent/", "/api/collector/", "/api/chat/");
     /** Kawałki wysyłanych plików i znaczniki odczytu: szum, a nie zmiana. */
     private static final Pattern SKIPPED = Pattern.compile(
             ".*/(chunks/\\d+|imports/uploads|seen|preview|read|pending)$");
