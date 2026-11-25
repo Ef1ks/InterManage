@@ -11,6 +11,7 @@ import type {
   KsefInvoicePage,
   KsefOverview,
   KsefSettings,
+  KsefSupplierAccess,
 } from '@/lib/types'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 
@@ -277,4 +278,28 @@ export function useKsefSettingsMutations(storeId: string) {
       ),
     ),
   }
+}
+
+/**
+ * Kto widzi faktury wszystkich dostawców (tylko Aderon i właściciel; innym serwer odpowiada 403, wtedy karty nie ma).
+ */
+export function useKsefSupplierAccess(storeId: string) {
+  return useQuery({
+    queryKey: [...ksefKey(storeId), 'supplier-access'],
+    queryFn: () => api<KsefSupplierAccess[]>(`${ksefPath(storeId)}/supplier-access`),
+    retry: false,
+  })
+}
+
+export function useSetKsefSupplierAccess(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, allSuppliers }: { userId: string; allSuppliers: boolean }) =>
+      api<KsefSupplierAccess[]>(`${ksefPath(storeId)}/supplier-access/${userId}`, {
+        method: 'PUT',
+        json: { allSuppliers },
+      }),
+    onSuccess: (list) => queryClient.setQueryData([...ksefKey(storeId), 'supplier-access'], list),
+    meta: { invalidates: false },
+  })
 }

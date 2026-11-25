@@ -2183,6 +2183,17 @@ export type KsefInvoicePage = {
   matchingCount: number
   netTotal: number
   grossTotal: number
+  /** Konto widzi tylko faktury dostawców z listy dostawców sklepu. */
+  listedSuppliersOnly: boolean
+}
+
+/** Konto sklepu i to, czy w Fakturach KSeF widzi wszystkich dostawców (z urzędu albo włączone przez Aderona). */
+export type KsefSupplierAccess = {
+  userId: string
+  name: string
+  rankName: string | null
+  reason: 'OWNER' | 'ADERON' | 'ACCOUNTING' | 'GRANTED' | 'NONE'
+  allSuppliers: boolean
 }
 
 /** Sklep, dla którego wystawiono ruch międzymagazynowy; {@code enteredAt}, gdy sklep wprowadził go u siebie. */

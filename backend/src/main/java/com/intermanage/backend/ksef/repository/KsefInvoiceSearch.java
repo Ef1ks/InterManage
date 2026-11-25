@@ -21,6 +21,7 @@ import com.intermanage.backend.ksef.entity.KsefConnection;
 import com.intermanage.backend.ksef.entity.KsefInvoice;
 import com.intermanage.backend.ksef.entity.KsefInvoiceEntry;
 import com.intermanage.backend.ksef.entity.KsefSkippedSupplier;
+import com.intermanage.backend.supplier.entity.Supplier;
 
 import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -98,6 +99,22 @@ public final class KsefInvoiceSearch {
         String field = SORTABLE.getOrDefault(column, "issueDate");
         Sort.Order order = "asc".equalsIgnoreCase(direction) ? Sort.Order.asc(field) : Sort.Order.desc(field);
         return Sort.by(order.nullsLast(), Sort.Order.desc("ksefNumber"));
+    }
+
+    /**
+     * Tylko faktury dostawców z listy dostawców sklepu wgranej z raportu (NIP sprzedawcy = NIP dostawcy z kodem).
+     * Dostawca dodany ręcznie się nie liczy.
+     */
+    public static Specification<KsefInvoice> listedSuppliersOnly(UUID storeId) {
+        return (root, query, cb) -> {
+            Subquery<Integer> subquery = query.subquery(Integer.class);
+            Root<Supplier> supplier = subquery.from(Supplier.class);
+            subquery.select(cb.literal(1)).where(
+                    cb.equal(supplier.get("store").get("id"), storeId),
+                    cb.isNotNull(supplier.get("code")),
+                    cb.equal(supplier.get("nip"), root.get("sellerNip")));
+            return cb.exists(subquery);
+        };
     }
 
     public static Specification<KsefInvoice> matching(UUID storeId, String nip, Collection<String> ownInternalIds,

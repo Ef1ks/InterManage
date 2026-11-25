@@ -22,8 +22,7 @@ import com.intermanage.backend.importguide.component.ReportSaveMacro;
  * bo bez dostawcy, opakowania i ceny powstałby pusty wpis.
  *
  * <p>Karta bez kodu CN pokazuje przy wczytaniu „Kody CN, GTU i Split Payment są wymagane”: makro zamyka komunikat,
- * wpisuje w „Kod CN:” kod {@value #CN}, zapisuje kartę i dopiero potem przechodzi do ITM8. Pola ekranu „Kod CN:” nie
- * znamy ze skanu, więc kod idzie klawiszami w pole z kursorem, a karta zapisuje się tylko, gdy pokazuje ten kod.
+ * wpisuje w „Kod CN:” (ar-e131) kod {@value #CN}, zapisuje kartę i dopiero potem przechodzi do ITM8.
  */
 public final class CadPriorityMacro {
 
@@ -53,10 +52,15 @@ public final class CadPriorityMacro {
     private static final String ITM8_BUTTON = "lnkZ1_CodeITM_LnkAviso";
     private static final String RESET = "btnB2_RAZ_LnkBouton";
     private static final String CN_BUTTON = "Lnk_CodeCN_LnkAviso";
-    private static final String CARD_CN = "txt_CodeCn_TxtBox";
+    // Ekran „Kod CN:” (ar-e131.aspx?source=are001&chrono=…).
+    private static final String CN_SCREEN = "ar-e131";
+    private static final String CN_FIELD = "txt_CodeCn_TxtBox";
+    private static final String CN_BACK = "btn_Retour_LnkBouton";
+    /** Ekran kodu CN odpowiada szybko (sprawdzone 25.11.2026), więc krótsze przerwy niż przy zapisie karty. */
+    private static final int CN_STEP_MS = 500;
+    /** Pytania po Zatwierdź na karcie: zapis i, czasem, sprzedaż ze stratami. */
+    private static final String CARD_SAVE_QUESTIONS = "zachowa;stratami";
     private static final String CARD_APPROVE = "btnB6_Valider_LnkBouton";
-    /** Ekrany otwarte z karty mają w adresie jej numer (ar-e005.aspx?Chrono=…), sama karta nie. */
-    private static final String CARD_SUBPAGE = "Chrono=";
     private static final String NEW_ITM8 = "txtZ02_Itm_TxtBox";
     private static final String NEW_ITM8_SUPPLIER = "lstZ04_Fournisseur_TxtBox";
     private static final String PRIORITY_CHECKBOX = "chkZ03_Prioritaire_CheckBox1";
@@ -204,23 +208,30 @@ public final class CadPriorityMacro {
         return out;
     }
 
-    /** „Kod CN:” z karty: kod, Enter, Enter, Tak, Powrót, potem zapis karty, o ile pokazuje wpisany kod. */
+    /**
+     * „Kod CN:” z karty (ar-e131, skan 25.11.2026): kod w polu, Enter, Enter, Tak, Powrót, potem zapis karty. Kod
+     * sprawdza się na ekranie CN przed zapisem, bo karta pola z kodem nie ma.
+     */
     private static List<String> enterCn(String noCn) {
         return List.of(
                 "WEBCLICK|" + WINDOW + "|" + CN_BUTTON,
-                "WEBPAGE|" + WINDOW + "|" + CARD_SUBPAGE + "|" + BACK + "|" + PAGE_TIMEOUT_MS,
-                "SLEEP|" + AFTER_CONFIRM_MS,
-                "KEY|^a" + CN + "{Enter}",
-                "SLEEP|" + AFTER_CONFIRM_MS,
+                "WEBPAGE|" + WINDOW + "|" + CN_SCREEN + "|" + CN_FIELD + "|" + PAGE_TIMEOUT_MS,
+                "WEBKEY|" + WINDOW + "|" + CN_FIELD + "|^a" + CN,
+                "WEBIFVALUE|" + WINDOW + "|" + CN_FIELD + "|^\\s*" + CN + "\\s*$|" + noCn + "|5000",
+                "WEBKEY|" + WINDOW + "|" + CN_FIELD + "|{Enter}",
+                "SLEEP|" + CN_STEP_MS,
                 "WEBDIALOG|" + ALERT + "|stawk;kodu CN|Fermer|500",
                 "KEY|{Enter}",
                 "WEBDIALOG|" + DIALOG + "|zachowa;Utworzy|Oui|10000",
-                "SLEEP|" + AFTER_CONFIRM_MS,
-                "WEBCLICK|" + WINDOW + "|" + BACK,
+                "SLEEP|" + CN_STEP_MS,
+                "WEBCLICK|" + WINDOW + "|" + CN_BACK,
+                "WEBDIALOG|" + DIALOG + "|zachowa;zapis|Oui|1500",
                 "WEBIFSEEN|" + WINDOW + "|" + RESET + "|" + noCn + "|" + PAGE_TIMEOUT_MS,
-                "WEBIFVALUE|" + WINDOW + "|" + CARD_CN + "|^\\s*" + CN + "\\s*$|" + noCn + "|5000",
                 "WEBCLICK|" + WINDOW + "|" + CARD_APPROVE,
-                "IFDIALOG|" + DIALOG + "|zachowa|Oui|" + noCn + "|" + PAGE_TIMEOUT_MS,
+                // Rzadko przed albo po „Czy zachować wpis?” przychodzi „Sprzedaż ze stratami! … Czy potwierdzasz”
+                // (BoiteConfirmation, Tak / Nie): oba pytania zatwierdza się Tak, w dowolnej kolejności.
+                "IFDIALOG|" + DIALOG + "|" + CARD_SAVE_QUESTIONS + "|Oui|" + noCn + "|" + PAGE_TIMEOUT_MS,
+                "WEBDIALOG|" + DIALOG + "|" + CARD_SAVE_QUESTIONS + "|Oui|1500",
                 "SLEEP|" + AFTER_CONFIRM_MS,
                 "WEBIFVALUE|" + WINDOW + "|" + CARD_NAME + "|\\S|" + noCn + "|" + LOAD_TIMEOUT_MS);
     }

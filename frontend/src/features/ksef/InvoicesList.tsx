@@ -266,6 +266,12 @@ function Invoices({ storeId, overview, canEdit }: { storeId: string; overview: K
         </Card>
       ) : (
         <Card className="gap-0 py-0">
+          {first?.listedSuppliersOnly && (
+            <p className="border-b px-4 py-2.5 text-sm text-muted-foreground">
+              Widzisz tylko faktury dostawców z listy dostawców sklepu. Faktury pozostałych widzą Aderon i Księgowość
+              (Aderon może to włączyć innym osobom w ustawieniach KSeF).
+            </p>
+          )}
           <StatusLegend />
           {/*
             Stałe szerokości dla statusu, dat, kwot i akcji; numer i dostawca dzielą resztę i zawijają się albo

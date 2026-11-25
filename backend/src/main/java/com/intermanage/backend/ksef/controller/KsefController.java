@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.intermanage.backend.auth.security.Access;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.document.dto.DocumentCandidate;
 import com.intermanage.backend.document.dto.LinkDocumentRequest;
@@ -39,9 +40,12 @@ import com.intermanage.backend.ksef.dto.KsefOverview;
 import com.intermanage.backend.ksef.dto.KsefSettingsResponse;
 import com.intermanage.backend.ksef.dto.KsefShareConnectionRequest;
 import com.intermanage.backend.ksef.dto.KsefSkippedSupplierRequest;
+import com.intermanage.backend.ksef.dto.KsefSupplierAccessRequest;
+import com.intermanage.backend.ksef.dto.KsefSupplierAccessResponse;
 import com.intermanage.backend.ksef.repository.KsefInvoiceSearch;
 import com.intermanage.backend.ksef.service.KsefConnectionService;
 import com.intermanage.backend.ksef.service.KsefInvoiceService;
+import com.intermanage.backend.ksef.service.KsefSupplierAccessService;
 import com.intermanage.backend.ksef.service.KsefSyncService;
 
 import jakarta.validation.Valid;
@@ -72,9 +76,12 @@ public class KsefController {
     private final KsefSyncService syncService;
     private final DocumentKsefLinkService documentLinks;
     private final DocumentService documentService;
+    private final KsefSupplierAccessService supplierAccess;
 
     public KsefController(KsefInvoiceService invoiceService, KsefConnectionService connectionService,
-            KsefSyncService syncService, DocumentKsefLinkService documentLinks, DocumentService documentService) {
+            KsefSyncService syncService, DocumentKsefLinkService documentLinks, DocumentService documentService,
+            KsefSupplierAccessService supplierAccess) {
+        this.supplierAccess = supplierAccess;
         this.documentService = documentService;
         this.invoiceService = invoiceService;
         this.connectionService = connectionService;
@@ -106,10 +113,30 @@ public class KsefController {
             @RequestParam(defaultValue = "false") boolean myDeliveries,
             @RequestParam(defaultValue = "false") boolean quantityChanges,
             @RequestParam(defaultValue = "issueDate") String sort,
-            @RequestParam(defaultValue = "desc") String direction) {
-        return invoiceService.list(storeId, page,
-                new KsefInvoiceSearch.Filter(query, from, to, entered, kind, internalId, showSkipped,
-                        myDeliveries, quantityChanges), sort, direction);
+            @RequestParam(defaultValue = "desc") String direction,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        KsefInvoiceSearch.Filter filter = new KsefInvoiceSearch.Filter(query, from, to, entered, kind, internalId,
+                showSkipped, myDeliveries, quantityChanges);
+        if (supplierAccess.seesAllSuppliers(storeId, principal.getId())) {
+            return invoiceService.list(storeId, page, filter, sort, direction);
+        }
+        return invoiceService.list(storeId, page, filter, KsefInvoiceSearch.listedSuppliersOnly(storeId), sort,
+                direction).withListedSuppliersOnly(true);
+    }
+
+    /** Konta sklepu i to, czy widzą faktury wszystkich dostawców (Aderon i właściciel). */
+    @GetMapping("/supplier-access")
+    @PreAuthorize(Access.STORE_ADMIN)
+    public List<KsefSupplierAccessResponse> supplierAccess(@PathVariable UUID storeId) {
+        return supplierAccess.list(storeId);
+    }
+
+    @PutMapping("/supplier-access/{userId}")
+    @PreAuthorize(Access.STORE_ADMIN)
+    public List<KsefSupplierAccessResponse> setSupplierAccess(@PathVariable UUID storeId, @PathVariable UUID userId,
+            @Valid @RequestBody KsefSupplierAccessRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return supplierAccess.set(storeId, userId, request.allSuppliers(), principal.getId());
     }
 
     @PutMapping("/invoices/{id}/entered")

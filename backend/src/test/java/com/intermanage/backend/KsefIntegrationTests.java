@@ -760,6 +760,51 @@ class KsefIntegrationTests {
     }
 
     @Test
+    void employeeSeesOnlySuppliersFromSupplierListUnlessAderonGrantsAll() throws Exception {
+        Cookie owner = login();
+        String storeId = createStore(owner);
+        when(ksef.authenticate(eq(nip), any(), any()))
+                .thenReturn(new KsefClient.AccessToken("token", Instant.now().plus(1, ChronoUnit.HOURS)));
+        connection(owner, storeId, nip, "haslo-testowe").andExpect(status().isOk());
+        OffsetDateTime stored = OffsetDateTime.of(2026, 10, 20, 8, 0, 0, 0, ZoneOffset.UTC);
+        when(ksef.purchaseInvoices(anyString(), any(), any(), anyInt())).thenReturn(new KsefInvoiceMetadata.Page(
+                false, false, OffsetDateTime.now(ZoneOffset.UTC), List.of(
+                        invoice("FV/30/2026", "1111111111", "MLECZARNIA", stored, "Vat", null),
+                        invoice("FV/31/2026", "2222222222", "LEASING", stored.plusMinutes(1), "Vat", null),
+                        invoice("FV/32/2026", "3333333333", "RECZNY", stored.plusMinutes(2), "Vat", null))));
+        syncAndWait(owner, storeId);
+        // Na liście dostawców z raportu jest tylko mleczarnia; dostawca dodany ręcznie się nie liczy.
+        jdbc.update("insert into suppliers (store_id, code, name, nip) values (?::uuid, '501', 'MLECZARNIA', "
+                + "'1111111111')", storeId);
+        jdbc.update("insert into suppliers (store_id, name, nip) values (?::uuid, 'RECZNY', '3333333333')", storeId);
+
+        list(owner, storeId, "").andExpect(jsonPath("$.matchingCount").value(3))
+                .andExpect(jsonPath("$.listedSuppliersOnly").value(false));
+        Cookie employee = employee(owner, storeId);
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(1))
+                .andExpect(jsonPath("$.listedSuppliersOnly").value(true))
+                .andExpect(jsonPath("$.invoices[0].invoiceNumber").value("FV/30/2026"));
+        mvc.perform(get(url(storeId, "/supplier-access")).cookie(employee)).andExpect(status().isForbidden());
+
+        // Aderon (tu właściciel) włącza wszystkich dostawców konkretnemu kontu.
+        String employeeId = JsonPath.read(mvc.perform(get("/api/auth/me").cookie(employee))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        send(owner, put(url(storeId, "/supplier-access/" + employeeId)), "{\"allSuppliers\":true}")
+                .andExpect(status().isOk());
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(3));
+        send(owner, put(url(storeId, "/supplier-access/" + employeeId)), "{\"allSuppliers\":false}")
+                .andExpect(status().isOk());
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(1));
+
+        // Księgowość widzi wszystkich z urzędu.
+        jdbc.update("""
+                update user_store_roles set store_role_id = (select id from store_roles
+                    where store_id = ?::uuid and role_key = 'ACCOUNTING' and deleted_at is null)
+                where user_id = ?::uuid and store_id = ?::uuid""", storeId, employeeId, storeId);
+        list(employee, storeId, "").andExpect(jsonPath("$.matchingCount").value(3));
+    }
+
+    @Test
     void employeeSeesAndLinksOnlyCompaniesFromOwnStores() throws Exception {
         Cookie owner = login();
         String connected = createStore(owner);

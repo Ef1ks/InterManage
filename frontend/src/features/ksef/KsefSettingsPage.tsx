@@ -7,11 +7,17 @@ import { Form, FormActions, MultiComboboxField, TextField } from '@/components/f
 import { HowTo } from '@/components/HowTo'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useKsefSettings, useKsefSettingsMutations } from '@/features/ksef/api'
+import { Switch } from '@/components/ui/switch'
+import {
+  useKsefSettings,
+  useKsefSettingsMutations,
+  useKsefSupplierAccess,
+  useSetKsefSupplierAccess,
+} from '@/features/ksef/api'
 import { formatDateTime, formatDay, formatNip, invoicesWord } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
 import { applyServerErrors } from '@/lib/form-errors'
-import type { KsefCompany, KsefCompanyStore, KsefConnection, KsefSettings } from '@/lib/types'
+import type { KsefCompany, KsefCompanyStore, KsefConnection, KsefSettings, KsefSupplierAccess } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { LoadingPanel } from '@/components/LoadingPanel'
 
@@ -71,6 +77,7 @@ export function KsefSettingsPage({ storeId }: { storeId: string }) {
       )}
       <InternalIdsCard storeId={storeId} settings={settings} />
       <SkippedSuppliersCard storeId={storeId} settings={settings} />
+      <SupplierAccessCard storeId={storeId} />
     </div>
   )
 }
@@ -675,6 +682,78 @@ function SkippedSuppliersCard({ storeId, settings }: { storeId: string; settings
           Pomijaj
         </Button>
       </Form>
+    </Card>
+  )
+}
+
+const ACCESS_REASONS: Record<KsefSupplierAccess['reason'], string | null> = {
+  OWNER: 'właściciel',
+  ADERON: 'Aderon',
+  ACCOUNTING: 'Księgowość',
+  GRANTED: null,
+  NONE: null,
+}
+
+/**
+ * Kto widzi faktury wszystkich dostawców. Pozostali widzą tylko dostawców z listy dostawców wgranej w Imporcie
+ * danych. Karta jest tylko dla Aderona i właściciela (innym serwer odmawia).
+ */
+function SupplierAccessCard({ storeId }: { storeId: string }) {
+  const { data: accounts } = useKsefSupplierAccess(storeId)
+  const setAccess = useSetKsefSupplierAccess(storeId)
+
+  if (!accounts) {
+    return null
+  }
+
+  const change = (account: KsefSupplierAccess, allSuppliers: boolean) =>
+    setAccess.mutate(
+      { userId: account.userId, allSuppliers },
+      {
+        onSuccess: () =>
+          toast.success(
+            allSuppliers ? `${account.name} widzi wszystkich dostawców` : `${account.name} widzi dostawców z listy`,
+            {
+              action: {
+                label: 'Cofnij',
+                onClick: () => setAccess.mutate({ userId: account.userId, allSuppliers: !allSuppliers }),
+              },
+            },
+          ),
+        onError: (error) => toast.error(errorMessage(error, 'Nie udało się zapisać')),
+      },
+    )
+
+  return (
+    <Card className="gap-4 p-5">
+      <div>
+        <h2 className="text-base font-semibold">Faktury wszystkich dostawców</h2>
+        <p className="text-sm text-muted-foreground">
+          Bez tego konto widzi tylko faktury dostawców z listy dostawców wgranej w Imporcie danych. Właściciel, Aderon i
+          Księgowość widzą wszystkich zawsze.
+        </p>
+      </div>
+      <ul className="divide-y rounded-xl border">
+        {accounts.map((account) => {
+          const fixed = ACCESS_REASONS[account.reason]
+          return (
+            <li key={account.userId} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{account.name}</span>
+                <span className="block text-sm text-muted-foreground">
+                  {fixed ? `${fixed}, widzi wszystkich` : (account.rankName ?? 'bez rangi')}
+                </span>
+              </span>
+              <Switch
+                aria-label={`${account.name}: faktury wszystkich dostawców`}
+                checked={account.allSuppliers}
+                disabled={fixed !== null || setAccess.isPending}
+                onCheckedChange={(checked) => change(account, checked)}
+              />
+            </li>
+          )
+        })}
+      </ul>
     </Card>
   )
 }

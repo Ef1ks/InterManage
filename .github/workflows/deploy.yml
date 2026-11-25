@@ -90,7 +90,19 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          # Świeżo dołączony runner bywa przez chwilę bez połączenia z pve (25.11.2026: trzy próby z rzędu po 5 s),
+          # więc na serwer czekamy do ok. 2,5 min zamiast jednej próby.
+          for attempt in $(seq 1 12); do
+            if ssh-keyscan -T 10 -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts; then
+              exit 0
+            fi
+            echo "Próba $attempt: serwer nie odpowiada na SSH przez Tailscale"
+            sleep 3
+          done
+          tailscale status || true
+          tailscale ping --c 3 pve || true
+          echo "::error::Serwer nie odpowiada na SSH przez Tailscale (host pve, trasa 192.168.33.0/24)"
+          exit 1
 
       - name: Wdrożenie
         env:
