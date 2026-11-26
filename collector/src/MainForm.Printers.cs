@@ -285,6 +285,8 @@ namespace Intermanage.Collector
 
         // ---- kalibracja ----
 
+        private bool calibrateMark;
+
         private void OnCalibrateMenu(object sender, EventArgs e)
         {
             Printer printer = Printers.Chosen;
@@ -297,10 +299,16 @@ namespace Intermanage.Collector
             input.Text = "";
             searched = "";
             mode = Mode.Printer;
-            StartCalibrate(printer);
+            checkedPrinter = printer;
+            printerFailed = false;
+            message.Show("Kalibracja: " + printer.Name, CalibrateChoice, false);
+            ShowView(message);
         }
 
-        private void StartCalibrate(Printer printer)
+        private const string CalibrateChoice = "Jakie etykiety są w drukarce?\n\n1: z przerwą między etykietami "
+            + "(prześwit na podkładzie)\n2: z czarnym paskiem na spodzie rolki\n\nEsc: lista drukarek.";
+
+        private void StartCalibrate(Printer printer, bool blackMark)
         {
             if (printing || checkingPrinter)
             {
@@ -308,8 +316,9 @@ namespace Intermanage.Collector
             }
             printing = true;
             printedOn = printer;
-            message.Show("Kalibruję drukarkę", printer.Name + "\n\nDrukarka przesunie kilka pustych etykiet, "
-                + "żeby zmierzyć przerwy między nimi.", false);
+            calibrateMark = blackMark;
+            message.Show("Kalibruję drukarkę", printer.Name + (blackMark ? "\nCzujnik: czarny znacznik" : "\nCzujnik: przerwa")
+                + "\n\nDrukarka przesunie kilka pustych etykiet, żeby je zmierzyć.", false);
             ShowView(message);
             Thread thread = new Thread(new ThreadStart(RunCalibrate));
             thread.IsBackground = true;
@@ -320,7 +329,7 @@ namespace Intermanage.Collector
         {
             try
             {
-                printerResult = Printers.Calibrate(printedOn);
+                printerResult = Printers.Calibrate(printedOn, calibrateMark);
                 printerFailed = false;
             }
             catch (BluetoothException error)
@@ -397,7 +406,13 @@ namespace Intermanage.Collector
             else if (e.KeyChar == '0' && view == message && checkedPrinter != null
                 && Settings.PrinterMac == checkedPrinter.Mac)
             {
-                StartCalibrate(checkedPrinter);
+                message.Show("Kalibracja: " + checkedPrinter.Name, CalibrateChoice, false);
+                ShowView(message);
+            }
+            else if ((e.KeyChar == '1' || e.KeyChar == '2') && view == message && checkedPrinter != null
+                && Settings.PrinterMac == checkedPrinter.Mac)
+            {
+                StartCalibrate(checkedPrinter, e.KeyChar == '2');
             }
             else if (enter && view == message && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
             {

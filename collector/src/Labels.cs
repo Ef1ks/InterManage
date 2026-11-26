@@ -4,25 +4,25 @@ using System.Text;
 
 namespace Intermanage.Collector
 {
-    /// <summary>Dane cenĂłwki w chwili wydruku.</summary>
+    /// <summary>Dane cenówki w chwili wydruku.</summary>
     internal sealed class PriceLabel
     {
         public string Name = "";
         public string Brand = "";
-        /// <summary>ZawartoĹ›Ä‡ do napisu, np. â€ž500 gâ€ť; pusta = bez.</summary>
+        /// <summary>Zawartość do napisu, np. „500 g”; pusta = bez.</summary>
         public string Content = "";
         public decimal Price;
-        /// <summary>â€ž1 kg = 25,98 zĹ‚â€ť; pusty = bez ceny jednostkowej.</summary>
+        /// <summary>„1 kg = 25,98 zł”; pusty = bez ceny jednostkowej.</summary>
         public string UnitPrice = "";
         public bool Promotion;
         public DateTime PromoTo = DateTime.MinValue;
-        /// <summary>Cena zwykĹ‚a przy promocji; 0 = bez.</summary>
+        /// <summary>Cena zwykła przy promocji; 0 = bez.</summary>
         public decimal Regular;
         public string Ean = "";
         public string Itm8 = "";
         public DateTime PrintedOn = DateTime.Today;
 
-        /// <summary>CenĂłwka artykuĹ‚u z kartoteki na dziĹ›; null, gdy artykuĹ‚ nie ma ceny.</summary>
+        /// <summary>Cenówka artykułu z kartoteki na dziś; null, gdy artykuł nie ma ceny.</summary>
         public static PriceLabel Of(Article article)
         {
             DateTime today = DateTime.Today;
@@ -52,15 +52,15 @@ namespace Intermanage.Collector
             return label;
         }
 
-        /// <summary>CenĂłwka prĂłbna do ustawienia drukarki: dĹ‚uga nazwa z polskimi literami i promocja.</summary>
+        /// <summary>Cenówka próbna do ustawienia drukarki: długa nazwa z polskimi literami i promocja.</summary>
         public static PriceLabel Sample()
         {
             PriceLabel label = new PriceLabel();
-            label.Name = "CZEKOLADA MLECZNA Z ORZECHAMI LASKOWYMI Ĺ»Ă“ĹÄ†";
-            label.Brand = "ZAĹ»Ă“ĹÄ† GÄĹšLÄ„ JAĹąĹ";
+            label.Name = "CZEKOLADA MLECZNA Z ORZECHAMI LASKOWYMI ŻÓŁĆ";
+            label.Brand = "ZAŻÓŁĆ GĘŚLĄ JAŹŃ";
             label.Content = "100 g";
             label.Price = 12.99m;
-            label.UnitPrice = "1 kg = 129,90 zĹ‚";
+            label.UnitPrice = "1 kg = 129,90 zł";
             label.Promotion = true;
             label.PromoTo = DateTime.Today.AddDays(7);
             label.Regular = 15.99m;
@@ -70,7 +70,7 @@ namespace Intermanage.Collector
         }
 
         /// <summary>
-        /// ZawartoĹ›Ä‡ i cena za kilogram albo litr. Towar na wagÄ™ (A.Wa) ma cenÄ™ za kilogram. Sztuki bez ceny jednostkowej.
+        /// Zawartość i cena za kilogram albo litr. Towar na wagę (A.Wa) ma cenę za kilogram. Sztuki bez ceny jednostkowej.
         /// </summary>
         private static void Measure(PriceLabel label, string unit, string netContent)
         {
@@ -104,7 +104,7 @@ namespace Intermanage.Collector
             }
             label.Content = content < 1 ? Number(content * 1000m) + (per == "kg" ? " g" : " ml")
                 : Number(content) + " " + per;
-            label.UnitPrice = "1 " + per + " = " + Money(label.Price / content) + " zĹ‚";
+            label.UnitPrice = "1 " + per + " = " + Money(label.Price / content) + " zł";
         }
 
         private static decimal Parse(string value)
@@ -124,17 +124,17 @@ namespace Intermanage.Collector
     }
 
     /// <summary>
-    /// CenĂłwka w ZPL na etykietÄ™ 52 Ă— 38 mm (realnie ok. 51,5 Ă— 37,5 mm, wiÄ™c z marginesem 2 mm z kaĹĽdej strony).
-    /// UkĹ‚ad rysowany w punktach drukarki 203 dpi (8 punktĂłw na mm) i przeliczany do rozdzielczoĹ›ci drukarki.
-    /// Polskie litery przez ^CI28 (UTF-8) i czcionkÄ™ 0.
+    /// Cenówka w ZPL na etykietę 52 × 38 mm (realnie ok. 51,5 × 37,5 mm, więc z marginesem 2 mm z każdej strony).
+    /// Układ rysowany w punktach drukarki 203 dpi (8 punktów na mm) i przeliczany do rozdzielczości drukarki.
+    /// Polskie litery przez ^CI28 (UTF-8) i czcionkę 0. Obrót o 180° (^POI): bez niego cenówka wychodziła do góry nogami.
     /// </summary>
     internal static class LabelZpl
     {
-        public const decimal WidthMm = 52m;
-        public const decimal HeightMm = 38m;
+        public const decimal WidthMm = 51.5m;
+        public const decimal HeightMm = 37.5m;
         public const decimal MarginMm = 2m;
         private const int BaseDpi = 203;
-        /// <summary>Pole na treĹ›Ä‡ przy 203 dpi: (52 â’ 2 Ă— 2) Ă— 8 i (38 â’ 2 Ă— 2) Ă— 8.</summary>
+        /// <summary>Pole na treść przy 203 dpi: (52 − 2 × 2) × 8 i (38 − 2 × 2) × 8.</summary>
         private const int Width = 384;
         private const int Height = 272;
 
@@ -142,11 +142,11 @@ namespace Intermanage.Collector
         {
             Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi);
             StringBuilder s = z.Text;
-            s.Append("^XA^CI28^MNY^MMT^LS0^LT0");
+            s.Append("^XA^CI28^POI^MMT^LS0^LT0");
             s.Append("^PW").Append(z.Mm(WidthMm)).Append("^LL").Append(z.Mm(HeightMm));
             s.Append("^LH").Append(z.Mm(MarginMm)).Append(',').Append(z.Mm(MarginMm));
 
-            // Nazwa: dwie linie, za dĹ‚uga jest ucinana przez drukarkÄ™.
+            // Nazwa: dwie linie, za długa jest ucinana przez drukarkę.
             z.Block(0, 0, Width, 2, 28, 24, 'L', label.Name);
             string second = (label.Brand + "  " + label.Content).Trim();
             z.Block(0, 62, Width, 1, 20, 18, 'L', second);
@@ -159,18 +159,18 @@ namespace Intermanage.Collector
                 z.Inverse(6, 92, 186, 20, 18, "PROMOCJA" + until);
                 if (label.Regular > 0)
                 {
-                    z.Block(204, 92, Width - 204, 1, 20, 18, 'R', "zwykĹ‚a " + PriceLabel.Money(label.Regular) + " zĹ‚");
+                    z.Block(204, 92, Width - 204, 1, 20, 18, 'R', "zwykła " + PriceLabel.Money(label.Regular) + " zł");
                 }
             }
 
-            // Cena: zĹ‚ote duĹĽe, grosze mniejsze u gĂłry, â€žzĹ‚â€ť pod groszami.
+            // Cena: złote duże, grosze mniejsze u góry, „zł” pod groszami.
             string money = PriceLabel.Money(label.Price);
             int comma = money.IndexOf(',');
             string whole = money.Substring(0, comma);
             string cents = money.Substring(comma + 1);
             z.Block(0, 118, 300, 1, 96, 80, 'R', whole + ",");
             z.Block(302, 124, 82, 1, 46, 40, 'L', cents);
-            z.Block(302, 172, 82, 1, 30, 28, 'L', "zĹ‚");
+            z.Block(302, 172, 82, 1, 30, 28, 'L', "zł");
 
             z.Block(0, 214, 230, 1, 20, 18, 'L', label.UnitPrice);
             z.Block(230, 214, Width - 230, 1, 18, 16, 'R', label.PrintedOn.ToString("dd.MM.yyyy",
@@ -221,7 +221,7 @@ namespace Intermanage.Collector
                     .Append("^FS");
             }
 
-            /// <summary>BiaĹ‚y napis na czarnym polu (^FR odwraca to, co pod nim).</summary>
+            /// <summary>Biały napis na czarnym polu (^FR odwraca to, co pod nim).</summary>
             public void Inverse(int x, int y, int width, int height, int fontWidth, string text)
             {
                 Text.Append("^FO").Append(D(x)).Append(',').Append(D(y))
@@ -252,7 +252,7 @@ namespace Intermanage.Collector
                 Text.Append("^FS");
             }
 
-            /// <summary>^ i ~ sÄ… w ZPL poleceniami, wiÄ™c nie mogÄ… trafiÄ‡ do tekstu.</summary>
+            /// <summary>^ i ~ są w ZPL poleceniami, więc nie mogą trafić do tekstu.</summary>
             private static string Clean(string text)
             {
                 return text.Replace('^', ' ').Replace('~', ' ').Replace('\r', ' ').Replace('\n', ' ');

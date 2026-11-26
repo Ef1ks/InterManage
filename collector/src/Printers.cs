@@ -268,10 +268,11 @@ namespace Intermanage.Collector
         }
 
         /// <summary>
-        /// Ustawia drukarkę pod etykiety z przerwą i mierzy je (~JC): rodzaj papieru, czujnik przerwy, początek wydruku
-        /// bez przesunięcia, odrywanie. Drukarka przesuwa przy tym kilka etykiet. Zwraca nową długość etykiety.
+        /// Ustawia rodzaj etykiet i mierzy je (~JC): przerwa między etykietami (czujnik przerwy, ^MNY) albo czarny
+        /// znacznik na spodzie rolki (czujnik znacznika, ^MNM). Początek wydruku bez przesunięcia, odrywanie, a etykiety
+        /// drukarka szuka najwyżej na 80 mm (^ML), żeby przy złym czujniku nie przewinęła pół rolki.
         /// </summary>
-        public static string Calibrate(Printer printer)
+        public static string Calibrate(Printer printer, bool blackMark)
         {
             using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
             {
@@ -279,17 +280,31 @@ namespace Intermanage.Collector
                 {
                     throw new BluetoothException("Pokrywa drukarki jest otwarta.", 0);
                 }
-                link.Send("! U1 setvar \"ezpl.media_type\" \"web\"\r\n");
-                link.Send("! U1 setvar \"media.sense_mode\" \"gap\"\r\n");
+                int dpi;
+                try
+                {
+                    dpi = int.Parse(link.GetVar("head.resolution.in_dpi"));
+                }
+                catch (FormatException)
+                {
+                    dpi = 203;
+                }
+                int maxLength = (int)(80m * dpi / 25.4m);
+                link.Send("! U1 setvar \"media.type\" \"label\"\r\n");
+                link.Send("! U1 setvar \"media.sense_mode\" \"" + (blackMark ? "bar" : "gap") + "\"\r\n");
                 link.Send("! U1 setvar \"zpl.label_top\" \"0\"\r\n");
                 link.Send("! U1 setvar \"media.printmode\" \"tear off\"\r\n");
-                link.Send("^XA^MNY^MMT^LT0^XZ~JC");
+                link.Send("^XA" + (blackMark ? "^MNM" : "^MNY") + "^MMT^LT0^ML" + maxLength + "^JUS^XZ");
+                link.GetVar("device.friendly_name");
+                link.Send("~JC");
                 // Pomiar trwa kilka sekund; odpowiedź przychodzi po nim.
-                System.Threading.Thread.Sleep(6000);
+                System.Threading.Thread.Sleep(8000);
                 string length = link.GetVar("zpl.label_length");
-                Log.Write("Kalibracja " + BluetoothLink.Bar(printer.Mac) + ": długość " + length);
-                return "Drukarka zmierzyła etykiety" + (length.Length > 0 ? ": długość " + length + " pkt" : "")
-                    + ".\nEtykieta 38 mm to ok. 300 pkt przy 203 dpi.\n" + MediaReport(link).TrimEnd('\n');
+                Log.Write("Kalibracja " + BluetoothLink.Bar(printer.Mac) + (blackMark ? " (znacznik)" : " (przerwa)")
+                    + ": długość " + length);
+                return "Czujnik: " + (blackMark ? "czarny znacznik" : "przerwa między etykietami") + ".\n"
+                    + "Zmierzona długość" + (length.Length > 0 ? ": " + length + " pkt" : ": brak") + " (etykieta 37,5 mm "
+                    + "to ok. " + (int)(37.5m * dpi / 25.4m) + " pkt).\n" + MediaReport(link).TrimEnd('\n');
             }
         }
 
