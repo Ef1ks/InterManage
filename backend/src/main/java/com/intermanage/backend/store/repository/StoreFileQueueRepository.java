@@ -199,6 +199,25 @@ public interface StoreFileQueueRepository extends JpaRepository<StoreFileQueueIt
             for update skip locked""")
     List<MacroFile> lockWaitingForMacro(UUID storeId, int minutes);
 
+    /** Plik czekający na makro, do kolejki w nagłówku. */
+    interface WaitingFile {
+        String getFileName();
+
+        Instant getRequestedAt();
+
+        String getRequestedBy();
+    }
+
+    /** To samo co {@link #lockWaitingForMacro}, bez blokady: tylko do pokazania. */
+    @Query(nativeQuery = true, value = """
+            select q.file_name as fileName, q.macro_requested_at as requestedAt, u.display_name as requestedBy
+            from store_file_queue q
+            join users u on u.id = q.created_by
+            where q.store_id = :storeId and q.macro_requested_at > now() - make_interval(mins => :minutes)
+              and q.macro_job_id is null
+            order by q.macro_requested_at, q.id""")
+    List<WaitingFile> findWaitingForMacro(UUID storeId, int minutes);
+
     @Query(nativeQuery = true, value = """
             select q.id as id, q.file_name as fileName, q.created_by as createdBy,
                 q.product_file_export_id as exportId

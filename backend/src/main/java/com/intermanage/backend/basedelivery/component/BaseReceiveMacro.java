@@ -5,7 +5,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
@@ -83,6 +82,7 @@ public final class BaseReceiveMacro {
     private static final String SUPPLIER_CODE = "txeZ1_Code_TxtBox";
     private static final String SUPPLIER_APPROVE = "btnB2_Valider_LnkBouton";
     private static final String EMPTY_ORDER_TEXT = "puste";
+    private static final int SUPPLIER_PICK_MS = 5000;
 
     // Lista błędów pobrania (ac-e051).
     private static final String ERRORS_PAGE = "ac-e051";
@@ -120,12 +120,6 @@ public final class BaseReceiveMacro {
         String macroName() {
             return name.replaceAll("[|;\\r\\n]", " ").strip();
         }
-
-        /** Pierwsze słowo nazwy z samych liter, do wyrażenia regularnego. */
-        String firstWord() {
-            Matcher matcher = Pattern.compile("[A-Za-z]{3,}").matcher(name);
-            return matcher.find() ? matcher.group() : "";
-        }
     }
 
     /** Plik, który makro zapisze, a agent wyśle: dostawca i pełna ścieżka. */
@@ -162,6 +156,7 @@ public final class BaseReceiveMacro {
             String none = "brak-" + code;
             String panel = "zamowienia-" + code;
             String create = "nowy-kod-" + code;
+            String approve = "zatwierdz-dostawce-" + code;
             String read = "numer-" + code;
             String errors = "bledy-" + code;
             String question = "pytanie-" + code;
@@ -212,8 +207,11 @@ public final class BaseReceiveMacro {
             out.add("WEBWAIT|" + WINDOW + "|" + SUPPLIER_CODE + "||" + PAGE_TIMEOUT_MS);
             out.add("WEBKEY|" + WINDOW + "|" + SUPPLIER_CODE + "|^a" + code + "{Enter}");
             out.add("SLEEP|" + RELOAD_MS);
-            out.add("WEBPICKRE|" + WINDOW + "|" + GRID + "|(?<!\\d)0*" + code + "(?!\\d).*" + supplier.firstWord() + "|"
-                    + PAGE_TIMEOUT_MS);
+            // Lista pod kodem bywa pusta (Enter w kodzie już wybrał dostawcę), a nazwa w niej inna niż na liście dostawców
+            // („SCA PR” zamiast „SCAPR”): wiersz z samym kodem, a bez niego od razu Zatwierdź.
+            out.add("WEBPICKRE|" + WINDOW + "|" + GRID + "|(?<!\\d)0*" + code + "(?!\\d)|" + SUPPLIER_PICK_MS + "|"
+                    + approve);
+            out.add("LABEL|" + approve);
             out.add("WEBCLICK|" + WINDOW + "|" + SUPPLIER_APPROVE);
             out.add("WEBWAIT|" + DIALOG + "|Oui|" + EMPTY_ORDER_TEXT + "|" + PAGE_TIMEOUT_MS);
             out.add("WEBCLICK|" + DIALOG + "|Oui");

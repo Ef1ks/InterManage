@@ -19,6 +19,7 @@ import com.intermanage.backend.agent.dto.AgentMacroApi;
 import com.intermanage.backend.agent.entity.AgentMacroKind;
 import com.intermanage.backend.agent.service.AgentMacroService;
 import com.intermanage.backend.agent.service.CadPriorityMacroService;
+import com.intermanage.backend.agent.service.InvoiceCloseMacroService;
 import com.intermanage.backend.agent.service.PriceControlMacroService;
 import com.intermanage.backend.agent.service.ProductFileMacroService;
 import com.intermanage.backend.auth.security.AppUserPrincipal;
@@ -39,6 +40,7 @@ import jakarta.validation.Valid;
  * POST /api/stores/{storeId}/agent-macros/base-receive      {deliveryId, agentId?} wprowadź dostawę z bazy do Mercalys
  * POST /api/stores/{storeId}/agent-macros/base-close        {deliveryId, agentId?} Nr BL i zakończenie dostaw bonu
  * POST /api/stores/{storeId}/agent-macros/cad-priorities    {items, agentId?} ITM8 z cadencier: priorytet i aktywność
+ * POST /api/stores/{storeId}/agent-macros/invoice-close     {ids, print, confirmed, agentId?} zamknij faktury z kolejki
  * GET  /api/stores/{storeId}/agent-macros/recent            trwające i ostatnie makra, trwająca aktualizacja danych
  * GET  /api/stores/{storeId}/agent-macros/{id}              stan (odliczanie, w toku, wynik, zebrane kody)
  * POST /api/stores/{storeId}/agent-macros/{id}/cancel       anuluje przed startem na komputerze
@@ -64,8 +66,12 @@ public class AgentMacroController {
 
     private final CadPriorityMacroService cadPriorities;
 
+    private final InvoiceCloseMacroService invoiceClose;
+
     public AgentMacroController(AgentMacroService macros, ProductFileMacroService productFiles,
-            PriceControlMacroService priceControl, CadPriorityMacroService cadPriorities) {
+            PriceControlMacroService priceControl, CadPriorityMacroService cadPriorities,
+            InvoiceCloseMacroService invoiceClose) {
+        this.invoiceClose = invoiceClose;
         this.cadPriorities = cadPriorities;
         this.priceControl = priceControl;
         this.macros = macros;
@@ -126,10 +132,18 @@ public class AgentMacroController {
         return cadPriorities.run(storeId, request, principal.getId());
     }
 
+    @PostMapping("/invoice-close")
+    @PreAuthorize(EDIT)
+    public AgentMacroApi.Job invoiceClose(@PathVariable UUID storeId,
+            @Valid @RequestBody AgentMacroApi.InvoiceCloseRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return invoiceClose.run(storeId, request, principal.getId());
+    }
+
     @GetMapping("/recent")
     @PreAuthorize(VIEW)
     public AgentMacroApi.Activity recent(@PathVariable UUID storeId) {
-        return macros.activity(storeId);
+        return macros.activity(storeId).withWaitingFiles(productFiles.waiting(storeId));
     }
 
     @GetMapping("/{id}")

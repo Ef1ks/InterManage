@@ -32,6 +32,8 @@ export type MacroRequest =
   | { macro: 'mea-codes'; codes: string[]; agentId?: string }
   | { macro: 'cad-priorities'; items: { itm8: string; topItm8: string }[]; agentId?: string }
   | { macro: 'base-receive' | 'base-close'; deliveryId: string; agentId?: string }
+  /** Zamknięcia zatwierdzone na stronie: odtwarzacz na komputerze sklepu już o nie nie pyta. */
+  | { macro: 'invoice-close'; ids: string[]; print: boolean; confirmed: true; agentId?: string }
 
 /** Jeszcze się nie skończyło: czeka w kolejce, odlicza albo działa na komputerze. */
 export const isActive = (job: AgentMacroJob) =>
@@ -55,6 +57,7 @@ export function useAgentActivity(storeId: string | undefined, enabled = true) {
       const since = Date.now() - FRESH_MS
       return {
         update: activity.update,
+        waitingFiles: activity.waitingFiles ?? null,
         jobs: activity.jobs.map((job): RecentMacro => ({
           ...job,
           fresh: isActive(job) || (job.finishedAt !== null && new Date(job.finishedAt).getTime() > since),
@@ -66,7 +69,7 @@ export function useAgentActivity(storeId: string | undefined, enabled = true) {
     refetchInterval: (query) =>
       query.state.data?.update || query.state.data?.jobs.some((job) => onComputer(job))
         ? 5_000
-        : query.state.data?.jobs.some((job) => isActive(job))
+        : query.state.data?.waitingFiles || query.state.data?.jobs.some((job) => isActive(job))
           ? 15_000
           : 60_000,
   })

@@ -100,6 +100,9 @@ public class ProductFileMacroService {
                 .orElse(null);
         if (export != null && ProductFileMacro.supplierCode(export.getSupplierCode()) != null) {
             queue.requestMacro(event.id(), export.getId());
+            // Kolejka w nagłówku pokazuje czekający plik od razu, a nie dopiero, gdy makro ruszy.
+            live.publish(event.storeId(), "agent-macro", Map.of("id", event.id(), "kind",
+                    AgentMacroKind.PRODUCT_FILES.name(), "status", "WAITING"));
         } else if (item.getCreatedBy() != null) {
             live.publish(event.storeId(), "agent-macro", Map.of("id", event.id(), "kind",
                     AgentMacroKind.PRODUCT_FILES.name(), "status", "NO_SUPPLIER", "userId", item.getCreatedBy().getId(),
@@ -190,6 +193,22 @@ public class ProductFileMacroService {
         }
         return agents.status(storeId).active() && productFiles.exported(storeId, fileName, item.getContent())
                 .filter(export -> ProductFileMacro.supplierCode(export.getSupplierCode()) != null).isPresent();
+    }
+
+    /** Pliki czekające na makro do kolejki w nagłówku; {@code null}, gdy nic nie czeka. */
+    @Transactional(readOnly = true)
+    public AgentMacroApi.WaitingFiles waiting(UUID storeId) {
+        if (!enabled) {
+            return null;
+        }
+        List<StoreFileQueueRepository.WaitingFile> files = queue.findWaitingForMacro(storeId,
+                (int) MAX_WAIT.toMinutes());
+        if (files.isEmpty()) {
+            return null;
+        }
+        return new AgentMacroApi.WaitingFiles(files.size(), files.getFirst().getRequestedAt(),
+                files.getLast().getRequestedBy(),
+                files.stream().map(StoreFileQueueRepository.WaitingFile::getFileName).distinct().toList());
     }
 
     /** Makro się nie udało, a pliki wczytał człowiek: artykuły dodaje tak samo jak udane makro. */

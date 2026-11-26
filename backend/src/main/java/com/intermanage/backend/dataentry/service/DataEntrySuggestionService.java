@@ -163,7 +163,8 @@ public class DataEntrySuggestionService {
         Map<Integer, String> names = new HashMap<>();
         answers.forEach((index, answer) -> {
             if (answer.name() != null) {
-                names.put(index, ArticleName.clean(answer.name(), brandToRemove(answer, context.layers().get(index)),
+                String name = ArticleName.spelledAsInvoice(answer.name(), items.get(index).invoiceName());
+                names.put(index, ArticleName.clean(name, brandToRemove(answer, context.layers().get(index)),
                         measure(items.get(index), answer)));
             }
         });
@@ -364,7 +365,8 @@ public class DataEntrySuggestionService {
                         continue;
                     }
                     int index = tooLong.get(position);
-                    String name = ArticleName.clean(shortened.name(),
+                    String name = ArticleName.clean(
+                            ArticleName.spelledAsInvoice(shortened.name(), items.get(index).invoiceName()),
                             brandToRemove(answers.get(index), context.layers().get(index)), measures.get(index));
                     if (!name.isEmpty() && name.length() < names.get(index).length()) {
                         names.put(index, name);

@@ -44,6 +44,7 @@ import com.intermanage.backend.cadtop.component.CadPriorityMacro;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.component.StoreTime;
 import com.intermanage.backend.common.exception.ApiException;
+import com.intermanage.backend.dataentry.component.InvoiceCloseMacro;
 import com.intermanage.backend.dataentry.component.PriceControlMacro;
 import com.intermanage.backend.importguide.component.ReportSaveMacro;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -251,6 +252,16 @@ public class AgentMacroService {
         return create(storeId, AgentMacroKind.PROMO_ENTRY, title, macro, null, itemCount, agentId, userId);
     }
 
+    /**
+     * Zamknięcie faktur ({@code InvoiceCloseMacroService}). Zamknięć nie da się cofnąć, więc zatwierdza je zlecający
+     * na stronie, a odtwarzacz w makrze z agenta nie pyta.
+     */
+    @Transactional
+    public AgentMacroApi.Job invoiceClose(UUID storeId, String macro, int itemCount, UUID agentId, UUID userId) {
+        return create(storeId, AgentMacroKind.INVOICE_CLOSE, "Zamknij faktury (" + itemCount + ")", macro, null,
+                itemCount, agentId, userId);
+    }
+
     /** Czy któryś komputer sklepu może teraz dostać makro serwera (trwające makro sklepu odrzuci samo zlecenie). */
     @Transactional(readOnly = true)
     public boolean canRun(UUID storeId, AgentMacroKind kind) {
@@ -305,7 +316,7 @@ public class AgentMacroService {
         return new AgentMacroApi.Activity(recent, agents.findRunningUpdate(storeId)
                 .map(update -> new AgentMacroApi.Update(update.getMachineName() == null ? update.getName()
                         : update.getName() + " (" + update.getMachineName() + ")", update.getStartedAt()))
-                .orElse(null));
+                .orElse(null), null);
     }
 
     @Transactional
@@ -696,6 +707,9 @@ public class AgentMacroService {
         }
         if (kind != null && BASE_KINDS.contains(kind) && !state.playerAtLeast(BASE_PLAYER_MINOR)) {
             return "potrzebny agent 1.8.0 i odtwarzacz makr AutoJob 0.67 albo nowsze";
+        }
+        if (kind == AgentMacroKind.INVOICE_CLOSE && !state.playerAtLeast(InvoiceCloseMacro.PLAYER_MINOR)) {
+            return "potrzebny odtwarzacz makr AutoJob 0." + InvoiceCloseMacro.PLAYER_MINOR + " albo nowszy";
         }
         if (kind == AgentMacroKind.PRODUCT_FILES && !state.playerAtLeast(ProductFileMacro.PLAYER_MINOR)) {
             return "potrzebny odtwarzacz makr AutoJob 0." + ProductFileMacro.PLAYER_MINOR + " albo nowszy";

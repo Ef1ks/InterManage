@@ -195,6 +195,42 @@ namespace Intermanage.Collector
             }
         }
 
+        /// <summary>
+        /// Drukuje cenówkę (w tle). Przed wydrukiem sprawdza papier i pokrywę, po nim czeka na odpowiedź drukarki, żeby
+        /// rozłączenie nie ucięło danych. Wyjątek BluetoothException: brak połączenia albo drukarka nie jest gotowa.
+        /// </summary>
+        public static string Print(Printer printer, PriceLabel label)
+        {
+            using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
+            {
+                string head = link.GetVar("head.latch");
+                if (head == "open")
+                {
+                    throw new BluetoothException("Pokrywa drukarki jest otwarta.", 0);
+                }
+                string media = link.GetVar("media.status");
+                if (media == "out")
+                {
+                    throw new BluetoothException("W drukarce nie ma etykiet.", 0);
+                }
+                int dpi;
+                try
+                {
+                    dpi = int.Parse(link.GetVar("head.resolution.in_dpi"));
+                }
+                catch (FormatException)
+                {
+                    dpi = 203;
+                }
+                string zpl = LabelZpl.Build(label, dpi);
+                link.Send(Encoding.UTF8.GetBytes(zpl));
+                // Odpowiedź przychodzi dopiero po przyjęciu etykiety.
+                link.GetVar("device.friendly_name");
+                Log.Write("Cenówka " + label.Itm8 + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
+                return "Wydrukowano cenówkę na: " + printer.Name + " (" + dpi + " dpi).";
+            }
+        }
+
         private static void Apply(Dictionary<string, string> values)
         {
             List<Printer> loaded = new List<Printer>();

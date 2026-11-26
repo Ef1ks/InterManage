@@ -19,7 +19,13 @@ import { cancelMacro, isActive, type MacroRequest, restoreMacro, runMacro, useAg
 import { hiddenResults, hideResult } from './hidden-results'
 
 /** Makra, których podsumowanie warto pokazać także po udanym przebiegu. */
-const SHOWN_RESULTS: AgentMacroJob['kind'][] = ['MEA_CODES', 'BASE_RECEIVE', 'BASE_CLOSE', 'CAD_PRIORITY']
+const SHOWN_RESULTS: AgentMacroJob['kind'][] = [
+  'MEA_CODES',
+  'BASE_RECEIVE',
+  'BASE_CLOSE',
+  'CAD_PRIORITY',
+  'INVOICE_CLOSE',
+]
 
 type Restore = {
   /** Makra tego okna (rodzaj, bon), które mają wrócić po odświeżeniu strony. */

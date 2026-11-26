@@ -55,6 +55,25 @@ class ArticleNameTests {
     }
 
     @Test
+    void takesInvoiceSpellingWhenModelGuessedPronunciation() {
+        assertThat(ArticleName.spelledAsInvoice("RZUREK SLASKI 500ML", "Żurek śląski 500ml"))
+                .isEqualTo("ZUREK SLASKI 500ML");
+        assertThat(ArticleName.spelledAsInvoice("ZUREK", "ŻUREK STAROPOLSKI")).isEqualTo("ZUREK");
+        assertThat(ArticleName.spelledAsInvoice("MOJ CHERBATA", "Herbata Mój Ogród")).isEqualTo("MOJ HERBATA");
+        assertThat(ArticleName.spelledAsInvoice("SUK JABLKOWY", "Sok jabłkowy 1l")).isEqualTo("SOK JABLKOWY");
+        assertThat(ArticleName.spelledAsInvoice("NAPÓJ JEŻYNA-LIMONKA 330ML", "Hortex Napój Jeżyna/Limonka"))
+                .isEqualTo("NAPOJ JEZYNA-LIMONKA 330ML");
+    }
+
+    @Test
+    void keepsModelWordsWithoutInvoiceCounterpart() {
+        assertThat(ArticleName.spelledAsInvoice("MLEKO UHT TRUSKAWKOWE 200ML", "Mleko UHT o smak.trusk.200ml"))
+                .isEqualTo("MLEKO UHT TRUSKAWKOWE 200ML");
+        assertThat(ArticleName.spelledAsInvoice("RZEPA", null)).isEqualTo("RZEPA");
+        assertThat(ArticleName.spelledAsInvoice("SER ZOLTY", "Ser")).isEqualTo("SER ZOLTY");
+    }
+
+    @Test
     void withoutBrandNameIsJustNormalized() {
         assertThat(ArticleName.clean("Mleko 3.2% 500 ml", null, HALF_LITRE)).isEqualTo("MLEKO 3,2% 500ML");
         assertThat(ArticleName.clean("Mleko 500 ml", " - ", HALF_LITRE)).isEqualTo("MLEKO 500ML");

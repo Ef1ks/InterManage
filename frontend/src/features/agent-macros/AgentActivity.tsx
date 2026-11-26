@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useCan } from '@/features/auth/api'
 import { useCurrentStore } from '@/features/stores/current-store'
 import { ApiError } from '@/lib/api'
-import type { AgentMacroJob } from '@/lib/types'
+import type { AgentActivity as Activity, AgentMacroJob } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import {
@@ -44,10 +44,10 @@ export function AgentActivity() {
   const canView = useCan('DATA_ENTRY', 'VIEW')
   const canEdit = useCan('DATA_ENTRY', 'EDIT')
   const { data } = useAgentActivity(store?.id, canView)
-  if (!store || !canView || !data || (data.jobs.length === 0 && !data.update)) return null
+  if (!store || !canView || !data || (data.jobs.length === 0 && !data.update && !data.waitingFiles)) return null
 
   const active = data.jobs.find((job) => onComputer(job))
-  const queued = data.jobs.filter((job) => job.status === 'QUEUED').length
+  const queued = data.jobs.filter((job) => job.status === 'QUEUED').length + (data.waitingFiles ? 1 : 0)
   const waiting = queued > 0 ? `w kolejce: ${queued}` : null
   const current = active
     ? `${active.title}${active.computer ? ` · ${active.computer}` : ''}`
@@ -94,6 +94,7 @@ export function AgentActivity() {
               </div>
             )}
             <ul className="grid gap-1">
+              {data.waitingFiles && <WaitingFilesRow files={data.waitingFiles} />}
               {data.jobs.map((job, index) => (
                 <JobRow
                   key={job.id}
@@ -109,6 +110,28 @@ export function AgentActivity() {
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>
+  )
+}
+
+/** Pliki nowych artykułów zapisane przez agenta, na które makro jeszcze nie ruszyło (np. trwa inne makro sklepu). */
+function WaitingFilesRow({ files }: { files: NonNullable<Activity['waitingFiles']> }) {
+  return (
+    <li className="grid gap-1 rounded-lg px-1 py-1.5">
+      <div className="flex items-start gap-2">
+        <LoaderCircleIcon className="mt-0.5 size-4 shrink-0 animate-spin text-sky-600 motion-reduce:animate-none dark:text-sky-400" />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium break-words">
+            Wczytanie nowych artykułów{files.count > 1 ? ` (${files.count} pliki)` : ''}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {time(files.since)} · {LABELS.QUEUED} · {files.requestedBy}
+          </p>
+          <p className="mt-0.5 text-xs break-words text-muted-foreground">
+            Czeka, aż komputer sklepu skończy inne makro. Ruszy samo.
+          </p>
+        </div>
+      </div>
+    </li>
   )
 }
 

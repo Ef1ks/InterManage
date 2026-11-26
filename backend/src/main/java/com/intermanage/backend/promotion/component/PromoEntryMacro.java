@@ -45,7 +45,13 @@ public final class PromoEntryMacro {
     private static final String FREE_CODE_LABEL = "KOD_WOLNY";
     private static final String LOSS_TEXT = "ze strat";
     private static final String BACK_BUTTON = "btnB1_Retour_LnkBouton";
-    private static final String CN_TEXT = "kodu CN";
+    /**
+     * Komunikaty o stawce VAT i kodzie CN po EAN-ie (tylko czasem, sam „Fermer” = Zamknij, okno „:: MERCALYS - Les
+     * Mousquetaires ::”): „Wprowadzona stawka podatkowa nie jest dozwolona dla wprowadzonego kodu CN”, „Przed
+     * kontynuacją popraw kartę artykułu. Aby zobaczyć dozwoloną stawkę VAT wprowadź kod CN” (skan 26.11.2026), „Kody CN,
+     * GTU i Split Payment są wymagane”.
+     */
+    private static final String CN_TEXT = "kod CN;kodu CN;Kody CN;dozwolon;stawk;GTU";
     private static final String CN_CLOSE_BUTTON = "Fermer";
     private static final String VAT_FIELD = "lstZ22_TVA_TxtBox";
 
@@ -53,8 +59,10 @@ public final class PromoEntryMacro {
     private static final int AFTER_SAVE = 1500;
     private static final int EXISTING_CHECK = 3000;
     private static final int BEFORE_BACK = 500;
-    private static final int CN_DIALOG = 200;
-    private static final int VAT_CHECK = 300;
+    /** Okno o kodzie CN czeka tylko przy pustym albo zerowym VAT, więc może dłużej. */
+    private static final int CN_DIALOG = 1000;
+    /** Tyle makro czeka po EAN-ie na kod stawki w polu VAT; zwykle jest od razu. */
+    private static final int VAT_LOAD = 2000;
 
     /** Artykuł promocji; {@code vatCode}: kod stawki w Mercalys (1 = 23%, 2 = 8%, 6 = 5%), pusty = nieznany. */
     public record Item(String ean, BigDecimal price, LocalDate dateTo, String vatCode) {
@@ -146,16 +154,24 @@ public final class PromoEntryMacro {
     private static void article(List<String> out, Item item, int index, int count) {
         String price = item.price().setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
         String vatLabel = "VAT_OK_" + (index + 1);
+        String fixLabel = "VAT_FIX_" + (index + 1);
         out.add("# Artykuł " + (index + 1) + "/" + count + ", EAN " + item.ean() + ": " + price + " do " + item.dateTo());
         out.add("WEBWAIT|" + WINDOW + "|" + ARTICLE_FIELD + "||" + PAGE_TIMEOUT_MS);
         out.add("WEBKEY|" + WINDOW + "|" + ARTICLE_FIELD + "|^a" + item.ean() + "{Enter}");
         out.add("SLEEP|" + AFTER_EAN);
+        // Wczytany artykuł ma kod stawki w polu VAT: wtedy od razu dalej, bez czekania na okno, które przychodzi rzadko.
+        // Pole puste albo z 0 = komunikat o kodzie CN: Fermer i kod stawki artykułu; bez znanej stawki makro staje na
+        // sprawdzeniu pola, zamiast zapisać promocję z VAT 0.
+        out.add("WEBIFVALUE|" + WINDOW + "|" + VAT_FIELD + "|^[1-9]$|" + fixLabel + "|" + VAT_LOAD);
+        out.add(jump(vatLabel));
+        out.add("LABEL|" + fixLabel);
         out.add("WEBDIALOG|" + DIALOG + "|" + CN_TEXT + "|" + CN_CLOSE_BUTTON + "|" + CN_DIALOG);
-        out.add("WEBIFVALUE|" + WINDOW + "|" + VAT_FIELD + "|^0?$|" + vatLabel + "|" + VAT_CHECK);
         out.add(item.vatCode() != null ? "WEBKEY|" + WINDOW + "|" + VAT_FIELD + "|^a" + item.vatCode() + "{Tab}"
                 : "# Brak stawki VAT artykułu w kartotece");
         out.add("WEBVALUE|" + WINDOW + "|" + VAT_FIELD + "|^[1-9]$");
         out.add("LABEL|" + vatLabel);
+        // Komunikat przy stawce w polu („VAT … nie jest już dozwolony”): sprawdzenie bez czekania.
+        out.add("WEBDIALOG|" + DIALOG + "|" + CN_TEXT + "|" + CN_CLOSE_BUTTON + "|0");
         out.add("WEBKEY|" + WINDOW + "|" + SALE_END_FIELD + "|^a" + mercalysDate(item.dateTo()) + "{Tab}");
         out.add("WEBVALUE|" + WINDOW + "|" + SALE_END_FIELD + "|" + datePattern(item.dateTo()));
         out.add("WEBKEY|" + WINDOW + "|" + PRICE_FIELD + "|^a" + price + "{Enter}");
@@ -163,6 +179,11 @@ public final class PromoEntryMacro {
         out.add("WEBWAIT|" + DIALOG + "|Oui|" + CREATE_TEXT + "|" + PAGE_TIMEOUT_MS);
         out.add("WEBCLICK|" + DIALOG + "|Oui");
         out.add("SLEEP|" + AFTER_SAVE);
+    }
+
+    /** Skok bez warunku: pola nie ma, więc WEBIFVALUE od razu przeskakuje (działa w każdym odtwarzaczu z LABEL). */
+    private static String jump(String label) {
+        return "WEBIFVALUE|" + WINDOW + "|brak-pola|^$|" + label + "|0";
     }
 
     static String mercalysDate(LocalDate date) {

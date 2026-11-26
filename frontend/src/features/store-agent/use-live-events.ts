@@ -313,7 +313,8 @@ function notifyProductFiles(storeId: string, message: LiveMessage) {
       })
       break
     case 'RUNNING':
-      toast.loading('Komputer sklepu wczytuje nowe artykuły…', { id, duration: 600_000 })
+      // Toast „loading” w sonnerze nie znika sam; postęp i tak widać w kolejce makr w nagłówku.
+      toast.message('Komputer sklepu wczytuje nowe artykuły', { id, duration: 6_000 })
       break
     case 'DONE':
       toast.success('Nowe artykuły wczytane na komputerze sklepu', { id, description, duration: 10_000 })

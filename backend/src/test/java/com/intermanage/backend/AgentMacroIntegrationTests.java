@@ -278,6 +278,8 @@ class AgentMacroIntegrationTests {
                 .contains("WEBPICKRE|Mercalys|dgDetail|(?<!\\d)0*9516050082\\D+0*538(?!\\d)|30000|brak-538")
                 .contains("WEBORDERPICK|Mercalys|ibtB1_Ajouter_ImageButton1,ibtB1_Ajouter_LnkBouton|538|"
                         + "SCAPR POLSKA SP.Z.O.O.|Base;Baza|")
+                .contains("WEBPICKRE|Mercalys|dgDetail|(?<!\\d)0*88110(?!\\d)|5000|zatwierdz-dostawce-88110\r\n"
+                        + "LABEL|zatwierdz-dostawce-88110\r\nWEBCLICK|Mercalys|btnB2_Valider_LnkBouton\r\n")
                 .contains("WEBERRORS|Mercalys|btnB2_Supprimer_LnkBouton|niezgodne jednost;nieistniej;art.ju;doręczone|30000")
                 .contains("|Les Mousquetaires|Te linie nie;integracj|Oui|pytanie-88110|")
                 .contains("EXCELSAVE|P:\\Production\\INTERMANAGE\\EXCEL\\BON_9516050082_88110.xlsx|180000")
@@ -724,6 +726,71 @@ class AgentMacroIntegrationTests {
     private void poll(String key, String playerVersion) throws Exception {
         agentPost(key, "/macro-jobs/poll", ("{\"idleSeconds\":900,\"locked\":false,\"playerRunning\":true,"
                 + "\"busy\":false,\"playerVersion\":\"%s\"}").formatted(playerVersion)).andExpect(status().isOk());
+    }
+
+    /** Zamknięcie faktur na komputerze sklepu: potwierdzenie na stronie, odtwarzacz o nie już nie pyta. */
+    @Test
+    void invoiceClosingsAreClosedOnComputerAfterConfirmationOnPage() throws Exception {
+        String first = invoiceClosing("538", "FV/1/2026");
+        String second = invoiceClosing("", "FV/2/2026");
+        String kasa = addAgent("Kasa");
+        poll(kasa, "0.66");
+        String ids = "[\"" + second + "\",\"" + first + "\"]";
+
+        // Bez potwierdzenia na stronie nic nie rusza; za stary odtwarzacz nie dostanie makra.
+        invoiceClose(ids, false, false).andExpect(status().isBadRequest());
+        String early = JsonPath.read(invoiceClose(ids, false, true).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        cancel(early);
+
+        poll(kasa, "0.67");
+        String job = JsonPath.read(invoiceClose(ids, true, true).andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind").value("INVOICE_CLOSE"))
+                .andExpect(jsonPath("$.itemCount").value(2))
+                .andExpect(jsonPath("$.computer").value("Kasa"))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String macro = JsonPath.read(agentPost(kasa, "/macro-jobs/" + job + "/start", "")
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.macro");
+        assertThat(macro).startsWith("# Zamknięcie faktur: 2\r\nWEBLIST||FV/2/2026\r\nWEBLIST|538|FV/1/2026\r\n"
+                + "WINOPEN|Mercalys ahk_exe Mercalys.exe\r\n")
+                .contains("WEBROWS|Mercalys|dgDetail|10|btnB4_CreationCommande_LnkBouton|pgrDetail_ibtSuivant|2|")
+                .contains("WEBCLOSE|Mercalys|dgDetail|1|12|btnB3_Cloturer_LnkBouton|")
+                .endsWith("PDFPRINTALL|ahk_class AcrobatSDIWindow|20000\r\nWINMIN|Mercalys ahk_exe Mercalys.exe\r\n");
+        mvc.perform(get("/api/stores/" + storeId + "/data-entry/invoice-closings").cookie(owner))
+                .andExpect(jsonPath("$[0].generatedAt").exists())
+                .andExpect(jsonPath("$[1].generatedAt").exists());
+
+        agentPost(kasa, "/macro-jobs/" + job + "/finish", "{\"ok\":true,\"message\":\"Zamknięte:\\n1 FV/1/2026\"}")
+                .andExpect(status().isNoContent());
+        mvc.perform(get(base() + "/" + job).cookie(owner))
+                .andExpect(jsonPath("$.status").value("DONE"))
+                .andExpect(jsonPath("$.message").value("Zamknięte:\n1 FV/1/2026"));
+
+        // Usunięta z listy faktura nie trafi do makra.
+        mvc.perform(post("/api/stores/" + storeId + "/data-entry/invoice-closings/delete").cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + first + "\"]}"))
+                .andExpect(status().isOk());
+        invoiceClose(ids, false, true).andExpect(status().isConflict());
+    }
+
+    private String invoiceClosing(String supplierCode, String number) {
+        UUID export = jdbc.queryForObject("""
+                insert into data_entry_xml_exports (store_id, file_name, document_number, document_date, line_count,
+                    net_value, content, kind, saved_at)
+                values (?::uuid, 'plik.xml', ?, current_date, 1, 10, '\\x00'::bytea, 'SAVED', now()) returning id""",
+                UUID.class, storeId, number);
+        return jdbc.queryForObject("""
+                insert into data_entry_invoice_closings (store_id, export_id, supplier_code, document_number,
+                    document_date, net_value) values (?::uuid, ?, ?, ?, current_date, 10) returning id::text""",
+                String.class, storeId, export, supplierCode, number);
+    }
+
+    private ResultActions invoiceClose(String ids, boolean print, boolean confirmed) throws Exception {
+        return mvc.perform(post(base() + "/invoice-close").cookie(owner).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":%s,\"print\":%s,\"confirmed\":%s}".formatted(ids, print, confirmed)));
     }
 
     private ResultActions meaCodes(String codes) throws Exception {

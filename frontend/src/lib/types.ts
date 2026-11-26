@@ -5665,6 +5665,7 @@ export type AgentMacroJob = {
     | 'PRICE_CONTROL'
     | 'CAD_PRIORITY'
     | 'PROMO_ENTRY'
+    | 'INVOICE_CLOSE'
   title: string
   /** `QUEUED`: czeka w kolejce sklepu (trwa inne makro albo żaden komputer nie jest wolny), rusza samo. */
   status: 'QUEUED' | 'OFFERED' | 'RUNNING' | 'DONE' | 'FAILED' | 'NO_COMPUTER' | 'CANCELLED'
@@ -5693,4 +5694,6 @@ export type AgentMacroJob = {
 export type AgentActivity = {
   jobs: AgentMacroJob[]
   update: { computer: string; startedAt: string } | null
+  /** Pliki nowych artykułów czekające na makro (jeszcze bez zlecenia, np. trwa inne makro); `null` = nic nie czeka. */
+  waitingFiles: { count: number; since: string; requestedBy: string; fileNames: string[] } | null
 }

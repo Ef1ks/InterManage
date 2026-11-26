@@ -76,6 +76,14 @@ public final class AgentMacroApi {
     List<@NotNull String> codes, UUID agentId) {
     }
 
+    /**
+     * Faktury z kolejki zamknięć, już zatwierdzone na stronie ({@code confirmed}), bo zamknięcia nie da się cofnąć;
+     * {@code print} = bony do drukarki domyślnej komputera sklepu.
+     */
+    public record InvoiceCloseRequest(@NotNull @Size(min = 1, max = 200, message = "Zaznacz od 1 do 200 faktur")
+    List<@NotNull UUID> ids, boolean print, boolean confirmed, UUID agentId) {
+    }
+
     /** Bon dostawy z bazy („Wprowadź dostawę” i „Zatwierdź”). */
     public record BaseDeliveryRequest(@NotNull UUID deliveryId, UUID agentId) {
     }
@@ -95,7 +103,18 @@ public final class AgentMacroApi {
     }
 
     /** Co robią komputery sklepu: trwające i ostatnie makra (od najnowszego) i trwająca aktualizacja danych. */
-    public record Activity(List<Job> jobs, Update update) {
+    public record Activity(List<Job> jobs, Update update, WaitingFiles waitingFiles) {
+
+        public Activity withWaitingFiles(WaitingFiles files) {
+            return new Activity(jobs, update, files);
+        }
+    }
+
+    /**
+     * Pliki nowych artykułów zapisane przez agenta, które czekają na makro (np. na koniec trwającego makra sklepu). To
+     * jeszcze nie zlecenie makra, więc nie ma go wśród {@code jobs}; {@code null} = nic nie czeka.
+     */
+    public record WaitingFiles(int count, Instant since, String requestedBy, List<String> fileNames) {
     }
 
     public record Update(String computer, Instant startedAt) {

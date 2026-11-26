@@ -19,5 +19,7 @@ public enum AgentMacroKind {
     /** ITM8 z cadencier jako priorytetowe i aktywne; zleca je osoba albo serwer po aktualizacji danych. */
     CAD_PRIORITY,
     /** Promocje z kolektora: operacja w Wprowadzaniu promocji; zleca je kolektor albo osoba z przeglądarki. */
-    PROMO_ENTRY
+    PROMO_ENTRY,
+    /** Zamknięcie faktur z kolejki wprowadzania danych: integracja PZ, kody, Nr BL i zamknięcie dostaw. */
+    INVOICE_CLOSE
 }

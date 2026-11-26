@@ -78,7 +78,8 @@ export type MacroDocument = {
  * Makro dla odtwarzacza: przywraca Mercalys z paska zadań i otwiera zakładkę Zakup, potem integracja plików, kody na bonach z listy bez Nr Zamów, Nr BL
  * w nagłówkach, a po jednym potwierdzeniu zamknięcia z wydrukiem bonu i powrót do przeglądarki. Bon bez kodu zatrzymuje makro przed nagłówkami,
  * a podsumowanie mówi, czego nie znalazło. Z `print` bony otwarte w Acrobacie idą przed zamknięciem do drukarki domyślnej
- * (PDFPRINTALL, odtwarzacz od wersji 51), bez niego są tylko zamykane. CRLF jak w Windows.
+ * (PDFPRINTALL, odtwarzacz od wersji 51), bez niego są tylko zamykane. CRLF jak w Windows. To samo makro na komputer
+ * sklepu składa serwer (`InvoiceCloseMacro`): zmiana ekranów = zmiana w obu.
  */
 export function buildDeliveryMacro(documents: MacroDocument[], print = false) {
   const bl = BL_SCREEN
@@ -528,7 +529,9 @@ const PROMO_SCREEN = {
    * „Wprowadzona stawka podatkowa nie jest dozwolona dla wprowadzonego kodu CN.”: tylko czasem, po EAN-ie. Okno ma
    * sam odnośnik „Fermer” (bez id), a pole VAT zostaje z 0, więc makro wpisuje kod stawki artykułu.
    */
-  cnText: 'kodu CN',
+  // Też „Przed kontynuacją popraw kartę artykułu. Aby zobaczyć dozwoloną stawkę VAT wprowadź kod CN” (skan
+  // 26.11.2026) i „Kody CN, GTU i Split Payment są wymagane”.
+  cnText: 'kod CN;kodu CN;Kody CN;dozwolon;stawk;GTU',
   cnCloseButton: 'Fermer',
   /** Kod stawki jak w kartotece Mercalys: 1 = 23%, 2 = 8%, 6 = 5%. */
   vatField: 'lstZ22_TVA_TxtBox',
@@ -553,9 +556,9 @@ export const PROMO_MACRO_CONFIG = {
   /** Po przeładowaniu strony artykułów, przed Powrót. */
   beforeBack: 500,
   /** Tyle makro czeka po EAN-ie na okno o stawce VAT niezgodnej z kodem CN. */
-  cnDialog: 200,
-  /** Tyle makro sprawdza, czy pole VAT zostało puste albo z 0 (po oknie o kodzie CN). */
-  vatCheck: 300,
+  cnDialog: 1000,
+  /** Tyle makro czeka po EAN-ie na kod stawki w polu VAT; zwykle jest od razu, a puste albo 0 = okno o kodzie CN. */
+  vatLoad: 2000,
 } as const
 
 /** {@code vatCode}: kod stawki w Mercalys ({@link mercalysVatCode}), wpisywany, gdy Mercalys wyzeruje VAT. */
@@ -780,20 +783,26 @@ function promoArticleLines(items: PromoMacroItem[], from: number) {
     if (index < from) return
     const price = item.price.toFixed(2).replace('.', ',')
     const vatLabel = `VAT_OK_${index + 1}`
+    const fixLabel = `VAT_FIX_${index + 1}`
     out.push(
       `# Artykuł ${index + 1}/${items.length}, EAN ${item.ean}: ${price} do ${item.dateTo}`,
       `WEBWAIT|${WINDOW}|${screen.articleField}||${PAGE_TIMEOUT_MS}`,
       `WEBKEY|${WINDOW}|${screen.articleField}|^a${item.ean}{Enter}`,
       `SLEEP|${c.afterEan}`,
-      // Stawka VAT niedozwolona dla kodu CN: Fermer, a pole VAT zostaje z 0. Wtedy kod stawki artykułu; bez znanej
-      // stawki makro staje na sprawdzeniu pola, zamiast zapisać promocję z VAT 0.
+      // Wczytany artykuł ma kod stawki w polu VAT: od razu dalej, bez czekania na okno, które przychodzi rzadko. Pole
+      // puste albo z 0 = komunikat o kodzie CN: Fermer i kod stawki artykułu; bez znanej stawki makro staje na
+      // sprawdzeniu pola, zamiast zapisać promocję z VAT 0. Skok bez warunku: WEBIFVALUE na polu, którego nie ma.
+      `WEBIFVALUE|${WINDOW}|${screen.vatField}|^[1-9]$|${fixLabel}|${c.vatLoad}`,
+      `WEBIFVALUE|${WINDOW}|brak-pola|^$|${vatLabel}|0`,
+      `LABEL|${fixLabel}`,
       `WEBDIALOG|${DIALOG}|${screen.cnText}|${screen.cnCloseButton}|${c.cnDialog}`,
-      `WEBIFVALUE|${WINDOW}|${screen.vatField}|^0?$|${vatLabel}|${c.vatCheck}`,
       ...(item.vatCode
         ? [`WEBKEY|${WINDOW}|${screen.vatField}|^a${item.vatCode}{Tab}`]
         : [`# Brak stawki VAT artykułu w kartotece`]),
       `WEBVALUE|${WINDOW}|${screen.vatField}|^[1-9]$`,
       `LABEL|${vatLabel}`,
+      // Komunikat przy stawce w polu: sprawdzenie bez czekania.
+      `WEBDIALOG|${DIALOG}|${screen.cnText}|${screen.cnCloseButton}|0`,
       `WEBKEY|${WINDOW}|${screen.saleEndField}|^a${mercalysDate(item.dateTo)}{Tab}`,
       `WEBVALUE|${WINDOW}|${screen.saleEndField}|${datePattern(item.dateTo)}`,
       `WEBKEY|${WINDOW}|${screen.priceField}|^a${price}{Enter}`,

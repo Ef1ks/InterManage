@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.71.0.0
+;@Ahk2Exe-SetVersion 0.72.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.71" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.72" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
@@ -1330,17 +1330,33 @@ WebSelectRow(title, grid, column, timeoutMs, &key := "", handled := Map(), accep
 }
 
 ; Ostatni PDF przychodzi po chwili: zamykamy dopiero, gdy okna i ich tytuły nie zmieniają się przez 4 sekundy.
+; Od 0.72 po zamknięciu czeka jeszcze chwilę i zamyka kolejne: drugi PDF (np. po pobraniu dostawy z bazy) przychodzi
+; czasem dopiero po zamknięciu pierwszego albo otwiera się jako karta w tym samym oknie i zostawał na ekranie.
 WinCloseAll(title, timeoutMs) {
     WaitForStableWindows(title, timeoutMs)
-    found := WinGetList(title)
-    for hwnd in found
-        try WinClose hwnd
-    left := 0
-    for hwnd in found {
-        if !WinWaitClose("ahk_id " hwnd, , 3)
-            left += 1
+    Loop 6 {
+        found := WinGetList(title)
+        if (found.Length = 0)
+            return ""
+        for hwnd in found
+            ClosePdfWindow(hwnd)
+        WaitForStableWindows(title, 3000)
     }
-    return left = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
+    return WinGetList(title).Length = 0 ? "" : "Acrobat nie zamknął się sam, zamknij PDF-y ręcznie."
+}
+
+; Zamyka okno Acrobata; gdy zostaje (karty w jednym oknie), zamyka po kolei dokumenty Ctrl+W.
+ClosePdfWindow(hwnd) {
+    try WinClose hwnd
+    if WinWaitClose("ahk_id " hwnd, , 3)
+        return
+    Loop 10 {
+        if !WinExist("ahk_id " hwnd)
+            return
+        try WinActivate hwnd
+        Send "^w"
+        Sleep 500
+    }
 }
 
 ; Jak WinCloseAll, ale każdy dokument najpierw idzie do drukarki domyślnej przez okno drukowania Acrobata (Ctrl+P, Enter),

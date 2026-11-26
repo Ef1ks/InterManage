@@ -26,7 +26,10 @@ public final class SuggestionPrompt {
             - name: nazwa artykułu dla klienta, najwyżej 30 znaków razem ze spacjami i miarą (policz je):
               * jak najbardziej czytelna: pełne słowa, skróty tylko wtedy, gdy bez nich nazwa się nie mieści;
                 wtedy skracaj słowa opisowe (CZEKOLADOWY -> CZEKOL), a rodzaj towaru i wariant (smak, kolor) zostaw;
-              * WIELKIE LITERY, bez polskich znaków, bez kropek (ułamek z przecinkiem);
+              * WIELKIE LITERY, bez kropek (ułamek z przecinkiem);
+              * poprawna polska pisownia Z POLSKIMI LITERAMI (Ą Ć Ę Ł Ń Ó Ś Ź Ż), ogonki usuwamy sami;
+                nigdy nie zamieniaj liter na inne: Ż to nie RZ, Ó to nie U, H to nie CH;
+                słowa z faktury przepisuj litera w literę, nie poprawiaj ich i nie zgaduj innych słów;
               * bez marki i bez producenta: marka idzie tylko do pola brand i nie powtarzaj jej w nazwie,
                 nazwa zaczyna się od rodzaju towaru; bez opisu kartonu (np. "/12", "8/");
                 wyjątek: papierosy i wyroby tytoniowe (rodzina 3901) mają markę w nazwie, bez słowa PAPIEROSY;
@@ -39,7 +42,9 @@ public final class SuggestionPrompt {
               "WAFI | Krem dla kota - kurczak [5x14g]" -> "KREM DLA KOTA KURCZAK 5X14G";
               "ALE BROWAR TMAVE but 0,5l" -> "PIWO TMAVE 500ML" (marka ALE BROWAR);
               "P.Winston Blue Superline /10/ (25.50) TTT JTI" -> "WINSTON BLUE SUPERLINE" (marka WINSTON);
-              "Hortex Napój Jeżyna/Limonka 0.33L Puszka KAUCJA" -> "NAPOJ JEZYNA-LIMONKA 330ML" (marka HORTEX).
+              "Hortex Napój Jeżyna/Limonka 0.33L Puszka KAUCJA" -> "NAPÓJ JEŻYNA-LIMONKA 330ML" (marka HORTEX);
+              "Żurek śląski z chrzanem 500ml" -> "ŻUREK ŚLĄSKI Z CHRZANEM 500ML";
+              "ZUREK STAROPOLSKI 450G" -> "ZUREK STAROPOLSKI 450G" (faktura bez ogonków: przepisz, nie zmieniaj liter).
             - brand: MARKA produktu, nie producent ani dystrybutor: Milka (nie Mondelez), Kinder (nie Ferrero),
               WIELKIE LITERY. Jeśli marka jest już w kartotece (podobne nazwy, ten sam producent), zapisz ją tak samo.
               Gdy marki nie da się ustalić, pusty tekst.
@@ -60,7 +65,8 @@ public final class SuggestionPrompt {
             Skracasz nazwy artykułów w kartotece supermarketu, które przekraczają limit długości.
             Dla każdej pozycji zwróć name: nazwę BEZ MIARY (miarę dopiszemy sami na końcu), która ma najwyżej
             podaną liczbę znaków, licząc spacje. Policz znaki przed odpowiedzią.
-            - WIELKIE LITERY, bez polskich znaków, bez kropek.
+            - WIELKIE LITERY, bez kropek, z polskimi literami (ogonki usuwamy sami).
+            - Słowa, których nie skracasz, przepisz litera w literę: nie zamieniaj Z na RZ, O na U, H na CH.
             - Zostaw rodzaj towaru i wariant (smak, kolor, odmiana), bo po nich klient rozróżnia artykuły.
             - Najpierw pomiń słowa zbędne, potem skracaj słowa opisowe i nazwy linii produktów
               (CZEKOLADOWY -> CZEKOL, TRUSKAWKOWY -> TRUSK, ATHLETES -> ATHL), bez kropek po skrótach.

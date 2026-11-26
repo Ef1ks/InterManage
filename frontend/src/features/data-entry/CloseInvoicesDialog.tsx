@@ -1,7 +1,17 @@
-import { useState } from 'react'
-import { ClipboardCopyIcon, Trash2Icon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ClipboardCopyIcon, MonitorPlayIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,6 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useAgentComputers } from '@/features/agent-macros/api'
+import { RemoteMacroButton, RemoteMacroStatus, useRemoteMacro } from '@/features/agent-macros/RemoteMacro'
+import { useCan } from '@/features/auth/api'
 import { formatMoney } from '@/features/documents/format'
 import { formatDate } from '@/features/ksef/format'
 import { ApiError } from '@/lib/api'
@@ -51,8 +64,13 @@ type Props = {
   onOpenChange: (open: boolean) => void
 }
 
+/** Zamknięcie na komputerze sklepu czeka na „Tak” w okienku na tej stronie: odtwarzacz o nie już nie pyta. */
+type RemoteClose = { items: InvoiceClosing[]; agentId?: string }
+
 /**
- * Faktury z plików XML zapisanych na dysku. Skrypt idzie do schowka i dopiero wtedy faktury stają się wygenerowane.
+ * Faktury z plików XML zapisanych na dysku. Skrypt idzie do schowka albo makro na wolny komputer sklepu (agent), i
+ * dopiero wtedy faktury stają się wygenerowane. Przy komputerze sklepu pytanie „Zamknąć dostawy?” jest tutaj, przed
+ * zleceniem, a podsumowanie (zamknięte i pominięte dostawy) wraca na stronę.
  * Schowek łatwo nadpisać, więc wygenerowane zostają na liście: można je skopiować ponownie, a usuwa je osoba, która
  * sprawdziła zamknięcie. Fakturę, której nie trzeba zamykać, usuwa się też z „Do zamknięcia” (znacznik, „Przywróć”).
  */
@@ -62,6 +80,17 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
   // Zaznaczone jest wszystko, więc pamiętamy tylko odznaczone.
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(new Set())
   const [print, setPrint] = useState(readPrint)
+  const canRunRemotely = useCan('DATA_ENTRY', 'EDIT')
+  const { data: computers = [] } = useAgentComputers(storeId, open && canRunRemotely)
+  const remote = useRemoteMacro(storeId, { matches: (job) => job.kind === 'INVOICE_CLOSE' })
+  const [confirm, setConfirm] = useState<RemoteClose | null>(null)
+  const remoteJobId = remote.job?.id
+  const refetchClosings = closings.refetch
+  // Zlecenie oznacza faktury jako wygenerowane na serwerze; lista w oknie musi to pokazać od razu.
+  useEffect(() => {
+    if (remoteJobId) void refetchClosings()
+  }, [remoteJobId, refetchClosings])
+  const remoteReady = canRunRemotely && computers.length > 0
 
   const items = closings.data ?? []
   const pending = items.filter((item) => item.generatedAt === null)
@@ -109,6 +138,17 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
       description: 'Naciśnij Alt+E, a odtwarzacz sam otworzy Mercalys.',
     })
     onOpenChange(false)
+  }
+
+  const closeRemotely = async ({ items: picked, agentId }: RemoteClose) => {
+    setConfirm(null)
+    await remote.run({
+      macro: 'invoice-close',
+      ids: picked.map((item) => item.id),
+      print,
+      confirmed: true,
+      agentId,
+    })
   }
 
   const remove = (picked: InvoiceClosing[]) => {
@@ -182,8 +222,9 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Zamknij faktury</DialogTitle>
           <DialogDescription>
-            Skrypt zintegruje pliki PZ, utworzy kody, wpisze numery faktur w nagłówkach i zamknie dostawy. Mercalys musi
-            być uruchomiony, może zostać na pasku zadań.
+            Skrypt zintegruje pliki PZ, utworzy kody, wpisze numery faktur w nagłówkach i zamknie dostawy. Na tym
+            komputerze: skrypt do schowka i Alt+E. Na komputerze sklepu: zamknięcie zatwierdzasz tutaj, a wynik wraca na
+            tę stronę.
           </DialogDescription>
         </DialogHeader>
 
@@ -201,11 +242,13 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
             <span className="font-medium">Drukuj bony po zamknięciu</span>
             <span className="text-xs text-muted-foreground">
               {print
-                ? 'Każdy bon otwarty w Adobe Acrobat pójdzie od razu do drukarki domyślnej, potem się zamknie (odtwarzacz od wersji 0.51).'
+                ? 'Każdy bon otwarty w Adobe Acrobat pójdzie od razu do drukarki domyślnej komputera, który wykonuje makro, potem się zamknie (odtwarzacz od wersji 0.51).'
                 : 'Bony otwarte w Adobe Acrobat zostaną zamknięte bez drukowania.'}
             </span>
           </span>
         </label>
+
+        {remote.job && <RemoteMacroStatus job={remote.job} onCancel={remote.cancel} onClose={remote.close} />}
 
         <section aria-label="Do zamknięcia" className="flex flex-col gap-2">
           <h3 className="text-sm font-medium">Do zamknięcia ({pending.length})</h3>
@@ -217,7 +260,7 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
               </p>
             )}
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="outline"
               disabled={pickedPending.length === 0 || change.isPending}
@@ -226,10 +269,23 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
               <Trash2Icon />
               Usuń zaznaczone ({pickedPending.length})
             </Button>
-            <Button disabled={pickedPending.length === 0 || change.isPending} onClick={() => void generate()}>
+            <Button
+              variant={remoteReady ? 'outline' : 'default'}
+              disabled={pickedPending.length === 0 || change.isPending}
+              onClick={() => void generate()}
+            >
               <ClipboardCopyIcon />
               Generuj skrypt ({pickedPending.length})
             </Button>
+            {remoteReady && (
+              <RemoteMacroButton
+                computers={computers}
+                label={`Zamknij na komputerze sklepu (${pickedPending.length})`}
+                busy={remote.busy}
+                disabled={pickedPending.length === 0 || remote.busy || change.isPending}
+                onRun={(agentId) => setConfirm({ items: pickedPending, agentId })}
+              />
+            )}
           </div>
         </section>
 
@@ -240,7 +296,8 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
               <ul aria-label="Faktury wygenerowane">{generated.map(row)}</ul>
             </div>
             <p className="text-xs text-muted-foreground">
-              Skrypt zniknął ze schowka albo przerwał się? Zaznacz niezamknięte faktury i skopiuj go ponownie.
+              Skrypt zniknął ze schowka albo przerwał się? Zaznacz niezamknięte faktury i skopiuj go ponownie albo
+              zamknij je na komputerze sklepu.
             </p>
           </section>
         )}
@@ -255,6 +312,16 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
                 <ClipboardCopyIcon />
                 Skopiuj ponownie ({pickedGenerated.length})
               </Button>
+              {remoteReady && (
+                <Button
+                  variant="outline"
+                  disabled={pickedGenerated.length === 0 || remote.busy}
+                  onClick={() => setConfirm({ items: pickedGenerated })}
+                >
+                  <MonitorPlayIcon />
+                  Na komputerze sklepu ({pickedGenerated.length})
+                </Button>
+              )}
               <Button
                 variant="outline"
                 disabled={pickedGenerated.length === 0 || change.isPending}
@@ -266,6 +333,38 @@ export function CloseInvoicesDialog({ storeId, open, onOpenChange }: Props) {
             </div>
           )}
         </DialogFooter>
+
+        <AlertDialog open={confirm !== null} onOpenChange={(next) => !next && setConfirm(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Zamknąć dostawy: {confirm?.items.length}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Komputer sklepu zintegruje pliki PZ, utworzy kody, wpisze numery faktur w nagłówkach i zamknie dostawy
+                {print ? ', a bony wydrukuje na swojej drukarce domyślnej' : ''}. Zamknięcia nie da się cofnąć, a przy
+                komputerze makro już o nie nie zapyta.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <ul className="max-h-[40vh] overflow-y-auto rounded-lg border text-sm">
+              {confirm?.items.map((item) => (
+                <li key={item.id} className="flex gap-3 border-b px-3 py-1.5 last:border-b-0">
+                  <span className="font-medium">{item.documentNumber}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                    {item.supplierCode && <span className="mr-2 tabular-nums">{item.supplierCode}</span>}
+                    {item.supplierName}
+                  </span>
+                  <span className="tabular-nums">{formatMoney(item.netValue)}</span>
+                </li>
+              ))}
+            </ul>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Nie</AlertDialogCancel>
+              <AlertDialogAction onClick={() => confirm && void closeRemotely(confirm)}>
+                <MonitorPlayIcon />
+                Tak, zamknij
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   )

@@ -166,8 +166,117 @@ namespace Intermanage.Collector
                 Settings.ChoosePrinter(printer.Mac, printer.Name);
                 message.Show("Wybrana drukarka: " + printer.Name, printerResult
                     + (printer.Unlisted ? "\n\nDrukarki nie ma na liście sklepu: dodaj ją w Intermanage." : "")
-                    + "\n\nEsc: lista drukarek.", false);
+                    + "\n\nEnter: cenówka testowa, Esc: lista drukarek.", false);
             }
+            if (mode == Mode.Printer)
+            {
+                ShowView(message);
+            }
+        }
+
+        // ---- cenówki ----
+
+        private volatile bool printing;
+        private PriceLabel printedLabel;
+        private Printer printedOn;
+        private bool printedFromCard;
+
+        /// <summary>„Drukuj” na karcie artykułu (lewy dolny róg albo Menu): cenówka pokazanego artykułu.</summary>
+        private void OnPrintShown(object sender, EventArgs e)
+        {
+            if (mode != Mode.Scan || view != card || shownArticle == null)
+            {
+                MessageBox.Show("Otwórz artykuł w Skanowaniu i wtedy wydrukuj jego cenówkę.", "Cenówka");
+                FocusInput();
+                return;
+            }
+            PriceLabel label = PriceLabel.Of(shownArticle);
+            if (label == null)
+            {
+                Native.ErrorBeep();
+                MessageBox.Show("Artykuł nie ma ceny sprzedaży.", "Cenówka");
+                FocusInput();
+                return;
+            }
+            Printer printer = Printers.Chosen;
+            if (printer == null)
+            {
+                Native.ErrorBeep();
+                MessageBox.Show("Najpierw wybierz drukarkę: Menu, Drukarka.", "Cenówka");
+                FocusInput();
+                return;
+            }
+            StartPrint(printer, label, true);
+        }
+
+        private void StartPrint(Printer printer, PriceLabel label, bool fromCard)
+        {
+            if (printing || checkingPrinter)
+            {
+                return;
+            }
+            printing = true;
+            printedLabel = label;
+            printedOn = printer;
+            printedFromCard = fromCard;
+            Cursor.Current = Cursors.WaitCursor;
+            if (!fromCard)
+            {
+                message.Show("Drukuję cenówkę testową", printer.Name + "\n" + BluetoothLink.Bar(printer.Mac), false);
+                ShowView(message);
+            }
+            Thread thread = new Thread(new ThreadStart(RunPrint));
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void RunPrint()
+        {
+            try
+            {
+                printerResult = Printers.Print(printedOn, printedLabel);
+                printerFailed = false;
+            }
+            catch (BluetoothException error)
+            {
+                printerResult = error.Message;
+                printerFailed = true;
+            }
+            catch (Exception error)
+            {
+                Log.Write("Cenówka na " + BluetoothLink.Bar(printedOn.Mac) + ": " + error);
+                printerResult = "Nie udało się wydrukować: " + error.Message;
+                printerFailed = true;
+            }
+            OnUi(new EventHandler(OnPrinted));
+        }
+
+        private void OnPrinted(object sender, EventArgs e)
+        {
+            printing = false;
+            Cursor.Current = Cursors.Default;
+            if (printedFromCard)
+            {
+                if (printerFailed)
+                {
+                    Native.ErrorBeep();
+                    MessageBox.Show(printerResult, "Cenówka");
+                }
+                else
+                {
+                    Native.Beep();
+                }
+                FocusInput();
+                return;
+            }
+            checkedPrinter = printedOn;
+            if (printerFailed)
+            {
+                Native.ErrorBeep();
+            }
+            message.Show(printerFailed ? "Nie wydrukowano" : "Cenówka testowa", printerResult
+                + "\n\nEnter: wydrukuj jeszcze raz, Esc: lista drukarek.", printerFailed);
+            printerFailed = false;
             if (mode == Mode.Printer)
             {
                 ShowView(message);
@@ -195,7 +304,7 @@ namespace Intermanage.Collector
                 return false;
             }
             e.Handled = true;
-            if (checkingPrinter)
+            if (checkingPrinter || printing)
             {
                 return true;
             }
@@ -214,6 +323,10 @@ namespace Intermanage.Collector
             {
                 CheckPrinter(checkedPrinter);
             }
+            else if (enter && view == message && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
+            {
+                StartPrint(checkedPrinter, PriceLabel.Sample(), false);
+            }
             else if (enter)
             {
                 ShowPrinters();
@@ -228,7 +341,7 @@ namespace Intermanage.Collector
             {
                 return false;
             }
-            if (checkingPrinter)
+            if (checkingPrinter || printing)
             {
                 return true;
             }

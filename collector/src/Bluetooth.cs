@@ -84,7 +84,11 @@ namespace Intermanage.Collector
 
         public void Send(string text)
         {
-            byte[] bytes = Encoding.ASCII.GetBytes(text);
+            Send(Encoding.ASCII.GetBytes(text));
+        }
+
+        public void Send(byte[] bytes)
+        {
             int sent = 0;
             while (sent < bytes.Length)
             {

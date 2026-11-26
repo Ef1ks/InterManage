@@ -79,6 +79,7 @@ namespace Intermanage.Collector
         /// </summary>
         private bool weightIn24;
         private Match shownMatch;
+        private Article shownArticle;
 
         public MainForm()
         {
@@ -135,6 +136,7 @@ namespace Intermanage.Collector
             install.Enabled = false;
             install.Click += new EventHandler(OnInstallVersion);
             menu.MenuItems.Add(install);
+            AddMenu("Drukuj cenówkę", new EventHandler(OnPrintShown));
             AddMenu("Drukarka", new EventHandler(OnPrinterMenu));
             AddMenu("Stan sieci", new EventHandler(OnNetwork));
             AddMenu("O programie", new EventHandler(OnAbout));
@@ -513,6 +515,7 @@ namespace Intermanage.Collector
             if (mode == Mode.Scan)
             {
                 shownMatch = match;
+                shownArticle = article;
                 // Bez przełącznika kodów 24 karta nie zgaduje, czy koniec kodu 24 to cena, czy waga.
                 bool known = match.ScaleCode.Length > 0 && match.ScaleCode[1] != '4';
                 card.Show(catalog, article, known ? Catalog.ScaleNote(match.ScaleCode, article, false) : "");
@@ -1044,7 +1047,15 @@ namespace Intermanage.Collector
             Bar.Icon icon = store == null || Entering || view == ask ? Bar.Icon.None
                 : store.Count > 0 ? Bar.Icon.Trash : store.CanRestore ? Bar.Icon.Undo : Bar.Icon.None;
             // Przełącznik kodów 24 tylko w protokole: tam koniec kodu daje ilość.
-            footer.ShowToggle(mode == Mode.Protocol && view != ask ? weightIn24 ? "24: kg" : "24: zł" : "", weightIn24);
+            // Na karcie artykułu w Skanowaniu ten sam róg drukuje cenówkę.
+            if (mode == Mode.Scan && view == card)
+            {
+                footer.ShowToggle("Drukuj", false);
+            }
+            else
+            {
+                footer.ShowToggle(mode == Mode.Protocol && view != ask ? weightIn24 ? "24: kg" : "24: zł" : "", weightIn24);
+            }
             if (sync.Percent >= 0)
             {
                 footer.Show(icon, sync.Status, sync.Percent + "%", Theme.Panel, Theme.Ink, sync.Percent);
@@ -1103,6 +1114,11 @@ namespace Intermanage.Collector
         private void OnFooter(object sender, MouseEventArgs e)
         {
             lastInput = Environment.TickCount;
+            if (footer.OnToggle(e.X) && mode == Mode.Scan && view == card)
+            {
+                OnPrintShown(sender, e);
+                return;
+            }
             if (footer.OnToggle(e.X))
             {
                 OnToggle24();

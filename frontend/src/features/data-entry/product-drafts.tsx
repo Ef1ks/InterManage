@@ -125,9 +125,12 @@ export function useProductDraftConfirm(storeId: string, onChanged?: (eans: strin
     )
     const manual = saved.filter((_, index) => !expected[index])
     if (manual.length < saved.length) {
-      toast.loading('Czekam, aż komputer sklepu wczyta nowe artykuły…', {
+      // Krótko, bez kręcenia się: plik może czekać godzinami na koniec innego makra, a stan pokazuje kolejka
+      // w nagłówku (AgentActivity). Wynik przyjdzie w tym samym powiadomieniu.
+      toast.message('Nowe artykuły wczyta komputer sklepu', {
         id: productFilesToast(storeId),
-        duration: 60_000,
+        description: 'Plik czeka w kolejce makr (w nagłówku). Dam znać, gdy artykuły będą w bazie.',
+        duration: 6_000,
       })
     }
     if (manual.length === 0) return

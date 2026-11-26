@@ -1,6 +1,9 @@
 package com.intermanage.backend.dataentry.service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -11,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
+import com.intermanage.backend.dataentry.component.InvoiceCloseMacro;
 import com.intermanage.backend.dataentry.dto.InvoiceClosingItem;
 import com.intermanage.backend.dataentry.entity.DataEntryInvoiceClosing;
 import com.intermanage.backend.dataentry.entity.DataEntryXmlExport;
@@ -18,8 +22,8 @@ import com.intermanage.backend.dataentry.mapper.DataEntryInvoiceClosingMapper;
 import com.intermanage.backend.dataentry.repository.DataEntryInvoiceClosingRepository;
 
 /**
- * Kolejka faktur do zamknięcia w programie sklepu. Zapis pliku XML na dysku dodaje fakturę raz. Skrypt składa
- * przeglądarka, a serwer pamięta, co już do niego poszło. Wygenerowane da się skopiować ponownie, bo schowek łatwo
+ * Kolejka faktur do zamknięcia w programie sklepu. Zapis pliku XML na dysku dodaje fakturę raz. Skrypt do schowka
+ * składa przeglądarka, makro na komputer sklepu serwer ({@link InvoiceCloseMacro}), a serwer pamięta, co już poszło. Wygenerowane da się skopiować ponownie, bo schowek łatwo
  * nadpisać, a usunięcie to znacznik.
  */
 @Service
@@ -60,6 +64,17 @@ public class DataEntryInvoiceClosingService {
     @Transactional(readOnly = true)
     public List<InvoiceClosingItem> list(UUID storeId) {
         return closings.findByStoreIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(storeId).stream().map(mapper::toItem)
+                .toList();
+    }
+
+    /** Faktury z kolejki do makra zamknięcia, w kolejności {@code ids}; usuniętych i cudzych nie ma. */
+    @Transactional(readOnly = true)
+    public List<InvoiceCloseMacro.Document> forMacro(UUID storeId, List<UUID> ids) {
+        Map<UUID, DataEntryInvoiceClosing> found = new HashMap<>();
+        closings.findByStoreIdAndIdIn(storeId, ids).stream().filter(closing -> closing.getDeletedAt() == null)
+                .forEach(closing -> found.put(closing.getId(), closing));
+        return ids.stream().distinct().map(found::get).filter(Objects::nonNull)
+                .map(closing -> new InvoiceCloseMacro.Document(closing.getDocumentNumber(), closing.getSupplierCode()))
                 .toList();
     }
 

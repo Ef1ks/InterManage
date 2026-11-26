@@ -1033,6 +1033,26 @@ class DataEntryIntegrationTests {
     }
 
     @Test
+    void modelSpellingMistakesGetInvoiceSpelling() throws Exception {
+        when(model.available()).thenReturn(true);
+        when(model.name()).thenReturn("test-model");
+        when(model.suggest(anyString(), anyString())).thenReturn(List.of(
+                // Model zapisał wymowę zamiast zdjąć ogonek.
+                new SuggestionModel.Answer(0, "RZUREK SLASKI 500ML", "", "010909", List.of(), 0.6, "L",
+                        new BigDecimal("0.5"), false),
+                new SuggestionModel.Answer(1, "CHERBATA ZIELONA", "", "010909", List.of(), 0.6, "szt.", BigDecimal.ONE,
+                        false)));
+
+        suggest(owner, """
+                {"items":[
+                  {"key":"a","ean":null,"invoiceName":"Żurek śląski 500ml","invoiceUnit":"szt."},
+                  {"key":"b","ean":null,"invoiceName":"Herbata zielona 20 torebek","invoiceUnit":"szt."}
+                ]}""").andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("ZUREK SLASKI 500ML"))
+                .andExpect(jsonPath("$.items[1].name").value("HERBATA ZIELONA"));
+    }
+
+    @Test
     void tobaccoKeepsBrandInName() throws Exception {
         when(model.available()).thenReturn(true);
         when(model.name()).thenReturn("test-model");
