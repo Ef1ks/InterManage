@@ -132,20 +132,22 @@ namespace Intermanage.Collector
             int dot = money.IndexOf('.');
             string whole = money.Substring(0, dot);
             string cents = money.Substring(dot);
+            // Cena pogrubiona: czcionka 0 nie ma grubszej odmiany, więc każda część idzie dwa razy, przesunięta o 2 punkty.
             int x = 0;
-            z.Baseline(x, PriceBase, WholeHeight, WholeWidth, whole);
-            x += (int)(whole.Length * WholeWidth * DigitAdvance) + 2;
-            z.Baseline(x, PriceBase, CentsHeight, CentsWidth, cents);
-            x += (int)((cents.Length - 0.5m) * CentsWidth * DigitAdvance) + 2;
+            z.Bold(x, PriceBase, WholeHeight, WholeWidth, whole);
+            x += (int)(whole.Length * WholeWidth * DigitAdvance) + 4;
+            z.Bold(x, PriceBase, CentsHeight, CentsWidth, cents);
+            x += (int)((cents.Length - 0.5m) * CentsWidth * DigitAdvance) + 4;
             // „zł” małe, równo z górą groszy.
-            z.Baseline(x, PriceBase - CentsHeight * 7 / 10 + 26, 36, 30, "zł");
+            z.Bold(x, PriceBase - CentsHeight * 7 / 10 + 26, 36, 30, "zł");
 
             z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
             z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
             z.Block(140, 214, Width - 140, 1, 18, 16, 'R', label.UnitPrice);
 
-            z.Barcode(8, 222, 30, label.Ean);
-            z.Block(8, 256, 200, 1, 18, 16, 'L', label.PrintedOn.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture));
+            // Kreski 24 punkty, a paski skrajne i środkowy EAN-13 schodzą jeszcze ok. 10 punktów niżej: data pod nimi.
+            z.Barcode(8, 220, 24, label.Ean);
+            z.Block(8, 258, 200, 1, 16, 14, 'L', label.PrintedOn.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture));
             s.Append("^PQ1^XZ");
             return s.ToString();
         }
@@ -198,6 +200,13 @@ namespace Intermanage.Collector
                 Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
                     .Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth))
                     .Append("^FD").Append(Clean(text)).Append("^FS");
+            }
+
+            /// <summary>Napis na linii dołu wydrukowany dwa razy, drugi o 2 punkty w prawo: grubsze kreski.</summary>
+            public void Bold(int x, int y, int height, int fontWidth, string text)
+            {
+                Baseline(x, y, height, fontWidth, text);
+                Baseline(x + 2, y, height, fontWidth, text);
             }
 
             /// <summary>EAN-13 albo EAN-8 bez cyfr pod kodem (cyfry stoją nad nim); inny kod Code 128.</summary>
