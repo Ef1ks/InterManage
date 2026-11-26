@@ -44,29 +44,39 @@ namespace Intermanage.Collector
             SocketException first = null;
             foreach (int channel in new int[] { 0, 1 })
             {
-                Socket socket = null;
-                try
+                foreach (bool packed in new bool[] { false, true })
                 {
-                    socket = new Socket(Bluetooth, SocketType.Stream, Rfcomm);
-                    socket.Connect(new BluetoothEndPoint(address, channel == 0 ? SerialPort : Guid.Empty, channel));
-                    return new BluetoothLink(socket);
-                }
-                catch (SocketException error)
-                {
-                    if (socket != null)
+                    Socket socket = null;
+                    try
                     {
-                        socket.Close();
+                        socket = new Socket(Bluetooth, SocketType.Stream, Rfcomm);
+                        Guid service = channel == 0 ? SerialPort : Guid.Empty;
+                        socket.Connect(new BluetoothEndPoint(address, service, channel, packed));
+                        return new BluetoothLink(socket);
                     }
-                    if (error.ErrorCode == 10047)
+                    catch (SocketException error)
                     {
-                        throw new BluetoothException("Ten kolektor ma inny stos Bluetooth (bez gniazd Microsoftu). "
-                            + "Trzeba będzie łączyć przez port COM.", error.ErrorCode);
+                        if (socket != null)
+                        {
+                            socket.Close();
+                        }
+                        if (error.ErrorCode == 10047)
+                        {
+                            throw new BluetoothException("Ten kolektor ma inny stos Bluetooth (bez gniazd Microsoftu). "
+                                + "Trzeba będzie łączyć przez port COM.", error.ErrorCode);
+                        }
+                        Log.Write("Bluetooth " + Bar(mac) + (channel == 0 ? " (SPP)" : " (kanał 1)")
+                            + (packed ? " 30 B" : " 40 B") + ": " + error.ErrorCode);
+                        if (first == null || first.ErrorCode == 10014)
+                        {
+                            first = error;
+                        }
+                        // Drugi układ adresu ma sens tylko, gdy stos odrzucił sam adres (10014, WSAEFAULT).
+                        if (error.ErrorCode != 10014)
+                        {
+                            break;
+                        }
                     }
-                    if (first == null)
-                    {
-                        first = error;
-                    }
-                    Log.Write("Bluetooth " + Bar(mac) + (channel == 0 ? " (SPP)" : " (kanał 1)") + ": " + error.ErrorCode);
                 }
             }
             throw new BluetoothException(Describe(first.ErrorCode), first.ErrorCode);
@@ -232,19 +242,39 @@ namespace Intermanage.Collector
         [DllImport("btdrt.dll")]
         private static extern int BthSetPIN(ref long address, int length, byte[] pin);
 
-        /// <summary>SOCKADDR_BTH (ws2bth.h, spakowany do bajtu): rodzina, adres, usługa, kanał; 30 bajtów.</summary>
+        /// <summary>
+        /// SOCKADDR_BTH (ws2bth.h): rodzina, adres, usługa, kanał. Na Windows CE struktura nie jest spakowana: pola
+        /// wyrównane (adres od 8, usługa od 16, kanał od 32), razem 40 bajtów; 30 bajtów stos CE odrzuca błędem 10014.
+        /// Spakowana (30 bajtów: 2, 10, 26) to układ z Windowsa na PC, zostaje jako zapas.
+        /// </summary>
         private sealed class BluetoothEndPoint : EndPoint
         {
-            private const int Size = 30;
             private readonly long address;
             private readonly Guid service;
             private readonly int channel;
+            private readonly bool packed;
 
-            public BluetoothEndPoint(long address, Guid service, int channel)
+            public BluetoothEndPoint(long address, Guid service, int channel, bool packed)
             {
                 this.address = address;
                 this.service = service;
                 this.channel = channel;
+                this.packed = packed;
+            }
+
+            private int AddressAt
+            {
+                get { return packed ? 2 : 8; }
+            }
+
+            private int ServiceAt
+            {
+                get { return packed ? 10 : 16; }
+            }
+
+            private int ChannelAt
+            {
+                get { return packed ? 26 : 32; }
             }
 
             public override AddressFamily AddressFamily
@@ -254,33 +284,35 @@ namespace Intermanage.Collector
 
             public override SocketAddress Serialize()
             {
-                SocketAddress result = new SocketAddress(Bluetooth, Size);
+                SocketAddress result = new SocketAddress(Bluetooth, packed ? 30 : 40);
                 byte[] bytes = BitConverter.GetBytes(address);
                 for (int i = 0; i < 8; i++)
                 {
-                    result[2 + i] = bytes[i];
+                    result[AddressAt + i] = bytes[i];
                 }
                 bytes = service.ToByteArray();
                 for (int i = 0; i < 16; i++)
                 {
-                    result[10 + i] = bytes[i];
+                    result[ServiceAt + i] = bytes[i];
                 }
                 bytes = BitConverter.GetBytes(channel);
                 for (int i = 0; i < 4; i++)
                 {
-                    result[26 + i] = bytes[i];
+                    result[ChannelAt + i] = bytes[i];
                 }
                 return result;
             }
 
             public override EndPoint Create(SocketAddress socketAddress)
             {
+                bool remotePacked = socketAddress.Size < 40;
+                int addressAt = remotePacked ? 2 : 8;
                 long remote = 0;
                 for (int i = 7; i >= 0; i--)
                 {
-                    remote = (remote << 8) | socketAddress[2 + i];
+                    remote = (remote << 8) | socketAddress[addressAt + i];
                 }
-                return new BluetoothEndPoint(remote, Guid.Empty, socketAddress[26]);
+                return new BluetoothEndPoint(remote, Guid.Empty, socketAddress[remotePacked ? 26 : 32], remotePacked);
             }
         }
     }

@@ -29,9 +29,10 @@ z linią `server=http://127.0.0.1:8090` (zwykłe http tylko na tym samym kompute
 ## Instalacja na kolektorze
 
 1. W przeglądarce kolektora wpisz `http://intermanage.pl/k` i uruchom pobrany `IntermanageSetup.exe`. Windows CE 6.0
-   nie połączy się przez https, więc ten jeden adres idzie zwykłym http: nginx (`frontend/nginx.conf`) przekierowuje
-   `/k` na `/k/IntermanageSetup.exe` = `/api/collector/setup`, a w Cloudflare reguła konfiguracji wyłącza dla `/k` i
-   `/k/*` „Always Use HTTPS”. Przez http instalator da się po drodze podmienić; parowanie i dalsza praca idą już przez
+   nie połączy się przez https, więc ten jeden adres idzie zwykłym http: `/k` to w nginx (`frontend/nginx.conf`)
+   prosta strona z linkiem do `/k/IntermanageSetup.exe` = `/api/collector/setup`. W Cloudflare „Always Use HTTPS” jest
+   wyłączone, a na https przekierowuje reguła Redirect Rules: `(not ssl and not (http.request.uri.path eq "/k" or
+   starts_with(http.request.uri.path, "/k/")))` → `concat("https://", http.host, http.request.uri.path)`, 301. Przez http instalator da się po drodze podmienić; parowanie i dalsza praca idą już przez
    TLS programu. Bez sieci: Kolektory → Urządzenia → Pobierz instalator na komputerze i skopiuj plik na kolektor.
 2. „Zainstaluj”, potem „Uruchom”. Gdy kolektor zgłosi brak .NET Compact Framework, zainstaluj najpierw
    `NETCFv35.wce.armv4.cab`.
