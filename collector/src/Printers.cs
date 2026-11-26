@@ -14,6 +14,16 @@ namespace Intermanage.Collector
 
         /// <summary>Nie ma jej na liście sklepu (wybrana skanem z adresem spoza Intermanage).</summary>
         public bool Unlisted;
+
+        /// <summary>
+        /// Przesunięcie wydruku zapisane w drukarce, w punktach: ^LS (dodatnie = w lewo) i ^LT (dodatnie = w dół).
+        /// Znane po połączeniu (OffsetsRead); OffsetsChanged = zmienione na kolektorze, jeszcze nie zapisane w drukarce.
+        /// </summary>
+        public int Shift;
+        public int Top;
+        public int Dpi = 203;
+        public bool OffsetsRead;
+        public bool OffsetsChanged;
     }
 
     /// <summary>
@@ -161,6 +171,7 @@ namespace Intermanage.Collector
                 string battery = link.GetVar("power.percent_full");
                 string media = link.GetVar("media.status");
                 string head = link.GetVar("head.latch");
+                ReadOffsets(link, printer);
                 Log.Write("Drukarka " + BluetoothLink.Bar(printer.Mac) + ": połączono w " + connected + " ms, " + name
                     + ", " + languages + ", bateria " + battery + ", papier " + media + ", głowica " + head);
                 StringBuilder text = new StringBuilder();
@@ -205,6 +216,15 @@ namespace Intermanage.Collector
         {
             using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
             {
+                if (printer.OffsetsChanged)
+                {
+                    // Zapis w drukarce (^JUS), więc działa też z innych kolektorów i po wyłączeniu drukarki.
+                    link.Send("^XA^LS" + printer.Shift + "^LT" + printer.Top + "^JUS^XZ");
+                    link.GetVar("device.friendly_name");
+                    printer.OffsetsChanged = false;
+                    Log.Write("Drukarka " + BluetoothLink.Bar(printer.Mac) + ": przesunięcie ^LS" + printer.Shift
+                        + " ^LT" + printer.Top);
+                }
                 string head = link.GetVar("head.latch");
                 if (head == "open")
                 {
@@ -230,6 +250,30 @@ namespace Intermanage.Collector
                 link.GetVar("device.friendly_name");
                 Log.Write("Cenówka " + label.Itm8 + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
                 return "Wydrukowano cenówkę na: " + printer.Name + " (" + dpi + " dpi).";
+            }
+        }
+
+        /// <summary>Przesunięcie wydruku i rozdzielczość z drukarki (zpl.left_position, zpl.label_top).</summary>
+        private static void ReadOffsets(BluetoothLink link, Printer printer)
+        {
+            try
+            {
+                printer.Dpi = int.Parse(link.GetVar("head.resolution.in_dpi"));
+            }
+            catch (FormatException)
+            {
+                printer.Dpi = 203;
+            }
+            try
+            {
+                printer.Shift = int.Parse(link.GetVar("zpl.left_position"));
+                printer.Top = int.Parse(link.GetVar("zpl.label_top"));
+                printer.OffsetsRead = true;
+                printer.OffsetsChanged = false;
+            }
+            catch (FormatException)
+            {
+                printer.OffsetsRead = false;
             }
         }
 
@@ -292,9 +336,9 @@ namespace Intermanage.Collector
                 int maxLength = (int)(80m * dpi / 25.4m);
                 link.Send("! U1 setvar \"media.type\" \"label\"\r\n");
                 link.Send("! U1 setvar \"media.sense_mode\" \"" + (blackMark ? "bar" : "gap") + "\"\r\n");
-                link.Send("! U1 setvar \"zpl.label_top\" \"0\"\r\n");
                 link.Send("! U1 setvar \"media.printmode\" \"tear off\"\r\n");
-                link.Send("^XA" + (blackMark ? "^MNM" : "^MNY") + "^MMT^LT0^ML" + maxLength + "^JUS^XZ");
+                // Przesunięcie wydruku (^LS, ^LT) zostaje: ustawia się je osobno.
+                link.Send("^XA" + (blackMark ? "^MNM" : "^MNY") + "^MMT^ML" + maxLength + "^JUS^XZ");
                 link.GetVar("device.friendly_name");
                 link.Send("~JC");
                 // Pomiar trwa kilka sekund; odpowiedź przychodzi po nim.

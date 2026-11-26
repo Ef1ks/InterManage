@@ -138,13 +138,16 @@ namespace Intermanage.Collector
         private const int Width = 384;
         private const int Height = 272;
 
+        /// <summary>
+        /// Cenówka w ZPL. Przesunięcia wydruku (^LS, ^LT) nie ma w cenówce: trzyma je drukarka (Menu, Drukarka), bo
+        /// zależą od drukarki i rolki, a nie od kolektora.
+        /// </summary>
         public static string Build(PriceLabel label, int dpi)
         {
-            Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi);
+            Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi, MarginMm, MarginMm);
             StringBuilder s = z.Text;
-            s.Append("^XA^CI28^POI^MMT^LS0^LT0");
+            s.Append("^XA^CI28^POI^MMT^LH0,0");
             s.Append("^PW").Append(z.Mm(WidthMm)).Append("^LL").Append(z.Mm(HeightMm));
-            s.Append("^LH").Append(z.Mm(MarginMm)).Append(',').Append(z.Mm(MarginMm));
 
             // Nazwa: dwie linie, za długa jest ucinana przez drukarkę.
             z.Block(0, 0, Width, 2, 28, 24, 'L', label.Name);
@@ -186,10 +189,20 @@ namespace Intermanage.Collector
         {
             public readonly StringBuilder Text = new StringBuilder();
             private readonly int dpi;
+            private readonly int left;
+            private readonly int top;
 
-            public Zpl(int dpi)
+            public Zpl(int dpi, decimal leftMm, decimal topMm)
             {
                 this.dpi = dpi;
+                left = Mm(leftMm);
+                top = Mm(topMm);
+            }
+
+            /// <summary>^FO z punktu układu (203 dpi) przesuniętego o początek treści.</summary>
+            private StringBuilder At(int x, int y)
+            {
+                return Text.Append("^FO").Append(left + D(x)).Append(',').Append(top + D(y));
             }
 
             public int Mm(decimal mm)
@@ -208,7 +221,7 @@ namespace Intermanage.Collector
                 {
                     return;
                 }
-                Text.Append("^FO").Append(D(x)).Append(',').Append(D(y))
+                At(x, y)
                     .Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth))
                     .Append("^FB").Append(D(width)).Append(',').Append(lines).Append(",0,").Append(align).Append(",0")
                     .Append("^FD").Append(Clean(text)).Append("^FS");
@@ -216,7 +229,7 @@ namespace Intermanage.Collector
 
             public void Box(int x, int y, int width, int height)
             {
-                Text.Append("^FO").Append(D(x)).Append(',').Append(D(y))
+                At(x, y)
                     .Append("^GB").Append(D(width)).Append(',').Append(D(height)).Append(',').Append(D(height))
                     .Append("^FS");
             }
@@ -224,7 +237,7 @@ namespace Intermanage.Collector
             /// <summary>Biały napis na czarnym polu (^FR odwraca to, co pod nim).</summary>
             public void Inverse(int x, int y, int width, int height, int fontWidth, string text)
             {
-                Text.Append("^FO").Append(D(x)).Append(',').Append(D(y))
+                At(x, y)
                     .Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth))
                     .Append("^FB").Append(D(width)).Append(",1,0,C,0^FR^FD").Append(Clean(text)).Append("^FS");
             }
@@ -236,7 +249,7 @@ namespace Intermanage.Collector
                 {
                     return;
                 }
-                Text.Append("^FO").Append(D(x)).Append(',').Append(D(y)).Append("^BY").Append(Math.Max(1, D(2)));
+                At(x, y).Append("^BY").Append(Math.Max(1, D(2)));
                 if (code.Length == 13 && Catalog.IsDigits(code))
                 {
                     Text.Append("^BEN,").Append(D(20)).Append(",Y,N^FD").Append(code.Substring(0, 12));

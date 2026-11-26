@@ -121,6 +121,7 @@ namespace Intermanage.Collector
             }
             checkingPrinter = true;
             checkedPrinter = printer;
+            choosingCalibration = false;
             message.Show("Łączę z: " + printer.Name, BluetoothLink.Bar(printer.Mac)
                 + "\n\nDrukarka musi być włączona i stać blisko. Pierwsze połączenie trwa do kilkunastu sekund.", false);
             ShowView(message);
@@ -166,7 +167,7 @@ namespace Intermanage.Collector
                 Settings.ChoosePrinter(printer.Mac, printer.Name);
                 message.Show("Wybrana drukarka: " + printer.Name, printerResult
                     + (printer.Unlisted ? "\n\nDrukarki nie ma na liście sklepu: dodaj ją w Intermanage." : "")
-                    + "\n\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.", false);
+                    + PrinterHelp(), false);
             }
             if (mode == Mode.Printer)
             {
@@ -274,8 +275,9 @@ namespace Intermanage.Collector
             {
                 Native.ErrorBeep();
             }
-            message.Show(printerFailed ? "Nie wydrukowano" : "Cenówka testowa", printerResult
-                + "\n\nEnter: wydrukuj jeszcze raz, 0: kalibracja, Esc: lista drukarek.", printerFailed);
+            choosingCalibration = false;
+            message.Show(printerFailed ? "Nie wydrukowano" : "Cenówka testowa", printerResult + PrinterHelp(),
+                printerFailed);
             printerFailed = false;
             if (mode == Mode.Printer)
             {
@@ -286,6 +288,79 @@ namespace Intermanage.Collector
         // ---- kalibracja ----
 
         private bool calibrateMark;
+        /// <summary>Na ekranie jest pytanie o rodzaj etykiet: 1 i 2 wybierają czujnik, a nie przesuwają cenówki.</summary>
+        private bool choosingCalibration;
+
+        /// <summary>Najdalsze przesunięcie w mm w każdą stronę (^LT drukarki przyjmuje do 120 punktów).</summary>
+        private const decimal MaxShiftMm = 10m;
+
+        /// <summary>Wskazówki pod wynikiem: położenie cenówki zapisane w drukarce i klawisze.</summary>
+        private string PrinterHelp()
+        {
+            Printer printer = checkedPrinter;
+            string where = printer == null || !printer.OffsetsRead ? "Położenie cenówki: nieznane (połącz z drukarką)"
+                : "Położenie cenówki" + (printer.OffsetsChanged ? " (zapisze się w drukarce przy Enter)" : " w drukarce")
+                    + ": " + ShiftText(-printer.Shift, printer.Dpi, "w lewo", "w prawo") + ", "
+                    + ShiftText(printer.Top, printer.Dpi, "w górę", "w dół");
+            return "\n\n" + where
+                + "\n4 / 6: w lewo / w prawo, 8 / 2: w górę / w dół (o 0,5 mm), 5: bez przesunięcia"
+                + "\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.";
+        }
+
+        private static string ShiftText(int dots, int dpi, string minus, string plus)
+        {
+            if (dots == 0)
+            {
+                return "0 mm";
+            }
+            decimal mm = decimal.Round(Math.Abs(dots) * 25.4m / dpi, 1);
+            return mm.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture).Replace('.', ',') + " mm "
+                + (dots < 0 ? minus : plus);
+        }
+
+        /// <summary>
+        /// Klawisze 4, 6, 8, 2 przesuwają cenówkę o 0,5 mm, 5 zeruje przesunięcie. Zmiana trafia do drukarki z najbliższą
+        /// cenówką testową (Enter), więc drukarka pamięta ją dla każdego kolektora.
+        /// </summary>
+        private void ShiftLabel(char key)
+        {
+            Printer printer = checkedPrinter;
+            if (!printer.OffsetsRead)
+            {
+                Native.ErrorBeep();
+                message.Show("Położenie cenówki", "Najpierw połącz się z drukarką, żeby odczytać jej ustawienia."
+                    + PrinterHelp(), true);
+                ShowView(message);
+                return;
+            }
+            int step = Math.Max(1, (int)decimal.Round(0.5m * printer.Dpi / 25.4m, 0));
+            int max = (int)decimal.Round(MaxShiftMm * printer.Dpi / 25.4m, 0);
+            switch (key)
+            {
+                case '4':
+                    printer.Shift += step;
+                    break;
+                case '6':
+                    printer.Shift -= step;
+                    break;
+                case '8':
+                    printer.Top -= step;
+                    break;
+                case '2':
+                    printer.Top += step;
+                    break;
+                default:
+                    printer.Shift = 0;
+                    printer.Top = 0;
+                    break;
+            }
+            printer.Shift = Math.Max(-max, Math.Min(max, printer.Shift));
+            printer.Top = Math.Max(-max, Math.Min(max, printer.Top));
+            printer.OffsetsChanged = true;
+            message.Show("Położenie cenówki", "Enter wydrukuje cenówkę testową i zapisze położenie w drukarce."
+                + PrinterHelp(), false);
+            ShowView(message);
+        }
 
         private void OnCalibrateMenu(object sender, EventArgs e)
         {
@@ -301,6 +376,7 @@ namespace Intermanage.Collector
             mode = Mode.Printer;
             checkedPrinter = printer;
             printerFailed = false;
+            choosingCalibration = true;
             message.Show("Kalibracja: " + printer.Name, CalibrateChoice, false);
             ShowView(message);
         }
@@ -354,8 +430,9 @@ namespace Intermanage.Collector
             {
                 Native.ErrorBeep();
             }
-            message.Show(printerFailed ? "Nie skalibrowano" : "Skalibrowano", printerResult
-                + "\n\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.", printerFailed);
+            choosingCalibration = false;
+            message.Show(printerFailed ? "Nie skalibrowano" : "Skalibrowano", printerResult + PrinterHelp(),
+                printerFailed);
             printerFailed = false;
             if (mode == Mode.Printer)
             {
@@ -406,13 +483,20 @@ namespace Intermanage.Collector
             else if (e.KeyChar == '0' && view == message && checkedPrinter != null
                 && Settings.PrinterMac == checkedPrinter.Mac)
             {
+                choosingCalibration = true;
                 message.Show("Kalibracja: " + checkedPrinter.Name, CalibrateChoice, false);
                 ShowView(message);
             }
-            else if ((e.KeyChar == '1' || e.KeyChar == '2') && view == message && checkedPrinter != null
-                && Settings.PrinterMac == checkedPrinter.Mac)
+            else if (choosingCalibration && (e.KeyChar == '1' || e.KeyChar == '2') && view == message
+                && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
             {
+                choosingCalibration = false;
                 StartCalibrate(checkedPrinter, e.KeyChar == '2');
+            }
+            else if (!choosingCalibration && "24568".IndexOf(e.KeyChar) >= 0 && view == message
+                && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
+            {
+                ShiftLabel(e.KeyChar);
             }
             else if (enter && view == message && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
             {
