@@ -6,8 +6,11 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.intermanage.backend.download.dto.AgentUpdateInfo;
+import com.intermanage.backend.importguide.component.ReportSaveMacro;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -114,9 +117,10 @@ public final class AgentApi {
      * Raporty do aktualizacji z Mercalys (pliki w folderach nie są z dzisiaj); pusta lista = wszystkie z makrem.
      * {@code automatic}: aktualizacja przy starcie komputera albo po przejęciu roli głównego agenta (tylko główny
      * agent); {@code false} = pracownik wybrał ją w menu ikony. Brak (agent przed 1.3) = automatyczna.
+     * {@code mercalys}: na ilu Mercalys naraz (ustawienie komputera, agent od 1.14.0, odtwarzacz od 0.73); brak = 1.
      */
     public record ReportMacroRequest(@Size(max = 20) List<@NotBlank @Size(max = 30) String> kinds,
-            Boolean automatic) {
+            Boolean automatic, @Min(1) @Max(ReportSaveMacro.MAX_LANES) Integer mercalys) {
     }
 
     /** Wynik aktualizacji danych z Mercalys (agent od 1.13.0); {@code ok} puste = nieznany. */

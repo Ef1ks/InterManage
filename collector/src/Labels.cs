@@ -1,9 +1,57 @@
 using System;
 using System.Globalization;
+using System.IO;
+using System.Reflection;
 using System.Text;
 
 namespace Intermanage.Collector
 {
+    /// <summary>
+    /// Czcionka ceny na cenówce (od 1.8.3): DejaVu Sans Bold okrojona do cyfr, kropki, przecinka, „z” i „ł”
+    /// (collector/res/IMCENA.TTF, licencja DejaVu-LICENSE.txt obok; nowy znak = nowe okrojenie fontTools z
+    /// backend/src/main/resources/fonts/DejaVuSans-Bold.ttf). Prawdziwie gruba czcionka zamiast podwójnego druku czcionki 0,
+    /// a szerokości znaków są znane z pliku, więc grosze stoją dokładnie za złotymi. Plik idzie do pamięci drukarki (E:)
+    /// raz na uruchomienie programu (Printer.FontSent).
+    /// </summary>
+    internal static class LabelFont
+    {
+        public const string File = "E:IMCENA.TTF";
+
+        /// <summary>Szerokości znaków jako część wysokości czcionki (hmtx / unitsPerEm 2048).</summary>
+        public const decimal Digit = 0.6958m;
+        public const decimal Dot = 0.3799m;
+        /// <summary>Wysokość cyfr jako część wysokości czcionki (1493 / 2048).</summary>
+        public const decimal DigitHeight = 0.729m;
+
+        private static string download;
+
+        /// <summary>~DY: plik czcionki szesnastkowo (bez znaków, które drukarka wzięłaby za polecenia).</summary>
+        public static string Download()
+        {
+            if (download == null)
+            {
+                byte[] bytes;
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("IMCENA.TTF"))
+                {
+                    bytes = new byte[stream.Length];
+                    int read = 0;
+                    while (read < bytes.Length)
+                    {
+                        read += stream.Read(bytes, read, bytes.Length - read);
+                    }
+                }
+                StringBuilder s = new StringBuilder(bytes.Length * 2 + 40);
+                s.Append("~DY").Append(File).Append(",A,T,").Append(bytes.Length).Append(",,");
+                foreach (byte b in bytes)
+                {
+                    s.Append(b.ToString("X2"));
+                }
+                download = s.ToString();
+            }
+            return download;
+        }
+    }
+
     /// <summary>Dane cenówki w chwili wydruku.</summary>
     internal sealed class PriceLabel
     {
@@ -153,16 +201,18 @@ namespace Intermanage.Collector
 
         /// <summary>Linia dołu ceny (złote i grosze stoją na niej razem).</summary>
         private const int PriceBase = 190;
-        private const int WholeHeight = 160;
-        private const int WholeWidth = 96;
-        private const int CentsHeight = 96;
-        private const int CentsWidth = 60;
-
         /// <summary>
-        /// Szerokość cyfry czcionki 0 jako część szerokości z ^A0 (szacunek: na niej stoją grosze za złotymi; do
-        /// poprawienia po wydruku, gdy grosze nachodzą na złote albo stoją za daleko).
+        /// Wysokość i szerokość czcionki ceny (^A@, LabelFont): cyfry złotych ok. 90 punktów wysokości (11 mm), zwężone
+        /// jak dawna czcionka 0; grosze i „zł” w tej samej proporcji.
         /// </summary>
-        private const decimal DigitAdvance = 0.6m;
+        private const int WholeHeight = 124;
+        private const int WholeWidth = 84;
+        private const int CentsHeight = 74;
+        private const int CentsWidth = 50;
+        private const int UnitHeight = 40;
+        private const int UnitWidth = 34;
+        /// <summary>Odstęp między złotymi a kropką groszy i między groszami a „zł”.</summary>
+        private const int PriceGap = 4;
 
         /// <summary>
         /// Cenówka w ZPL. Przesunięcia wydruku (^LS, ^LT) nie ma w cenówce: trzyma je drukarka (Menu, Drukarka), bo
@@ -178,19 +228,25 @@ namespace Intermanage.Collector
             z.Block(0, 0, Width, 1, 22, 20, 'L', label.Name);
             z.Block(0, 36, Width, 1, 22, 18, 'L', label.Brand);
 
-            // Cena: wszystkie części na wspólnej linii dołu (^FT), grosze zaraz za złotymi.
+            // Cena czcionką LabelFont, wszystkie części na wspólnej linii dołu (^FT). Szerokości znaków są znane z pliku
+            // czcionki, a złote i tak stoją wyrównane do prawej w polu kończącym się przed kropką, więc nawet inne
+            // skalowanie szerokości w drukarce nie przesunie ich na grosze.
             string money = PriceLabel.Money(label.Price);
             int dot = money.IndexOf('.');
             string whole = money.Substring(0, dot);
             string cents = money.Substring(dot);
-            // Cena pogrubiona: czcionka 0 nie ma grubszej odmiany, więc każda część idzie dwa razy, przesunięta o 2 punkty.
-            int x = 0;
-            z.Bold(x, PriceBase, WholeHeight, WholeWidth, whole);
-            x += (int)(whole.Length * WholeWidth * DigitAdvance) + 4;
-            z.Bold(x, PriceBase, CentsHeight, CentsWidth, cents);
-            x += (int)((cents.Length - 0.5m) * CentsWidth * DigitAdvance) + 4;
-            // „zł” małe, równo z górą groszy.
-            z.Bold(x, PriceBase - CentsHeight * 7 / 10 + 26, 36, 30, "zł");
+            // Od czterech cyfr (1000 zł) węższe złote, żeby grosze i „zł” zmieściły się na etykiecie.
+            int wholeWidth = whole.Length >= 4 ? WholeWidth * 3 / 4 : WholeWidth;
+            // Pole złotych o 8 punktów szersze niż napis: gdyby drukarka skalowała szerokość inaczej, napis i tak mieści się
+            // w jednym wierszu pola (za szeroki ^FB zawija albo nadpisuje), a koniec zostaje przed kropką.
+            int x = Advance(whole.Length * LabelFont.Digit, wholeWidth) + 8;
+            z.Price(0, PriceBase, x, 'R', WholeHeight, wholeWidth, whole);
+            x += PriceGap;
+            z.Price(x, PriceBase, 0, 'L', CentsHeight, CentsWidth, cents);
+            x += Advance(LabelFont.Dot + (cents.Length - 1) * LabelFont.Digit, CentsWidth) + PriceGap;
+            // „zł” małe, górą równo z górą groszy.
+            int unitBase = PriceBase - (int)(LabelFont.DigitHeight * (CentsHeight - UnitHeight));
+            z.Price(x, unitBase, 0, 'L', UnitHeight, UnitWidth, "zł");
 
             z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
             z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
@@ -210,6 +266,12 @@ namespace Intermanage.Collector
             z.Block(8, 258, 200, 1, 16, 14, 'L', label.PrintedOn.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture));
             s.Append("^PQ1^XZ");
             return s.ToString();
+        }
+
+        /// <summary>Szerokość napisu w punktach: suma szerokości znaków (część em) razy szerokość czcionki.</summary>
+        private static int Advance(decimal em, int fontWidth)
+        {
+            return (int)decimal.Round(em * fontWidth, 0);
         }
 
         private sealed class Zpl
@@ -262,11 +324,20 @@ namespace Intermanage.Collector
                     .Append("^FD").Append(Clean(text)).Append("^FS");
             }
 
-            /// <summary>Napis na linii dołu wydrukowany dwa razy, drugi o 2 punkty w prawo: grubsze kreski.</summary>
-            public void Bold(int x, int y, int height, int fontWidth, string text)
+            /// <summary>
+            /// Część ceny czcionką LabelFont na linii dołu y. Z width &gt; 0 napis jest wyrównany w polu od x o tej
+            /// szerokości (^FT z ^FB: linia dołu ostatniego wiersza pola), np. złote do prawej, żeby kończyły się przed
+            /// kropką bez względu na skalowanie szerokości w drukarce.
+            /// </summary>
+            public void Price(int x, int y, int width, char align, int height, int fontWidth, string text)
             {
-                Baseline(x, y, height, fontWidth, text);
-                Baseline(x + 2, y, height, fontWidth, text);
+                Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
+                    .Append("^A@N,").Append(D(height)).Append(',').Append(D(fontWidth)).Append(',').Append(LabelFont.File);
+                if (width > 0)
+                {
+                    Text.Append("^FB").Append(D(width)).Append(",1,0,").Append(align).Append(",0");
+                }
+                Text.Append("^FD").Append(Clean(text)).Append("^FS");
             }
 
             /// <summary>EAN-13 albo EAN-8 bez cyfr pod kodem (cyfry stoją nad nim); inny kod Code 128.</summary>

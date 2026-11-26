@@ -358,8 +358,9 @@ internal sealed class ApiClient : IDisposable
     /// <paramref name="automatic"/>: przy starcie komputera albo po przejęciu roli głównego agenta (serwer da je tylko
     /// głównemu). 409 (<see cref="RejectedException"/>): dane aktualizuje już inny komputer sklepu.
     /// </remarks>
-    public Task<ReportMacro> ReportMacroAsync(IReadOnlyList<string> kinds, bool automatic, CancellationToken cancel) =>
-        SendJsonAsync<ReportMacro>(HttpMethod.Post, "/api/store-agent/report-macro", new { kinds, automatic },
+    public Task<ReportMacro> ReportMacroAsync(IReadOnlyList<string> kinds, bool automatic, int mercalys,
+        CancellationToken cancel) =>
+        SendJsonAsync<ReportMacro>(HttpMethod.Post, "/api/store-agent/report-macro", new { kinds, automatic, mercalys },
             TimeSpan.FromSeconds(60), cancel);
 
     /// <summary>Koniec aktualizacji danych na tym komputerze: inny komputer może ją znów uruchomić.</summary>

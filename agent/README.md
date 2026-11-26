@@ -112,6 +112,8 @@ Nie robi:
   niż minuta jest pomijany), a zatrzymanie to plik `makra\<id>.stop` zamiast Esc. Starszy AutoJob dostaje makro jak
   dotąd przez schowek i Alt+E;
 - niczego nie pobiera poza danymi dla sklepu (od 1.14.0 także nowej wersji agenta);
+- aktualizacji danych na kilku Mercalys (ustawienie „na tylu Mercalys naraz”, 1-3, od 1.14.0) agent sam nie prowadzi:
+  podaje liczbę serwerowi, a brakujące okna Mercalys uruchamia i przełącza między nimi AutoJob 0.73;
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
 
 ## Nowa wersja

@@ -22,6 +22,7 @@ internal sealed class SettingsForm : Form
         Text = "Przy starcie komputera aktualizuj dane z Mercalys (pliki raportów nie z dzisiaj)",
         AutoSize = true,
     };
+    private readonly NumericUpDown mercalysCount = new() { Minimum = 1, Maximum = 3, Width = 50 };
     private readonly CheckBox saveFiles = new()
     {
         Text = "Zapisuj na tym komputerze pliki dla programu sklepu",
@@ -47,21 +48,22 @@ internal sealed class SettingsForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 510);
+        ClientSize = new Size(560, 545);
         Font = new Font("Segoe UI", 9f);
 
         server.Text = settings.ServerUrl;
         key.Text = "";
-        // Nieznane położenie agent od razu szuka (działający Mercalys, domyślne miejsce na N:).
+        // Nieznane położenie agent od razu szuka (ścieżka sklepu z serwera, domyślne miejsce na N:).
         mercalysPath.Text = MercalysPath.Ensure() ?? MercalysPath.Saved ?? "";
         browse.Click += (_, _) => Browse();
         updateOnStart.Checked = settings.UpdateOnStart;
+        mercalysCount.Value = Math.Max(1, Math.Min(3, settings.MercalysCount));
         saveFiles.Checked = settings.SaveFiles;
         allowMacros.Checked = settings.AllowMacros;
         // Przy pierwszym zapisie zaznaczone; potem to, co naprawdę jest w Windows.
         autostart.Checked = AgentSettings.Autostart || !settings.HasKey;
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 13 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), ColumnCount = 2, RowCount = 14 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label { Text = "Adres serwera", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
@@ -105,14 +107,23 @@ internal sealed class SettingsForm : Form
             ForeColor = SystemColors.GrayText,
         }, 1, 6);
         layout.Controls.Add(updateOnStart, 1, 7);
-        layout.Controls.Add(saveFiles, 1, 8);
-        layout.Controls.Add(allowMacros, 1, 9);
-        layout.Controls.Add(autostart, 1, 10);
-        layout.Controls.Add(result, 1, 11);
+        var lanes = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
+        lanes.Controls.Add(new Label
+        {
+            Text = "Aktualizacja danych na tylu Mercalys naraz (AutoJob od 0.73):",
+            AutoSize = true,
+            Margin = new Padding(3, 6, 3, 3),
+        });
+        lanes.Controls.Add(mercalysCount);
+        layout.Controls.Add(lanes, 1, 8);
+        layout.Controls.Add(saveFiles, 1, 9);
+        layout.Controls.Add(allowMacros, 1, 10);
+        layout.Controls.Add(autostart, 1, 11);
+        layout.Controls.Add(result, 1, 12);
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(save);
-        layout.Controls.Add(buttons, 1, 12);
+        layout.Controls.Add(buttons, 1, 13);
         Controls.Add(layout);
         AcceptButton = save;
         CancelButton = cancel;
@@ -173,6 +184,7 @@ internal sealed class SettingsForm : Form
             if (newKey.Length > 0) settings.Key = newKey;
             if (newPassword.Length > 0) settings.MercalysPassword = newPassword;
             settings.UpdateOnStart = updateOnStart.Checked;
+            settings.MercalysCount = (int)mercalysCount.Value;
             settings.SaveFiles = saveFiles.Checked;
             settings.AllowMacros = allowMacros.Checked;
             settings.Save();

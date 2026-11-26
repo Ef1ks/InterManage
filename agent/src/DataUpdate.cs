@@ -131,7 +131,7 @@ internal sealed class DataUpdate
             ReportMacro macro;
             try
             {
-                macro = await api.ReportMacroAsync(kinds, !force, cancel).ConfigureAwait(false);
+                macro = await api.ReportMacroAsync(kinds, !force, settings.MercalysCount, cancel).ConfigureAwait(false);
             }
             catch (RejectedException error) when (error.Status == 409)
             {
@@ -294,7 +294,7 @@ internal sealed class DataUpdate
                 form.Status("Nie wszystko się udało, ponawiam: "
                     + string.Join(", ", outcome.Failed.Select(f => f.Title).Distinct()) + "…");
                 await Task.Delay(TimeSpan.FromSeconds(15), cancel).ConfigureAwait(false);
-                var next = await NextMacroAsync(api, run.Pending, force, cancel).ConfigureAwait(false);
+                var next = await NextMacroAsync(api, run.Pending, force, settings.MercalysCount, cancel).ConfigureAwait(false);
                 if (next != null)
                 {
                     Log.Info("Aktualizacja danych: ponawiam " + string.Join(", ", run.Pending));
@@ -309,12 +309,12 @@ internal sealed class DataUpdate
         }
     }
 
-    private static async Task<ReportMacro?> NextMacroAsync(ApiClient api, List<string> kinds, bool force,
+    private static async Task<ReportMacro?> NextMacroAsync(ApiClient api, List<string> kinds, bool force, int mercalys,
         CancellationToken cancel)
     {
         try
         {
-            var next = await api.ReportMacroAsync(kinds, !force, cancel).ConfigureAwait(false);
+            var next = await api.ReportMacroAsync(kinds, !force, mercalys, cancel).ConfigureAwait(false);
             return next.Reports.Count == 0 ? null : next;
         }
         catch (Exception error) when (!(error is OperationCanceledException && cancel.IsCancellationRequested))

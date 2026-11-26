@@ -23,7 +23,7 @@ $dist = Join-Path $root 'dist'
 $work = Join-Path $root 'obj'
 
 # Wersja programu: wyzsza niz na kolektorach = kolektory pobiora ja po wdrozeniu. Zmiana w src = nowa wersja.
-$version = '1.8.2'
+$version = '1.8.3'
 
 if ($TestVersion) {
     $version = $TestVersion
@@ -138,7 +138,7 @@ $program = Join-Path $dist 'Kolektor.exe'
 $launcher = Join-Path $dist 'Intermanage.exe'
 $setup = Join-Path $dist 'IntermanageSetup.exe'
 
-Invoke-Csc ($options + "-resource:`"$(Join-Path $root 'korzenie.pem')`",korzenie.pem" + "-out:`"$program`"" +
+Invoke-Csc ($options + "-resource:`"$(Join-Path $root 'korzenie.pem')`",korzenie.pem" + "-resource:`"$(Join-Path $root 'res\IMCENA.TTF')`",IMCENA.TTF" + "-out:`"$program`"" +
     "-r:`"$bcDll`"" + $references + $common + (Get-Sources $src)) 'Kolektor'
 Invoke-Csc ($options + "-out:`"$launcher`"" + $references + $common + (Get-Sources (Join-Path $src 'launcher'))) 'Intermanage'
 Invoke-Csc ($options + "-out:`"$setup`"" + "-resource:`"$program`",Kolektor.exe" + "-resource:`"$launcher`",Intermanage.exe" +

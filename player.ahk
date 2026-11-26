@@ -413,6 +413,10 @@ PlayParts(rawClip) {
         return
     }
     plan := SplitParts(rawClip)
+    if (RegExMatch(plan.head, "im)^#LANES\|(\d+)", &laneMatch) && Integer(laneMatch[1]) > 1 && plan.parts.Length > 1) {
+        PlayLanes(plan, Min(3, Integer(laneMatch[1])))
+        return
+    }
     done := ""
     failed := ""
     clean := false ; ekran Mercalys jest taki, jak zostawiła go poprzednia udana część
@@ -451,6 +455,319 @@ PlayParts(rawClip) {
         MacroBox done, "Makro zakończone", "Iconi" AlwaysOnTop
     else
         Notify "Zakończono", "Makro ze schowka zostało wykonane."
+}
+
+; --- Kilka Mercalys naraz (od 0.73, linia #LANES|n): Mercalys długo przygotowuje raport, a Excel wypełnia się w chwilę,
+; więc każde okno robi swoją część, a odtwarzacz przełącza się między nimi w czasie czekania. Wszystko w jednym wątku:
+; część idzie do pierwszego długiego czekania (WEBPAGE, EXCELSAVE, PDFSAVE), wtedy odtwarzacz obsługuje inne okna.
+; Polecenia części trafiają tylko do jej okna (ahk_id zamiast tytułu Mercalys). Nowy skoroszyt dostaje część, której
+; wzór nagłówka pasuje (EXCELSAVE z czwartym polem), a gdy czeka tylko jedna część, ona. PDF robi naraz jedno okno.
+
+PlayLanes(plan, wanted) {
+    password := RegExMatch(plan.head, "im)^WINOPEN\|[^|\r\n]*\|([^\r\n]*)$", &found) ? Trim(found[1]) : ""
+    note := ""
+    windows := []
+    problem := LaneWindows(wanted, password, windows, &note)
+    if (problem != "") {
+        MacroBox problem, "Błąd makra", "Icon!" AlwaysOnTop
+        return
+    }
+    lanes := []
+    for i, hwnd in windows {
+        pid := 0
+        try pid := WinGetPID(hwnd)
+        lanes.Push({no: i, title: "ahk_id " hwnd, pid: pid, ctx: "", job: "", clean: false, last: 0})
+    }
+    jobs := []
+    for i, part in plan.parts
+        jobs.Push({part: part, index: i, attempt: 0, started: 0, notBefore: 0, pdf: InStr(part.body part.alt, "PDFSAVE") > 0})
+    excelSeen := ExcelSnapshot()
+    pdfSeen := PdfSnapshot()
+    claimed := Map()
+    unknown := Map()
+    done := ""
+    failed := ""
+    Loop {
+        busy := 0
+        for lane in lanes
+            busy += IsObject(lane.ctx)
+        if (jobs.Length = 0 && busy = 0)
+            break
+        AssignWorkbooks(lanes, excelSeen, claimed, unknown, &note)
+        for lane in lanes {
+            if !IsObject(lane.ctx) {
+                job := NextJob(jobs, lanes)
+                if !IsObject(job)
+                    continue
+                StartJob(lane, job, plan, excelSeen, pdfSeen)
+                LaneStatus(lanes)
+            }
+            outcome := RunLane(lane)
+            if (outcome.state = "WAIT")
+                continue
+            job := lane.job
+            if (outcome.state = "DONE") {
+                done .= outcome.text
+                lane.clean := true
+                lane.last := job.index
+            } else {
+                lane.clean := false
+                text := outcome.text
+                shown := CleanAfterFailure(lane.pid)
+                if (shown != "")
+                    text .= "`nKomunikat Mercalys: " shown
+                if (job.attempt >= job.part.tries || A_TickCount - job.started > 5400000)
+                    failed .= job.part.name " (próby: " job.attempt "):`n" text "`n`n"
+                else {
+                    job.notBefore := A_TickCount + 5000 * job.attempt
+                    jobs.InsertAt(1, job)
+                    Notify "Błąd, ponawiam: " job.part.name
+                }
+            }
+            lane.ctx := ""
+            lane.job := ""
+            LaneStatus(lanes)
+        }
+        Sleep 300
+    }
+    if (note != "")
+        done := note "`n" done
+    if (failed != "") {
+        MacroBox "Nie udało się:`n" failed done, "Makro zakończone z błędami", "Icon!" AlwaysOnTop
+        return
+    }
+    PlayPart(plan.tail, &summary)
+    if (done != "")
+        MacroBox done, "Makro zakończone", "Iconi" AlwaysOnTop
+    else
+        Notify "Zakończono", "Makro ze schowka zostało wykonane."
+}
+
+; Okna Mercalys do pracy: działające i zalogowane, a brakujące odtwarzacz uruchamia i loguje. Gdy kolejne nie wstanie,
+; makro idzie na tylu, ile jest (z dopiskiem w podsumowaniu). Zwraca "" albo opis błędu (żadnego okna).
+LaneWindows(wanted, password, windows, &note) {
+    problem := WinOpen("Mercalys ahk_exe Mercalys.exe", password)
+    if (problem != "")
+        return problem
+    for hwnd in MercalysMains() {
+        if (windows.Length >= wanted)
+            break
+        ; Otwarty, ale wylogowany (wygasła sesja): logowanie jak przy WINOPEN.
+        if (MercalysLogin("ahk_id " hwnd, password, false) = "")
+            windows.Push(hwnd)
+    }
+    while (windows.Length < wanted) {
+        Notify "Uruchamiam kolejny Mercalys (" (windows.Length + 1) " z " wanted ")…"
+        hwnd := StartAnotherMercalys(password, &problem)
+        if !hwnd {
+            note .= "Raporty na " windows.Length " z " wanted " Mercalys: " problem "`n"
+            break
+        }
+        windows.Push(hwnd)
+    }
+    return windows.Length ? "" : "Nie znaleziono okna Mercalys."
+}
+
+; Główne okna Mercalys (z menu albo z logowaniem), bez okien komunikatów.
+MercalysMains() {
+    list := []
+    for hwnd in WinGetList("ahk_exe Mercalys.exe") {
+        cls := ""
+        try cls := WinGetClass(hwnd)
+        if (cls = "#32770" || cls = "Internet Explorer_TridentDlgFrame")
+            continue
+        docs := HtmlDocuments(hwnd)
+        if (FindElements(docs, MercalysMenu()).Length || FindElements(docs, MercalysPasswordField()).Length)
+            list.Push(hwnd)
+    }
+    return list
+}
+
+StartAnotherMercalys(password, &problem) {
+    path := RegRead(SettingsKey, "MercalysPath", "")
+    if (path = "" || !FileExist(path)) {
+        problem := "odtwarzacz nie zna położenia Mercalys."
+        return 0
+    }
+    before := Map()
+    for hwnd in WinGetList("ahk_exe Mercalys.exe")
+        before[hwnd] := true
+    try Run path
+    catch as error {
+        problem := "nie udało się uruchomić Mercalys: " error.Message
+        return 0
+    }
+    deadline := A_TickCount + 120000
+    Loop {
+        for hwnd in MercalysMains() {
+            if before.Has(hwnd)
+                continue
+            problem := MercalysLogin("ahk_id " hwnd, password, true)
+            return problem = "" ? hwnd : 0
+        }
+        if (A_TickCount >= deadline) {
+            problem := "kolejny Mercalys nie otworzył się w ciągu 2 minut."
+            return 0
+        }
+        Sleep 500
+    }
+}
+
+; Następna część do zrobienia: po przerwie po błędzie, a PDF tylko gdy żadne okno nie czeka na PDF.
+NextJob(jobs, lanes) {
+    pdfBusy := false
+    for lane in lanes
+        if (IsObject(lane.job) && lane.job.pdf)
+            pdfBusy := true
+    for i, job in jobs {
+        if (job.notBefore > A_TickCount || (job.pdf && pdfBusy))
+            continue
+        return jobs.RemoveAt(i)
+    }
+    return ""
+}
+
+; Część od początku w oknie: z początkiem makra i krokami ponowienia (#ALT), gdy okno nie stoi po poprzedniej części
+; tego samego raportu (np. kolejna część dokumentów korzysta z formularza poprzedniej).
+StartJob(lane, job, plan, excelSeen, pdfSeen) {
+    job.attempt += 1
+    if !job.started
+        job.started := A_TickCount
+    fresh := !lane.clean || lane.last != job.index - 1
+    body := fresh && job.part.alt != "" ? job.part.alt : job.part.body
+    text := StrReplace((fresh ? plan.head : "") body, "Mercalys ahk_exe Mercalys.exe", lane.title)
+    text := StrReplace(text, "|Mercalys|", "|" lane.title "|")
+    lane.job := job
+    lane.ctx := {lines: StrSplit(text, "`n", "`r"), index: 0, report: "", excelSeen: excelSeen, pdfSeen: pdfSeen,
+        waitIndex: 0, waitUntil: 0, excelWait: false, excelMatch: "", excelSince: 0, excel: ""}
+}
+
+; Jedna tura części: do końca, do błędu albo do długiego czekania.
+RunLane(lane) {
+    global PartMode := true
+    global PartError := ""
+    global PartReport := ""
+    result := ""
+    try result := PlayMacro("", lane.ctx)
+    catch as problem
+        PartError := problem.Message
+    PartMode := false
+    if (PartError != "")
+        return {state: "ERROR", text: PartError}
+    if (result = "SUSPEND")
+        return {state: "WAIT", text: ""}
+    return {state: "DONE", text: PartReport}
+}
+
+; Długie czekanie linii zaczyna się przy pierwszym jej sprawdzeniu.
+LaneWaitStart(ctx, index, timeout) {
+    if (ctx.waitIndex = index)
+        return
+    ctx.waitIndex := index
+    ctx.waitUntil := A_TickCount + timeout
+    ctx.excelSince := A_TickCount
+}
+
+LaneSuspend(ctx, index, report) {
+    ctx.index := index - 1 ; wznowienie sprawdza tę samą linię
+    ctx.report := report
+    return "SUSPEND"
+}
+
+; Nowe skoroszyty dla części czekających na Excela: po wzorze nagłówka; bez pasującego wzoru tylko, gdy czeka jedna
+; część, a przy kilku po minucie ta, która czeka najdłużej (z dopiskiem w podsumowaniu).
+AssignWorkbooks(lanes, excelSeen, claimed, unknown, &note) {
+    waiting := []
+    for lane in lanes
+        if (IsObject(lane.ctx) && lane.ctx.excelWait && !IsObject(lane.ctx.excel))
+            waiting.Push(lane)
+    if !waiting.Length
+        return
+    for item in ExcelWorkbooks() {
+        if (!waiting.Length)
+            break
+        if (excelSeen.Has(item.key) || claimed.Has(item.key))
+            continue
+        ready := false
+        try ready := item.app.Ready
+        if !ready
+            continue
+        text := WorkbookHeader(item)
+        pick := 0
+        for i, lane in waiting {
+            if (lane.ctx.excelMatch != "" && text != "") {
+                try {
+                    if RegExMatch(text, "is)" lane.ctx.excelMatch) {
+                        pick := i
+                        break
+                    }
+                }
+            }
+        }
+        if (!pick && waiting.Length = 1)
+            pick := 1
+        if !pick {
+            if !unknown.Has(item.key)
+                unknown[item.key] := A_TickCount
+            if (A_TickCount - unknown[item.key] < 60000)
+                continue
+            pick := 1
+            for i, lane in waiting
+                if (lane.ctx.excelSince < waiting[pick].ctx.excelSince)
+                    pick := i
+            name := ""
+            try name := item.book.Name
+            note .= "Nie rozpoznano raportu w skoroszycie " name ", zapisany jako " waiting[pick].job.part.name "`n"
+        }
+        lane := waiting.RemoveAt(pick)
+        lane.ctx.excel := item
+        claimed[item.key] := true
+    }
+}
+
+; Tekst pierwszych 15 wierszy i 30 kolumn pierwszego arkusza: bez polskich znaków i z pojedynczymi spacjami.
+WorkbookHeader(item) {
+    text := ""
+    try {
+        values := item.book.Worksheets(1).Range("A1:AD15").Value
+        Loop 15 {
+            row := A_Index
+            Loop 30 {
+                value := ""
+                try value := values[row, A_Index]
+                if (value != "")
+                    text .= " " value
+            }
+        }
+    }
+    for pair in [["ą", "a"], ["ć", "c"], ["ę", "e"], ["ł", "l"], ["ń", "n"], ["ó", "o"], ["ś", "s"], ["ź", "z"], ["ż", "z"]]
+        text := StrReplace(StrReplace(text, pair[1], pair[2]), StrUpper(pair[1]), StrUpper(pair[2]))
+    return Trim(RegExReplace(text, "\s+", " "))
+}
+
+; Stan dla agenta i podpowiedzi ikony: co robi każde okno.
+LaneStatus(lanes) {
+    text := ""
+    for lane in lanes
+        if IsObject(lane.job)
+            text .= (text = "" ? "" : "; ") "Mercalys " lane.no ": " lane.job.part.name (lane.job.attempt > 1 ? ", próba " lane.job.attempt : "")
+    if (text = "")
+        return
+    if (RemoteId != "" && !RemoteFinished)
+        WriteRemote("RUNNING", text)
+    A_IconTip := SubStr("Makro: " text ". Esc zatrzymuje", 1, 120)
+}
+
+; Zapis skoroszytu przydzielonego części (PlayLanes): format z końcówki i folder jak w ExcelSave.
+ExcelSaveTo(item, path, seen) {
+    SplitPath path, , &dir, &ext
+    format := ExcelFormat(ext)
+    if !format
+        return "Nieznany format pliku `"" path "`". Użyj końcówki .xlsx, .xlsm, .xlsb, .xls albo .csv."
+    problem := EnsureFolder(dir)
+    if (problem != "")
+        return problem
+    return ExcelSaveWorkbook(item, path, format, seen)
 }
 
 SplitParts(rawClip) {
@@ -503,11 +820,12 @@ PartStatus(name, attempt, tries) {
 
 ; Po błędzie części: komunikaty Mercalys zasłaniają ekran, a skoroszyt albo PDF z nieudanego zapisu przeszkodziłby
 ; następnej próbie (ta sama nazwa, to samo okno). Cudzych okien i skoroszytów nie ruszamy. Zwraca treść komunikatów.
-CleanAfterFailure() {
+; pid (od 0.73, kilka Mercalys): tylko komunikaty tego Mercalys, bo inne okna pracują dalej.
+CleanAfterFailure(pid := 0) {
     global FailedBooks, FailedPdfs
     shown := ""
     for winClass in ["Internet Explorer_TridentDlgFrame", "#32770"] {
-        for hwnd in WinGetList("ahk_class " winClass " ahk_exe Mercalys.exe") {
+        for hwnd in WinGetList("ahk_class " winClass (pid ? " ahk_pid " pid : " ahk_exe Mercalys.exe")) {
             text := ""
             try {
                 for doc in HtmlDocuments(hwnd)
@@ -550,16 +868,20 @@ CleanAfterFailure() {
     return shown
 }
 
-PlayMacro(rawClip) {
-    lines := StrSplit(rawClip, "`n", "`r")
+; ctx (od 0.73): część makra na jednym z kilku Mercalys (PlayLanes). Długie czekanie (WEBPAGE, EXCELSAVE, PDFSAVE)
+; nie blokuje wtedy odtwarzacza: linia sprawdza raz i zwraca "SUSPEND", a PlayLanes wznawia ją od tej linii, gdy
+; obsłuży inne okna. Stan części (linie, miejsce, podsumowanie) jest w ctx.
+PlayMacro(rawClip, ctx := "") {
+    lanes := IsObject(ctx)
+    lines := lanes ? ctx.lines : StrSplit(rawClip, "`n", "`r")
     wanted := Map() ; bony z linii WEBLIST
     results := Map() ; Nr Zamów bonów z listy, z WEBROWS
-    report := "" ; podsumowania etapów, pokazane na końcu makra
+    report := lanes ? ctx.report : "" ; podsumowania etapów, pokazane na końcu makra
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
     ; EXCELSAVE: skoroszyty otwarte przed makrem nie są „nowe”, więc makro nie zapisze cudzego pliku
-    excelSeen := InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
-    pdfSeen := InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
+    excelSeen := lanes ? ctx.excelSeen : InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
+    pdfSeen := lanes ? ctx.pdfSeen : InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
     orders := Map() ; dostawca -> numer zamówienia dostawy z bazy (WEBORDERREAD, WEBORDERKNOWN)
     pickedOrder := "" ; zamówienie przeniesione do wybranych przez ostatni WEBORDERPICK
     vars := Map() ; wartości odczytane przez WEBREAD, wstawiane w kolejne linie jako %nazwa%
@@ -569,7 +891,7 @@ PlayMacro(rawClip) {
     collected := MacroCollected ; WEBCOLLECT: kody ze wszystkich list tego makra (np. pliki bonu od 538 i 88110)
     collectRuns := 0
 
-    index := 0
+    index := lanes ? ctx.index : 0
     while (index < lines.Length) { ; pętla po numerze linii, bo WEBIFROW i WEBIFVALUE przeskakują do LABEL
         index += 1
         line := Trim(lines[index])
@@ -697,10 +1019,28 @@ PlayMacro(rawClip) {
                         try WinMinimize hwnd
                 }
             case "EXCELSAVE":
-                ; EXCELSAVE|ścieżka pliku|limit w ms: czeka na nowy skoroszyt w Excelu (np. po przycisku Excel w Mercalys),
-                ; zapisuje go pod tą ścieżką (format z końcówki: xlsx, xlsm, xlsb, xls, csv; istniejący plik jest nadpisywany) i zamyka
-                problem := parts.Length < 2 ? "Linia EXCELSAVE wymaga ścieżki pliku."
-                    : ExcelSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 120000, excelSeen)
+                ; EXCELSAVE|ścieżka pliku|limit w ms|wzór nagłówka: czeka na nowy skoroszyt w Excelu (np. po przycisku Excel w
+                ; Mercalys), zapisuje go pod tą ścieżką (format z końcówki: xlsx, xlsm, xlsb, xls, csv; istniejący plik jest
+                ; nadpisywany) i zamyka. Wzór (od 0.73) liczy się tylko na kilku Mercalys: skoroszyt przydziela PlayLanes.
+                timeout := parts.Length >= 3 ? Integer(Trim(parts[3])) : 120000
+                if (lanes && parts.Length >= 2) {
+                    LaneWaitStart(ctx, index, timeout)
+                    if !IsObject(ctx.excel) {
+                        if (A_TickCount < ctx.waitUntil) {
+                            ctx.excelWait := true
+                            ctx.excelMatch := parts.Length >= 4 ? Trim(parts[4]) : ""
+                            return LaneSuspend(ctx, index, report)
+                        }
+                        problem := "Excel nie otworzył skoroszytu tego raportu w ciągu " Round(timeout / 1000) " s."
+                    } else {
+                        item := ctx.excel
+                        ctx.excel := ""
+                        ctx.excelWait := false
+                        problem := ExcelSaveTo(item, Trim(parts[2]), excelSeen)
+                    }
+                } else
+                    problem := parts.Length < 2 ? "Linia EXCELSAVE wymaga ścieżki pliku."
+                        : ExcelSave(Trim(parts[2]), timeout, excelSeen)
                 if (problem != "") {
                     MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -709,8 +1049,16 @@ PlayMacro(rawClip) {
             case "PDFSAVE":
                 ; PDFSAVE|ścieżka pliku .pdf|limit w ms: czeka na nowe okno PDF (np. raport drukowany z Mercalys), zapisuje
                 ; ten dokument pod tą ścieżką (istniejący plik jest zastępowany) i zamyka okno PDF
-                problem := parts.Length < 2 ? "Linia PDFSAVE wymaga ścieżki pliku."
-                    : PdfSave(Trim(parts[2]), parts.Length >= 3 ? Integer(Trim(parts[3])) : 300000, pdfSeen)
+                timeout := parts.Length >= 3 ? Integer(Trim(parts[3])) : 300000
+                if (lanes && parts.Length >= 2) {
+                    ; Na kilku Mercalys PDF robi naraz tylko jedno okno (PlayLanes), więc każdy nowy PDF jest tej części.
+                    LaneWaitStart(ctx, index, timeout)
+                    problem := PdfSave(Trim(parts[2]), 0, pdfSeen)
+                    if (InStr(problem, "Nie otworzył się nowy PDF") = 1 && A_TickCount < ctx.waitUntil)
+                        return LaneSuspend(ctx, index, report)
+                } else
+                    problem := parts.Length < 2 ? "Linia PDFSAVE wymaga ścieżki pliku."
+                        : PdfSave(Trim(parts[2]), timeout, pdfSeen)
                 if (problem != "") {
                     MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
@@ -832,8 +1180,15 @@ PlayMacro(rawClip) {
                     dialogs.Push({title: Trim(parts[first]), expected: Trim(parts[first + 1]), button: Trim(parts[first + 2]), label: Trim(parts[first + 3]), shown: ""})
                 }
                 hit := ""
-                problem := parts.Length < 4 ? "Linia WEBPAGE wymaga okna, adresu i elementu."
-                    : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000, dialogs, &hit)
+                timeout := parts.Length >= 5 ? Integer(Trim(parts[5])) : 30000
+                if (lanes && parts.Length >= 4) {
+                    LaneWaitStart(ctx, index, timeout)
+                    problem := WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), 0, dialogs, &hit)
+                    if (problem != "" && problem != "DIALOG" && A_TickCount < ctx.waitUntil)
+                        return LaneSuspend(ctx, index, report)
+                } else
+                    problem := parts.Length < 4 ? "Linia WEBPAGE wymaga okna, adresu i elementu."
+                        : WebPage(Trim(parts[2]), Trim(parts[3]), Trim(parts[4]), timeout, dialogs, &hit)
                 if (problem = "DIALOG") {
                     if (dialogs.Length > 1 && hit.shown != "")
                         report .= "Komunikat Mercalys: " hit.shown "`n"

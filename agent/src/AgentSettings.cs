@@ -60,6 +60,12 @@ internal sealed class AgentSettings
     /// </summary>
     public bool UpdateOnStart { get; set; } = true;
 
+    /// <summary>
+    /// Na ilu Mercalys naraz idzie aktualizacja danych (1-3, od 1.14.0): Mercalys długo przygotowuje raport, więc kilka
+    /// okien robi raporty równolegle (AutoJob od 0.73 uruchamia brakujące okna i przełącza się między nimi).
+    /// </summary>
+    public int MercalysCount { get; set; } = 1;
+
     /// <summary>Ten komputer zapisuje pliki dla programu sklepu (wyłączone: inny komputer albo przeglądarka).</summary>
     public bool SaveFiles { get; set; } = true;
 

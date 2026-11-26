@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795689432.3152406,
-    "seen": 1795689549.6066933,
-    "ast_hash": "37ea87c426a5e1be66dc32ff7f3aa4d6",
+    "mtime": 1795692498.480731,
+    "seen": 1795692571.3251688,
+    "ast_hash": "b2258397e9154e3c31750c81a245439f",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -13296,15 +13296,15 @@
     "semantic_hash": ""
   },
   "agent/src/AgentSettings.cs": {
-    "mtime": 1795689028.964934,
-    "seen": 1795689549.2398255,
-    "ast_hash": "560eb985de519dea99d2f7f204ce24b2",
+    "mtime": 1795692219.7865255,
+    "seen": 1795692570.9379056,
+    "ast_hash": "ec8c2ad1036f84af4ad9c7fbf1016955",
     "semantic_hash": ""
   },
   "agent/src/ApiClient.cs": {
-    "mtime": 1795688997.5422857,
-    "seen": 1795689549.2398255,
-    "ast_hash": "8f1aeb8a196756bbc327bc9ae61763fd",
+    "mtime": 1795692219.7875264,
+    "seen": 1795692570.9379056,
+    "ast_hash": "93b7e3fc9205aaf150f99abe0dbc68b4",
     "semantic_hash": ""
   },
   "agent/src/FileSaver.cs": {
@@ -13332,9 +13332,9 @@
     "semantic_hash": ""
   },
   "agent/src/SettingsForm.cs": {
-    "mtime": 1795591872.7899194,
-    "seen": 1795591978.0614128,
-    "ast_hash": "aeef42504b117c0677a936e7341be9f9",
+    "mtime": 1795692229.3790565,
+    "seen": 1795692570.939906,
+    "ast_hash": "341f11b998b80b4b9f8bbc58a2309dbc",
     "semantic_hash": ""
   },
   "agent/src/TrayApp.cs": {
@@ -13356,9 +13356,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentApiController.java": {
-    "mtime": 1795610363.207032,
-    "seen": 1795610539.1815777,
-    "ast_hash": "5bd58121f2d3d54bbcba2e18d3799e2b",
+    "mtime": 1795690579.3912241,
+    "seen": 1795692570.9439054,
+    "ast_hash": "7002882bff2ce5a1268ce7d1c344c37b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/controller/StoreAgentController.java": {
@@ -13368,9 +13368,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/dto/AgentApi.java": {
-    "mtime": 1795689146.9026015,
-    "seen": 1795689549.2463303,
-    "ast_hash": "5940824e6cbbda9683210188bc72b582",
+    "mtime": 1795690586.1192403,
+    "seen": 1795692570.9439054,
+    "ast_hash": "ce2ee5d88cd319c1b3c7801b89f6cfe8",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/agent/dto/AgentStatusResponse.java": {
@@ -13494,9 +13494,9 @@
     "semantic_hash": ""
   },
   "agent/README.md": {
-    "mtime": 1795689109.2728984,
-    "seen": 1795689549.6066933,
-    "ast_hash": "4905fa11b2c4cd3105cef40ccfdc6237",
+    "mtime": 1795692498.5475032,
+    "seen": 1795692571.3251688,
+    "ast_hash": "2b7975674f0f2fdfb500171262792280",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/common/component/CompressedUploads.java": {
@@ -13974,9 +13974,9 @@
     "semantic_hash": ""
   },
   "agent/src/DataUpdate.cs": {
-    "mtime": 1795688983.4264097,
-    "seen": 1795689549.2398255,
-    "ast_hash": "c6c20316c09ef29e943cadf65df836e7",
+    "mtime": 1795692239.936759,
+    "seen": 1795692570.9379056,
+    "ast_hash": "168b19c04e7bc597388a640b7e02640a",
     "semantic_hash": ""
   },
   "agent/src/UpdateForm.cs": {
@@ -13986,9 +13986,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/component/ReportSaveMacro.java": {
-    "mtime": 1795604947.6636024,
-    "seen": 1795605132.6047735,
-    "ast_hash": "a91bb5a8c780470900dc39f4b997b79c",
+    "mtime": 1795690661.7548358,
+    "seen": 1795692571.0605016,
+    "ast_hash": "e0f93011257b0914e9506679d89535b9",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/dto/ReportMacroResponse.java": {
@@ -13998,15 +13998,15 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/importguide/service/ReportMacroService.java": {
-    "mtime": 1795286099.9412258,
-    "seen": 1795287011.0138867,
-    "ast_hash": "d701bb24bc18259938d172e518092bb8",
+    "mtime": 1795690579.4487808,
+    "seen": 1795692571.0635014,
+    "ast_hash": "df32b0a500c74e153407689fe5bf1376",
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/ReportSaveMacroTests.java": {
-    "mtime": 1795604947.6676044,
-    "seen": 1795605132.747367,
-    "ast_hash": "0be6336acce7eb260db4510dc9974797",
+    "mtime": 1795690693.4785192,
+    "seen": 1795692571.199008,
+    "ast_hash": "f8ce447df2d92dac4187ffce71ddfcf0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/feedback/controller/FeedbackController.java": {

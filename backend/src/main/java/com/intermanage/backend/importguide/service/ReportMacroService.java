@@ -27,11 +27,16 @@ public class ReportMacroService {
         this.coverage = coverage;
     }
 
-    /** Pusta lista raportów = wszystkie raporty z makrem. */
+    /** Pusta lista raportów = wszystkie raporty z makrem; na jednym Mercalys (przeglądarka). */
     public ReportMacroResponse build(UUID storeId, List<ImportReportKind> kinds) {
+        return build(storeId, kinds, 1);
+    }
+
+    /** {@code mercalys}: na ilu Mercalys naraz odtwarzacz robi raporty (ustawienie komputera z agentem). */
+    public ReportMacroResponse build(UUID storeId, List<ImportReportKind> kinds, int mercalys) {
         List<ImportReportKind> wanted = kinds == null || kinds.isEmpty() ? ReportSaveMacro.MACRO_REPORTS : kinds;
         ReportSaveMacro.Result result = ReportSaveMacro.build(wanted, locations.get(storeId).locations(),
-                coverage.coverage(storeId), LocalDate.now(StoreTime.ZONE));
+                coverage.coverage(storeId), LocalDate.now(StoreTime.ZONE), mercalys);
         return new ReportMacroResponse(result.macro(), ReportSaveMacro.OPEN_LINE,
                 result.reports().stream().map(Enum::name).toList(),
                 result.skipped().stream().map(skipped -> new ReportMacroResponse.Skipped(skipped.kind().name(),

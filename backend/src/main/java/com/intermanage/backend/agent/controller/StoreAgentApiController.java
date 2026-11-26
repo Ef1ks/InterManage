@@ -226,7 +226,7 @@ public class StoreAgentApiController {
         }
         agents.startUpdate(agent, automatic);
         try {
-            return macros.build(agent.storeId(), kinds);
+            return macros.build(agent.storeId(), kinds, request.mercalys() == null ? 1 : request.mercalys());
         } catch (RuntimeException e) {
             agents.finishUpdate(agent);
             throw e;

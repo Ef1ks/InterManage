@@ -49,6 +49,12 @@ public final class ReportSaveMacro {
      */
     private static final int PART_ATTEMPTS = 3;
 
+    /**
+     * Najwięcej Mercalys naraz przy aktualizacji danych (odtwarzacz od 0.73, linia {@code #LANES|n}): Mercalys długo
+     * przygotowuje raport, a wypełnienie Excela trwa chwilę, więc kilka okien przygotowuje raporty równolegle.
+     */
+    public static final int MAX_LANES = 3;
+
     /** Raporty z makrem, w kolejności odświeżania. */
     public static final List<ImportReportKind> MACRO_REPORTS = List.of(ImportReportKind.PRODUCTS,
             ImportReportKind.PRODUCT_CODES, ImportReportKind.PROMOTIONS, ImportReportKind.CADENCIER,
@@ -98,9 +104,18 @@ public final class ReportSaveMacro {
             List<SavedFile> files, String playerVersion) {
     }
 
-    /** Makro na podane raporty (bez ustawień: pominięte z powodem). */
+    /** Makro na podane raporty (bez ustawień: pominięte z powodem) na jednym Mercalys. */
     public static Result build(List<ImportReportKind> kinds, Map<String, String> locations, ImportCoverage coverage,
             LocalDate today) {
+        return build(kinds, locations, coverage, today, 1);
+    }
+
+    /**
+     * Makro na podane raporty; {@code lanes} = na ilu Mercalys naraz. Każdy zapis do Excela ma wzór nagłówka raportu,
+     * po którym odtwarzacz rozpoznaje skoroszyt (kilka okien Mercalys otwiera skoroszyty w dowolnej kolejności).
+     */
+    public static Result build(List<ImportReportKind> kinds, Map<String, String> locations, ImportCoverage coverage,
+            LocalDate today, int lanes) {
         LocalDate openedOn = parseDate(locations.get(OPENED_ON_KEY));
         List<ImportReportKind> ready = new ArrayList<>();
         List<Skipped> skipped = new ArrayList<>();
@@ -119,6 +134,10 @@ public final class ReportSaveMacro {
         List<String> lines = new ArrayList<>();
         List<SavedFile> files = new ArrayList<>();
         lines.add("# Intermanage: zapis raportów z Mercalys do folderów importu (odtwarzacz od wersji " + version + ")");
+        int laneCount = Math.max(1, Math.min(MAX_LANES, lanes));
+        if (laneCount > 1) {
+            lines.add("#LANES|" + laneCount);
+        }
         lines.add(OPEN_LINE);
         for (int index = 0; index < ready.size(); index++) {
             ImportReportKind kind = ready.get(index);
@@ -142,7 +161,8 @@ public final class ReportSaveMacro {
                     default -> LONG_EXCEL_WAIT_MS;
                 };
                 List<String> save = new ArrayList<>();
-                save.add((kind == ImportReportKind.PROMOTIONS ? "PDFSAVE|" : "EXCELSAVE|") + path + "|" + wait);
+                save.add(kind == ImportReportKind.PROMOTIONS ? "PDFSAVE|" + path + "|" + wait
+                        : "EXCELSAVE|" + path + "|" + wait + "|" + workbookMatch(kind, period));
                 if (kind == ImportReportKind.SALES) {
                     save.add("LABEL|" + emptyLabel);
                 }
@@ -161,6 +181,27 @@ public final class ReportSaveMacro {
         return new Result(String.join("\r\n", lines) + "\r\n", List.copyOf(ready), List.copyOf(skipped),
                 List.copyOf(files), version);
     }
+
+    /**
+     * Wzór (PCRE bez znaku {@code |}, bo to separator pól) na tekst pierwszych wierszy skoroszytu, po którym odtwarzacz
+     * od 0.73 poznaje raport, gdy pracuje na kilku Mercalys. Tekst jest bez polskich znaków, z pojedynczymi spacjami,
+     * bez wielkości liter. Kolumny jak w parserach importu; sprzedaż i dokumenty dodatkowo po okresie z nagłówka, bo
+     * ich części różnią się tylko datami. Starszy odtwarzacz pole pomija.
+     */
+    public static String workbookMatch(ImportReportKind kind, Period period) {
+        String dates = period == null ? "" : SHOWN.format(period.from()) + " do " + SHOWN.format(period.to());
+        return switch (kind) {
+            case PRODUCTS -> "CENA_CAD";
+            case PRODUCT_CODES -> "Kod EAN ?13";
+            case SUPPLIERS -> "Kod dost";
+            case CADENCIER -> "^(?!.*CENA_CAD)(?!.*Kod EAN ?13)(?!.*Kod dost)(?!.*PDV ?:)(?!.*\\bOD \\d\\d/).*\\bITM";
+            case SALES -> "^(?=.*PDV ?:).*\\bOd " + dates;
+            case DOCUMENTS -> "^(?!.*PDV ?:).*\\bOD " + dates;
+            default -> "";
+        };
+    }
+
+    private static final DateTimeFormatter SHOWN = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     /** Najstarszy odtwarzacz dla tych raportów: pusty wynik sprzedaży od 0.55, zapis PDF od 0.49. */
     static String playerVersion(List<ImportReportKind> kinds) {

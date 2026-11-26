@@ -25,6 +25,11 @@ namespace Intermanage.Collector
         public int Dpi = 203;
         public bool OffsetsRead;
         public bool OffsetsChanged;
+        /// <summary>
+        /// Czcionka ceny (LabelFont) wysłana do drukarki od uruchomienia programu. Raz na uruchomienie, a nie raz na
+        /// zawsze: drukarka po przywróceniu ustawień fabrycznych traci pliki, a wysłanie trwa ułamek sekundy.
+        /// </summary>
+        public bool FontSent;
     }
 
     /// <summary>
@@ -254,6 +259,14 @@ namespace Intermanage.Collector
                 catch (FormatException)
                 {
                     dpi = 203;
+                }
+                if (!printer.FontSent)
+                {
+                    // Plik czcionki ceny w pamięci drukarki (E:); odpowiedź = drukarka go przyjęła.
+                    link.Send(LabelFont.Download());
+                    link.GetVar("device.friendly_name");
+                    printer.FontSent = true;
+                    Log.Write("Czcionka ceny wysłana do " + BluetoothLink.Bar(printer.Mac));
                 }
                 string zpl = LabelZpl.Build(label, dpi);
                 link.Send(Encoding.UTF8.GetBytes(zpl));

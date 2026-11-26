@@ -41,6 +41,28 @@ class ReportSaveMacroTests {
     }
 
     @Test
+    void severalMercalysGetLanesAndEveryWorkbookHasItsHeaderPattern() {
+        Map<String, String> locations = Map.of("import:SALES:path", "P:\\Raporty\\Sprzedaz.xlsx",
+                "import:SUPPLIERS:path", "P:\\Raporty\\DOSTAWCY.xlsx");
+        ImportCoverage coverage = new ImportCoverage(
+                List.of(new ImportCoverage.DateRange(LocalDate.of(2024, 1, 1), LocalDate.of(2026, 11, 19))), List.of());
+
+        String macro = ReportSaveMacro.build(List.of(ImportReportKind.SALES, ImportReportKind.SUPPLIERS), locations,
+                coverage, TODAY, 3).macro();
+
+        assertThat(macro).contains("\r\n#LANES|3\r\n" + ReportSaveMacro.OPEN_LINE + "\r\n",
+                "EXCELSAVE|P:\\Raporty\\DOSTAWCY.xlsx|600000|Kod dost\r\n",
+                "EXCELSAVE|P:\\Raporty\\Sprzedaz.xlsx|1800000|^(?=.*PDV ?:).*\\bOd 20/11/2026 do 21/11/2026\r\n");
+        // Jeden Mercalys (przeglądarka, agent bez ustawienia): bez linii #LANES, wzory nie przeszkadzają.
+        assertThat(ReportSaveMacro.build(List.of(ImportReportKind.SALES), locations, coverage, TODAY, 1).macro())
+                .doesNotContain("#LANES");
+        // Wzór idzie polem makra, więc nie może mieć separatora pól.
+        for (ImportReportKind kind : ReportSaveMacro.MACRO_REPORTS) {
+            assertThat(ReportSaveMacro.workbookMatch(kind, new ReportSaveMacro.Period(TODAY, TODAY))).doesNotContain("|");
+        }
+    }
+
+    @Test
     void oneMissingSalesDayBeforeCurrentPeriodIsOneFile() {
         // 10023, 23.11.2026: brakował 21.11, bieżący okres 22-23.11; dawniej dwa pliki.
         Map<String, String> locations = Map.of("import:SALES:path", "P:\\Raporty\\Sprzedaz.xlsx");
@@ -118,7 +140,7 @@ class ReportSaveMacroTests {
                 + "WEBCLICK|Mercalys|btnB10_Excel_LnkBouton\r\n"
                 + "WEBWAIT|Mercalys|lstZ2_FrsMax_TxtBox||30000\r\n"
                 + "WEBCLICK|Mercalys|btnB2_Valider_LnkBouton\r\n"
-                + "EXCELSAVE|P:\\DOSTAWCY\\DOSTAWCY.xlsx|600000\r\n");
+                + "EXCELSAVE|P:\\DOSTAWCY\\DOSTAWCY.xlsx|600000|Kod dost\r\n");
     }
 
     @Test
