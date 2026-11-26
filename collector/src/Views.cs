@@ -419,8 +419,7 @@ namespace Intermanage.Collector
             string details = Brand;
             if (article != null)
             {
-                details += (details.Length > 0 ? ", " : "") + Theme.Money(article.PriceOn(DateTime.Today)) + ", stan "
-                    + Theme.Quantity(article.Stock);
+                details += (details.Length > 0 ? ", " : "") + Theme.Money(article.PriceOn(DateTime.Today));
             }
             Write(g, Cut(g, details, Theme.Text, width - 8), Theme.Text, Theme.Muted, 4, y + 1);
             if (numerator != denominator)
@@ -433,8 +432,44 @@ namespace Intermanage.Collector
             Write(g, "Ilość", Theme.Title, Theme.Ink, 6, InputTop + 8);
             Write(g, Cut(g, result, Theme.Title, width - 8), Theme.Title, Theme.Good, 4, InputTop + 44);
             Write(g, Cut(g, note, Theme.Text, width - 8), Theme.Text, Theme.Muted, 4, InputTop + 66);
+            DrawInfo(g, width, height);
             Write(g, Cut(g, editing ? "Enter zapisuje, 0 usuwa, Esc anuluje" : "Enter dodaje, Esc anuluje", Theme.Text, width - 8),
                 Theme.Text, Theme.Muted, 4, height - 20);
+        }
+
+        /// <summary>
+        /// Pod ilością (od 1.8.3): stan i rotacja, przy artykule z cadencier cena zakupu z cadencier i cena sprzedaży
+        /// dziś, ostatni dostawca. Wiersz, który nie mieści się nad podpowiedzią klawiszy, jest pomijany.
+        /// </summary>
+        private void DrawInfo(Graphics g, int width, int height)
+        {
+            if (article == null)
+            {
+                return;
+            }
+            List<string> info = new List<string>();
+            info.Add("Stan " + Theme.Quantity(article.Stock)
+                + (article.Rotation.Length > 0 ? ", rotacja " + Theme.Quantity(article.Rotation) + "/tydz." : ""));
+            if (article.Cadencier && article.CadencierPurchase.Length > 0)
+            {
+                info.Add("Cadencier: zakup " + Theme.Money(article.CadencierPurchase) + ", sprzedaż "
+                    + Theme.Money(article.PriceOn(DateTime.Today)));
+            }
+            if (article.Supplier.Length > 0)
+            {
+                info.Add("Dostawca: " + article.Supplier);
+            }
+            int line = LineHeight(g, Theme.Text);
+            int y = InputTop + 66 + line + 4;
+            foreach (string text in info)
+            {
+                if (y + line > height - 22)
+                {
+                    break;
+                }
+                Write(g, Cut(g, text, Theme.Text, width - 8), Theme.Text, Theme.Ink, 4, y);
+                y += line;
+            }
         }
     }
 
@@ -653,6 +688,8 @@ namespace Intermanage.Collector
         private const int ToggleWidth = 58;
         private string toggle = "";
         private bool toggled;
+        private string toggle2 = "";
+        private bool toggled2;
         private string left = "";
         private string right = "";
         private Color back = Theme.Ink;
@@ -686,14 +723,35 @@ namespace Intermanage.Collector
             }
         }
 
-        private int IconLeft
+        /// <summary>Drugi przełącznik za pierwszym (od 1.8.3, np. „1 na skan” w protokole); pusty tekst = bez niego.</summary>
+        public void ShowToggle2(string text, bool on)
+        {
+            if (toggle2 != text || toggled2 != on)
+            {
+                toggle2 = text;
+                toggled2 = on;
+                Invalidate();
+            }
+        }
+
+        private int FirstWidth
         {
             get { return toggle.Length > 0 ? ToggleWidth : 0; }
         }
 
+        private int IconLeft
+        {
+            get { return FirstWidth + (toggle2.Length > 0 ? ToggleWidth : 0); }
+        }
+
         public bool OnToggle(int x)
         {
-            return x < IconLeft;
+            return x < FirstWidth;
+        }
+
+        public bool OnToggle2(int x)
+        {
+            return x >= FirstWidth && x < IconLeft;
         }
 
         public bool OnIcon(int x)
@@ -716,6 +774,14 @@ namespace Intermanage.Collector
                 Fill(g, Theme.Paper, ToggleWidth - 1, 0, 1, height);
                 int textWidth = TextWidth(g, toggle, Theme.Bold);
                 Write(g, toggle, Theme.Bold, toggled ? Theme.Ink : Color.White, (ToggleWidth - textWidth) / 2, y);
+            }
+            if (toggle2.Length > 0)
+            {
+                int x0 = FirstWidth;
+                Fill(g, toggled2 ? Theme.Selected : Theme.Ink, x0, 0, ToggleWidth - 1, height);
+                Fill(g, Theme.Paper, x0 + ToggleWidth - 1, 0, 1, height);
+                int textWidth = TextWidth(g, toggle2, Theme.Bold);
+                Write(g, toggle2, Theme.Bold, toggled2 ? Theme.Ink : Color.White, x0 + (ToggleWidth - textWidth) / 2, y);
             }
             if (icon != Icon.None)
             {

@@ -549,12 +549,55 @@ namespace Intermanage.Collector
             pendingArticle = article;
             scaleCode = match.ScaleCode;
             editedLine = null;
+            if (Settings.OnePerScan)
+            {
+                AddOnScan();
+                return;
+            }
             if (article.Multipack > 1 && !label)
             {
                 AskUnit(line.Numerator == 1 && line.Denominator > 1);
                 return;
             }
             EnterQuantity();
+        }
+
+        /// <summary>
+        /// „1 na skan”: pierwszy skan artykułu dopisuje 1 (etykieta wagi swoją wagę, jednostka zeskanowanego kodu) bez okna
+        /// ilości, a ponowny skan tego samego artykułu w tej samej jednostce otwiera poprawkę jego ilości.
+        /// </summary>
+        private void AddOnScan()
+        {
+            ProtocolLine known = protocols.Lines.Find(delegate(ProtocolLine line) { return line.SameAs(pending); });
+            if (known != null)
+            {
+                EditLine(known, pendingArticle);
+                return;
+            }
+            decimal entered = 1;
+            if (scaleCode.Length > 0)
+            {
+                string weight = Catalog.ScaleQuantity(scaleCode, pendingArticle, weightIn24);
+                entered = weight.Length == 0 ? 0 : decimal.Parse(weight, CultureInfo.InvariantCulture);
+            }
+            if (entered <= 0)
+            {
+                // Etykieta wagi bez ilości (np. 24 bez ceny w kartotece): zwykłe okno ilości.
+                EnterQuantity();
+                return;
+            }
+            try
+            {
+                pending.Entered = entered;
+                protocols.Add(pending);
+                Native.Beep();
+            }
+            catch (Exception error)
+            {
+                Log.Write("Protokół: " + error);
+                MessageBox.Show("Nie udało się zapisać pozycji: " + error.Message, "Intermanage");
+            }
+            EndQuantity();
         }
 
         /// <summary>
@@ -640,14 +683,39 @@ namespace Intermanage.Collector
             {
                 return;
             }
+            EditLine(line, ArticleOf(line));
+        }
+
+        /// <summary>Poprawka ilości pozycji listy (wybór z listy albo ponowny skan przy „1 na skan”).</summary>
+        private void EditLine(ProtocolLine line, Article article)
+        {
             pending = null;
+            pendingArticle = null;
             scaleCode = "";
             editedLine = line;
-            quantity.Show(null, line.Name, line.Brand, line.Numerator, line.Denominator, true);
+            quantity.Show(article, line.Name, line.Brand, line.Numerator, line.Denominator, true);
             quantityInput.Text = ProtocolLine.Number(line.Entered).Replace('.', ',');
             ShowView(quantity);
             quantityInput.SelectAll();
             ShowQuantityResult();
+        }
+
+        /// <summary>Artykuł pozycji z danych kolektora (informacje w oknie ilości); null, gdy go już nie ma.</summary>
+        private Article ArticleOf(ProtocolLine line)
+        {
+            if (catalog == null)
+            {
+                return null;
+            }
+            foreach (Match match in catalog.Find(line.Ean))
+            {
+                Article article = catalog.Read(match.Index);
+                if (article.Itm8 == line.Itm8)
+                {
+                    return article;
+                }
+            }
+            return null;
         }
 
         private void OnQuantityTyped(object sender, EventArgs e)
@@ -1057,6 +1125,7 @@ namespace Intermanage.Collector
             {
                 footer.ShowToggle(mode == Mode.Protocol && view != ask ? weightIn24 ? "24: kg" : "24: zł" : "", weightIn24);
             }
+            footer.ShowToggle2(mode == Mode.Protocol && view != ask ? "1/skan" : "", Settings.OnePerScan);
             if (sync.Percent >= 0)
             {
                 footer.Show(icon, sync.Status, sync.Percent + "%", Theme.Panel, Theme.Ink, sync.Percent);
@@ -1123,6 +1192,13 @@ namespace Intermanage.Collector
             if (footer.OnToggle(e.X))
             {
                 OnToggle24();
+                return;
+            }
+            if (footer.OnToggle2(e.X) && mode == Mode.Protocol)
+            {
+                Settings.OnePerScan = !Settings.OnePerScan;
+                UpdateBars();
+                FocusInput();
                 return;
             }
             if (footer.OnIcon(e.X) && mode == Mode.Promo)

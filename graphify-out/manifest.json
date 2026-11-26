@@ -258,9 +258,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/types.ts": {
-    "mtime": 1795688426.5391192,
-    "seen": 1795688817.4679203,
-    "ast_hash": "70b0ffe0f91db40ad4aea035de082c54",
+    "mtime": 1795693499.8629048,
+    "seen": 1795693830.6338272,
+    "ast_hash": "0dde4f367d704fa577fdd4a8529890df",
     "semantic_hash": ""
   },
   "frontend/src/lib/utils.ts": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795692498.480731,
-    "seen": 1795692571.3251688,
-    "ast_hash": "b2258397e9154e3c31750c81a245439f",
+    "mtime": 1795693752.7679374,
+    "seen": 1795693830.6677883,
+    "ast_hash": "447d702d0a5c0e8b35c2c787b2bd95e4",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -7326,9 +7326,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ZeroStockOrderDialog.tsx": {
-    "mtime": 1794061656.5149572,
-    "seen": 1794061853.9623117,
-    "ast_hash": "279646629306c94a8e6d8decc810c660",
+    "mtime": 1795693476.2110562,
+    "seen": 1795693830.6132417,
+    "ast_hash": "d2057b73ab2246b7d26e0fa40149ed40",
     "semantic_hash": ""
   },
   "frontend/src/features/sales/ZeroStockReport.tsx": {
@@ -15162,9 +15162,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/component/CollectorCatalogFile.java": {
-    "mtime": 1795688353.7708101,
-    "seen": 1795688817.18189,
-    "ast_hash": "2d37fa60ff6e931e213cbe690f56798b",
+    "mtime": 1795693571.5882704,
+    "seen": 1795693830.316202,
+    "ast_hash": "ea45c840ead4764ed72a9ed976d093b0",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/controller/CollectorApiController.java": {
@@ -15210,9 +15210,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/service/CollectorCatalogService.java": {
-    "mtime": 1795688361.5768483,
-    "seen": 1795688817.1868894,
-    "ast_hash": "ff170e068f448e851abb9eb3c1e12b9b",
+    "mtime": 1795693578.564137,
+    "seen": 1795693830.3226793,
+    "ast_hash": "81b35904f45ebbf562e10841940a3b67",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/service/StoreCollectorService.java": {
@@ -15222,21 +15222,21 @@
     "semantic_hash": ""
   },
   "backend/src/test/java/com/intermanage/backend/CollectorIntegrationTests.java": {
-    "mtime": 1795688573.6618233,
-    "seen": 1795688817.3757627,
-    "ast_hash": "0ee96ad7265bc174d7f2545ac98ef5dd",
+    "mtime": 1795693376.9149096,
+    "seen": 1795693830.5236247,
+    "ast_hash": "5035316484319e1d69bcee0cdfdf3173",
     "semantic_hash": ""
   },
   "collector/build.ps1": {
-    "mtime": 1795689218.5016265,
-    "seen": 1795689549.4981222,
-    "ast_hash": "d91f0d6533ed8702c7f89aaab49cce8d",
+    "mtime": 1795693198.7097552,
+    "seen": 1795693830.5406244,
+    "ast_hash": "5bcba413a219cbaf2702afa892d78d36",
     "semantic_hash": ""
   },
   "collector/src/Catalog.cs": {
-    "mtime": 1795689155.304361,
-    "seen": 1795689549.4991186,
-    "ast_hash": "ff0c21d378ecdbb58882747859cda242",
+    "mtime": 1795693640.6518495,
+    "seen": 1795693830.5406244,
+    "ast_hash": "c3394792497989649cd38f8ac7e2bd76",
     "semantic_hash": ""
   },
   "collector/src/Certificates.cs": {
@@ -15252,9 +15252,9 @@
     "semantic_hash": ""
   },
   "collector/src/MainForm.cs": {
-    "mtime": 1795679145.5439453,
-    "seen": 1795688817.3923311,
-    "ast_hash": "93a22b37367267ba7b44835bfac471f7",
+    "mtime": 1795693683.3537958,
+    "seen": 1795693830.5406244,
+    "ast_hash": "fa1fafb7c704880d3a0f87831add003e",
     "semantic_hash": ""
   },
   "collector/src/Program.cs": {
@@ -15264,9 +15264,9 @@
     "semantic_hash": ""
   },
   "collector/src/Settings.cs": {
-    "mtime": 1795682771.1342533,
-    "seen": 1795688817.393331,
-    "ast_hash": "4815dcc9e7a38bc08704fa8396cea214",
+    "mtime": 1795693650.5787127,
+    "seen": 1795693830.5416245,
+    "ast_hash": "27eb8250f8a5266050286a4ec4e4eb52",
     "semantic_hash": ""
   },
   "collector/src/Sync.cs": {
@@ -15282,9 +15282,9 @@
     "semantic_hash": ""
   },
   "collector/src/Views.cs": {
-    "mtime": 1795631035.2596333,
-    "seen": 1795631215.5223894,
-    "ast_hash": "17c7b6a3cf8dc9f1b517e4fe0d89b4dc",
+    "mtime": 1795693672.1014476,
+    "seen": 1795693830.5416245,
+    "ast_hash": "c125adf90219c3e88fd9522e0d2116cc",
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/CollectorSettings.tsx": {
@@ -15366,9 +15366,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/controller/CollectorListController.java": {
-    "mtime": 1795629178.9479828,
-    "seen": 1795631215.311761,
-    "ast_hash": "594be6e9f7f0bc2be20d5e57361ed0f9",
+    "mtime": 1795693364.955376,
+    "seen": 1795693830.316202,
+    "ast_hash": "a2b1f8a7d406c7cb5eadccee90dd63a2",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/dto/CollectorListDetails.java": {
@@ -15378,9 +15378,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/dto/CollectorListResponse.java": {
-    "mtime": 1795629149.4316485,
-    "seen": 1795631215.311761,
-    "ast_hash": "6477af413672a92e45e8a18a20c81e00",
+    "mtime": 1795693360.2814965,
+    "seen": 1795693830.317711,
+    "ast_hash": "8b2cc86b34f9a45fc4989738c7bc182b",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/dto/CollectorProtocolRequest.java": {
@@ -15402,9 +15402,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/entity/CollectorListProtocol.java": {
-    "mtime": 1795628991.2711244,
-    "seen": 1795631215.311761,
-    "ast_hash": "4242c2738bfbf03f8109564e18749fd2",
+    "mtime": 1795693364.9339345,
+    "seen": 1795693830.3197215,
+    "ast_hash": "bfccd66e3539cc8e8ef626c097e3e9ea",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/mapper/CollectorListMapper.java": {
@@ -15432,9 +15432,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/collector/service/CollectorListService.java": {
-    "mtime": 1795633119.781931,
-    "seen": 1795633145.6227658,
-    "ast_hash": "2d961c12e4054da92a3e5d28bc64387e",
+    "mtime": 1795693364.9773843,
+    "seen": 1795693830.3226793,
+    "ast_hash": "698f956f8afcf29316d3f515e8730c22",
     "semantic_hash": ""
   },
   "collector/src/Protocols.cs": {
@@ -15456,15 +15456,15 @@
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/CollectorListsPage.tsx": {
-    "mtime": 1795633326.5675988,
-    "seen": 1795634369.109701,
-    "ast_hash": "9a0e196d5d7ba2cbeffba0e3257a6b8e",
+    "mtime": 1795693508.5892153,
+    "seen": 1795693830.5636342,
+    "ast_hash": "bec883d4de1721876539b9314b02ddf2",
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/lists-api.ts": {
-    "mtime": 1795630318.5635467,
-    "seen": 1795631215.541123,
-    "ast_hash": "1ef6d29af6742de6eb6aa137a4361fa4",
+    "mtime": 1795693476.2120595,
+    "seen": 1795693830.5646336,
+    "ast_hash": "9cda8d960c25ab57ffae229177c4380e",
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/paths.ts": {
@@ -15636,9 +15636,9 @@
     "semantic_hash": ""
   },
   "collector/src/Printers.cs": {
-    "mtime": 1795687580.5349457,
-    "seen": 1795688817.3923311,
-    "ast_hash": "7f7fdec7255b2c9e1fbdb0f1337acbd6",
+    "mtime": 1795693158.6463394,
+    "seen": 1795693830.5406244,
+    "ast_hash": "c0a75414926ac4cfa3498284fda8b3c1",
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/PrinterSettings.tsx": {
@@ -15666,9 +15666,9 @@
     "semantic_hash": ""
   },
   "collector/src/Labels.cs": {
-    "mtime": 1795689218.0655692,
-    "seen": 1795689549.4991186,
-    "ast_hash": "98b37ab22131e54dbdaef4855f902f75",
+    "mtime": 1795693231.0640016,
+    "seen": 1795693830.5406244,
+    "ast_hash": "5c4d074a54bc67500fcb6ac09faee896",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/product/component/DepositKindReportParser.java": {
@@ -15753,6 +15753,18 @@
     "mtime": 1795688837.5833132,
     "seen": 1795689549.4843955,
     "ast_hash": "63cf98abe0c9b9302ee983782387cfda",
+    "semantic_hash": ""
+  },
+  "backend/src/main/java/com/intermanage/backend/collector/entity/CollectorListOutput.java": {
+    "mtime": 1795693402.9528785,
+    "seen": 1795693830.3197215,
+    "ast_hash": "e6a2f1c6ddee68b07c052ee49b712d13",
+    "semantic_hash": ""
+  },
+  "collector/res/DejaVu-LICENSE.txt": {
+    "mtime": 1795693123.780549,
+    "seen": 1795693830.6687884,
+    "ast_hash": "449b2c30bfe5fa897fe87b8b70b16cfa",
     "semantic_hash": ""
   }
 }

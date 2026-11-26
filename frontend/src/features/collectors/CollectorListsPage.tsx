@@ -6,6 +6,7 @@ import {
   FileTextIcon,
   PrinterIcon,
   ScanBarcodeIcon,
+  ShoppingCartIcon,
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react'
@@ -36,7 +37,8 @@ import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, downloadFile, downloadPostedFile, fetchPostedFile, printFile } from '@/lib/api'
 import { PROTOCOLS, useProtoFolder, useProtoSettings } from '@/lib/proto-files'
 import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
-import type { CollectorList, CollectorListDetails, ProtocolKind } from '@/lib/types'
+import { ZeroStockOrderDialog } from '@/features/sales/ZeroStockOrderDialog'
+import type { CollectorList, CollectorListDetails, CollectorListOutput, ProtocolKind } from '@/lib/types'
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +46,7 @@ import {
   listQuery,
   useCollectorListDetails,
   useCollectorLists,
+  useMarkOrderSaved,
   useMarkProtocolSaved,
   useRemoveCollectorList,
   useRestoreCollectorList,
@@ -58,7 +61,8 @@ const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximum
 const quantity = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3 })
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
-const protocolLabel = (kind: ProtocolKind) => PROTOCOLS.find((item) => item.kind === kind)?.label ?? kind
+const protocolLabel = (kind: CollectorListOutput) =>
+  kind === 'ORDER' ? 'Zamówienie' : (PROTOCOLS.find((item) => item.kind === kind)?.label ?? kind)
 const plural = new Intl.PluralRules('pl-PL')
 const LINES: Partial<Record<Intl.LDMLPluralRule, string>> = { one: 'pozycja', few: 'pozycje' }
 const lineCount = (count: number) => `${count} ${LINES[plural.select(count)] ?? 'pozycji'}`
@@ -258,19 +262,41 @@ function Details({ storeId, ids, lists }: { storeId: string; ids: string[]; list
   }
   return (
     <div className="grid min-w-0 gap-4">
-      <Actions storeId={storeId} ids={ids} lists={lists.filter((list) => ids.includes(list.id))} />
+      <Actions
+        storeId={storeId}
+        ids={ids}
+        lists={lists.filter((list) => ids.includes(list.id))}
+        rows={details.data.rows}
+      />
       <Rows key={ids.join()} details={details.data} />
     </div>
   )
 }
 
-function Actions({ storeId, ids, lists }: { storeId: string; ids: string[]; lists: CollectorList[] }) {
+function Actions({
+  storeId,
+  ids,
+  lists,
+  rows,
+}: {
+  storeId: string
+  ids: string[]
+  lists: CollectorList[]
+  rows: CollectorListDetails['rows']
+}) {
   const { data: settings } = useProtoSettings(storeId)
   const folder = useProtoFolder(storeId)
   const markSaved = useMarkProtocolSaved(storeId)
+  const markOrder = useMarkOrderSaved(storeId)
   const undo = useUndoProtocol(storeId)
   const [pending, setPending] = useState<ProtocolKind | null>(null)
-  const [repeating, setRepeating] = useState<ProtocolKind | null>(null)
+  const [repeating, setRepeating] = useState<CollectorListOutput | null>(null)
+  const [ordering, setOrdering] = useState(false)
+  // Do zamówienia tylko artykuły z ilością na plusie (lista bywa różnicą ilości), ilość listy jako liczba kartonów.
+  const orderItems = rows
+    .filter((row) => row.quantity > 0)
+    .map((row) => ({ itm8: row.itm8, ean: row.ean, name: row.name, brand: row.brand, stock: null }))
+  const listQuantity = new Map(rows.map((row) => [row.itm8, row.quantity]))
   const [missingFolder, setMissingFolder] = useState<ProtocolKind | null>(null)
   const visible = PROTOCOLS.filter((protocol) => !settings?.hiddenProtocols.includes(protocol.kind))
   const done = lists.flatMap((list) => list.protocols.map((protocol) => ({ list, protocol })))
@@ -356,42 +382,67 @@ function Actions({ storeId, ids, lists }: { storeId: string; ids: string[]; list
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && (
         <p className="text-sm text-muted-foreground">Wszystkie protokoły są ukryte w ustawieniach sklepu.</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {visible.map((protocol) => (
-            <Button
-              key={protocol.kind}
-              onClick={() =>
-                done.some((item) => item.protocol.kind === protocol.kind)
-                  ? setRepeating(protocol.kind)
-                  : void save(protocol.kind)
-              }
-              loading={pending === protocol.kind}
-              disabled={pending !== null}
-            >
-              <FileOutputIcon aria-hidden />
-              {protocol.label}
-            </Button>
-          ))}
-        </div>
       )}
+      <div className="flex flex-wrap gap-2">
+        {visible.map((protocol) => (
+          <Button
+            key={protocol.kind}
+            onClick={() =>
+              done.some((item) => item.protocol.kind === protocol.kind)
+                ? setRepeating(protocol.kind)
+                : void save(protocol.kind)
+            }
+            loading={pending === protocol.kind}
+            disabled={pending !== null}
+          >
+            <FileOutputIcon aria-hidden />
+            {protocol.label}
+          </Button>
+        ))}
+        <Button
+          variant="outline"
+          disabled={pending !== null || orderItems.length === 0}
+          title={orderItems.length === 0 ? 'Na liście nie ma artykułów z ilością do zamówienia' : undefined}
+          onClick={() =>
+            done.some((item) => item.protocol.kind === 'ORDER') ? setRepeating('ORDER') : setOrdering(true)
+          }
+        >
+          <ShoppingCartIcon aria-hidden />
+          Zamówienie
+        </Button>
+      </div>
+
+      <ZeroStockOrderDialog
+        storeId={storeId}
+        items={orderItems}
+        open={ordering}
+        onOpenChange={setOrdering}
+        orderPath={`/stores/${storeId}/data-entry/export/order`}
+        initialQuantity={(item) => String(Math.min(99, Math.max(1, Math.round(listQuantity.get(item.itm8) ?? 1))))}
+        onSaved={(fileName) => markOrder.mutateAsync({ ids, fileName }).then(() => undefined)}
+        description="Ilości z listy jako liczba kartonów. Odznacz, czego nie zamawiasz, i popraw ilości. Plik trafi do folderu protokołów."
+      />
 
       <AlertDialog open={repeating !== null} onOpenChange={(open) => !open && setRepeating(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Utworzyć ten protokół jeszcze raz?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {repeating === 'ORDER' ? 'Utworzyć zamówienie jeszcze raz?' : 'Utworzyć ten protokół jeszcze raz?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Z tej listy jest już protokół {repeating && protocolLabel(repeating)}. Program sklepu wczyta ilości drugi
-              raz.
+              {repeating === 'ORDER'
+                ? 'Z tej listy jest już zamówienie. Program sklepu zamówi te artykuły drugi raz.'
+                : `Z tej listy jest już protokół ${repeating ? protocolLabel(repeating) : ''}. Program sklepu wczyta ilości drugi raz.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Anuluj</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (repeating) void save(repeating)
+                if (repeating === 'ORDER') setOrdering(true)
+                else if (repeating) void save(repeating)
                 setRepeating(null)
               }}
             >

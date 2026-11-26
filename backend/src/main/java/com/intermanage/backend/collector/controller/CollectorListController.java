@@ -25,6 +25,7 @@ import com.intermanage.backend.auth.security.AppUserPrincipal;
 import com.intermanage.backend.collector.dto.CollectorListDetails;
 import com.intermanage.backend.collector.dto.CollectorListResponse;
 import com.intermanage.backend.collector.dto.CollectorProtocolRequest;
+import com.intermanage.backend.collector.entity.CollectorListOutput;
 import com.intermanage.backend.collector.service.CollectorListService;
 import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.dataentry.service.DataEntryProtocolService;
@@ -76,7 +77,19 @@ public class CollectorListController {
     @PostMapping("/protocols/{kind}/saved")
     public List<CollectorListResponse> saved(@PathVariable UUID storeId, @PathVariable ProtocolKind kind,
             @Valid @RequestBody CollectorProtocolRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
-        return service.markSaved(storeId, kind, request.ids(), request.fileName(), principal.getId());
+        return service.markSaved(storeId, CollectorListOutput.of(kind), request.ids(), request.fileName(),
+                principal.getId());
+    }
+
+    /**
+     * Zamówienie z wybranych list zapisane w folderze: plik powstaje jak zamówienie z wprowadzania danych
+     * ({@code /data-entry/export/order}, ilości poprawione w oknie), a tu lista dostaje oznaczenie jak po protokole.
+     */
+    @PostMapping("/order/saved")
+    public List<CollectorListResponse> orderSaved(@PathVariable UUID storeId,
+            @Valid @RequestBody CollectorProtocolRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.markSaved(storeId, CollectorListOutput.ORDER, request.ids(), request.fileName(),
+                principal.getId());
     }
 
     @DeleteMapping("/{listId}/protocols/{protocolId}")

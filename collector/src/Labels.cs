@@ -11,11 +11,25 @@ namespace Intermanage.Collector
     /// (collector/res/IMCENA.TTF, licencja DejaVu-LICENSE.txt obok; nowy znak = nowe okrojenie fontTools z
     /// backend/src/main/resources/fonts/DejaVuSans-Bold.ttf). Prawdziwie gruba czcionka zamiast podwójnego druku czcionki 0,
     /// a szerokości znaków są znane z pliku, więc grosze stoją dokładnie za złotymi. Plik idzie do pamięci drukarki (E:)
-    /// raz na uruchomienie programu (Printer.FontSent).
+    /// tylko, gdy jej tam nie ma (^HW, raz na uruchomienie programu, Printer.FontSent), a bez niej w drukarce cena idzie
+    /// czcionką 0 (Printer.FontReady), żeby cenówka nigdy nie wyszła bez ceny.
     /// </summary>
     internal static class LabelFont
     {
+        /// <summary>
+        /// Plik w drukarce. W ~DY nazwa idzie bez rozszerzenia (rozszerzenie daje pole T = TrueType); w 1.8.3 nazwa
+        /// z „.TTF” w ~DY dawała plik pod inną nazwą i cenówki bez ceny.
+        /// </summary>
         public const string File = "E:IMCENA.TTF";
+        private const string DownloadName = "E:IMCENA";
+        /// <summary>Lista plików czcionki w drukarce; odpowiedź kończy się wierszem „… bytes free”.</summary>
+        public const string Directory = "^XA^HWE:IMCENA.TTF^XZ";
+
+        /// <summary>Czy odpowiedź ^HW ma plik czcionki.</summary>
+        public static bool Listed(string directory)
+        {
+            return directory.ToUpper().IndexOf("IMCENA.TTF") >= 0;
+        }
 
         /// <summary>Szerokości znaków jako część wysokości czcionki (hmtx / unitsPerEm 2048).</summary>
         public const decimal Digit = 0.6958m;
@@ -41,7 +55,7 @@ namespace Intermanage.Collector
                     }
                 }
                 StringBuilder s = new StringBuilder(bytes.Length * 2 + 40);
-                s.Append("~DY").Append(File).Append(",A,T,").Append(bytes.Length).Append(",,");
+                s.Append("~DY").Append(DownloadName).Append(",A,T,").Append(bytes.Length).Append(",,");
                 foreach (byte b in bytes)
                 {
                     s.Append(b.ToString("X2"));
@@ -215,10 +229,27 @@ namespace Intermanage.Collector
         private const int PriceGap = 4;
 
         /// <summary>
+        /// Cena czcionką 0, gdy drukarka nie ma pliku LabelFont (nie przyjęła go): jak w 1.8.2, ale bez podwójnego druku,
+        /// a szerokość cyfry to szacunek z zapasem (złote i tak wyrównane do prawej przed kropką).
+        /// </summary>
+        private const int Font0WholeHeight = 160;
+        private const int Font0WholeWidth = 96;
+        private const int Font0CentsHeight = 96;
+        private const int Font0CentsWidth = 60;
+        private const decimal Font0Digit = 0.66m;
+        private const decimal Font0Dot = 0.3m;
+
+        /// <summary>
         /// Cenówka w ZPL. Przesunięcia wydruku (^LS, ^LT) nie ma w cenówce: trzyma je drukarka (Menu, Drukarka), bo
         /// zależą od drukarki i rolki, a nie od kolektora.
         /// </summary>
         public static string Build(PriceLabel label, int dpi)
+        {
+            return Build(label, dpi, true);
+        }
+
+        /// <summary>ownFont: drukarka ma plik LabelFont; bez niego cena czcionką 0.</summary>
+        public static string Build(PriceLabel label, int dpi, bool ownFont)
         {
             Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi, MarginMm, MarginMm);
             StringBuilder s = z.Text;
@@ -235,18 +266,27 @@ namespace Intermanage.Collector
             int dot = money.IndexOf('.');
             string whole = money.Substring(0, dot);
             string cents = money.Substring(dot);
+            int wholeHeight = ownFont ? WholeHeight : Font0WholeHeight;
+            int centsHeight = ownFont ? CentsHeight : Font0CentsHeight;
+            int centsWidth = ownFont ? CentsWidth : Font0CentsWidth;
+            decimal digit = ownFont ? LabelFont.Digit : Font0Digit;
+            decimal dotWidth = ownFont ? LabelFont.Dot : Font0Dot;
             // Od czterech cyfr (1000 zł) węższe złote, żeby grosze i „zł” zmieściły się na etykiecie.
-            int wholeWidth = whole.Length >= 4 ? WholeWidth * 3 / 4 : WholeWidth;
+            int wholeWidth = ownFont ? WholeWidth : Font0WholeWidth;
+            if (whole.Length >= 4)
+            {
+                wholeWidth = wholeWidth * 3 / 4;
+            }
             // Pole złotych o 8 punktów szersze niż napis: gdyby drukarka skalowała szerokość inaczej, napis i tak mieści się
             // w jednym wierszu pola (za szeroki ^FB zawija albo nadpisuje), a koniec zostaje przed kropką.
-            int x = Advance(whole.Length * LabelFont.Digit, wholeWidth) + 8;
-            z.Price(0, PriceBase, x, 'R', WholeHeight, wholeWidth, whole);
+            int x = Advance(whole.Length * digit, wholeWidth) + 8;
+            z.Price(ownFont, 0, PriceBase, x, 'R', wholeHeight, wholeWidth, whole);
             x += PriceGap;
-            z.Price(x, PriceBase, 0, 'L', CentsHeight, CentsWidth, cents);
-            x += Advance(LabelFont.Dot + (cents.Length - 1) * LabelFont.Digit, CentsWidth) + PriceGap;
+            z.Price(ownFont, x, PriceBase, 0, 'L', centsHeight, centsWidth, cents);
+            x += Advance(dotWidth + (cents.Length - 1) * digit, centsWidth) + PriceGap;
             // „zł” małe, górą równo z górą groszy.
-            int unitBase = PriceBase - (int)(LabelFont.DigitHeight * (CentsHeight - UnitHeight));
-            z.Price(x, unitBase, 0, 'L', UnitHeight, UnitWidth, "zł");
+            int unitBase = PriceBase - (int)(LabelFont.DigitHeight * (centsHeight - UnitHeight));
+            z.Price(ownFont, x, unitBase, 0, 'L', UnitHeight, UnitWidth, "zł");
 
             z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
             z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
@@ -329,10 +369,17 @@ namespace Intermanage.Collector
             /// szerokości (^FT z ^FB: linia dołu ostatniego wiersza pola), np. złote do prawej, żeby kończyły się przed
             /// kropką bez względu na skalowanie szerokości w drukarce.
             /// </summary>
-            public void Price(int x, int y, int width, char align, int height, int fontWidth, string text)
+            public void Price(bool ownFont, int x, int y, int width, char align, int height, int fontWidth, string text)
             {
-                Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
-                    .Append("^A@N,").Append(D(height)).Append(',').Append(D(fontWidth)).Append(',').Append(LabelFont.File);
+                Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y));
+                if (ownFont)
+                {
+                    Text.Append("^A@N,").Append(D(height)).Append(',').Append(D(fontWidth)).Append(',').Append(LabelFont.File);
+                }
+                else
+                {
+                    Text.Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth));
+                }
                 if (width > 0)
                 {
                     Text.Append("^FB").Append(D(width)).Append(",1,0,").Append(align).Append(",0");

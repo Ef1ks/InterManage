@@ -82,6 +82,20 @@ namespace Intermanage.Collector
             get { return Value("printerName", ""); }
         }
 
+        /// <summary>
+        /// Protokół „1 na skan” (od 1.8.3): każdy skan dopisuje 1 bez okna ilości, a ponowny skan tego samego artykułu
+        /// otwiera poprawkę jego ilości. Zapamiętany na kolektorze, przełącznik w lewym dolnym rogu protokołu.
+        /// </summary>
+        public static bool OnePerScan
+        {
+            get { return Value("onePerScan", "0") == "1"; }
+            set
+            {
+                values["onePerScan"] = value ? "1" : "0";
+                Save();
+            }
+        }
+
         public static void ChoosePrinter(string mac, string name)
         {
             values["printer"] = mac;

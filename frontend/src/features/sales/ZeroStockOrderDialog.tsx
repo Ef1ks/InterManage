@@ -17,7 +17,18 @@ const DEFAULT_QUANTITY = '1'
 
 const validQuantity = (quantity: number) => Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_QUANTITY
 
-type Props = {
+/** Co okno robi poza raportem zerówek (np. dane z kolektorów): ilości na start, plik i potwierdzenie zapisu. */
+type OrderOptions = {
+  /** Ilość na start (tekst pola); bez niej 1. */
+  initialQuantity?: (item: ZeroStockItem) => string
+  /** Endpoint pliku COMMANDE z `{lines}`; bez niego plik z raportu zerówek. */
+  orderPath?: string
+  /** Po zapisaniu pliku w folderze (np. oznaczenie listy z kolektora). */
+  onSaved?: (fileName: string) => Promise<void> | void
+  description?: string
+}
+
+type Props = OrderOptions & {
   storeId: string
   items: ZeroStockItem[]
   open: boolean
@@ -25,23 +36,31 @@ type Props = {
 }
 
 /** Plik zamówienia z raportu zerówek: na start wszystko zaznaczone, po 1 sztuce. Każde otwarcie zaczyna od nowa. */
-export function ZeroStockOrderDialog({ storeId, items, open, onOpenChange }: Props) {
+export function ZeroStockOrderDialog({ storeId, items, open, onOpenChange, description, ...options }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-4 p-6 sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Stwórz zamówienie</DialogTitle>
           <DialogDescription>
-            Odznacz artykuły, których nie chcesz zamawiać, i popraw ilości. Plik trafi do folderu protokołów.
+            {description ??
+              'Odznacz artykuły, których nie chcesz zamawiać, i popraw ilości. Plik trafi do folderu protokołów.'}
           </DialogDescription>
         </DialogHeader>
-        {open && <OrderList storeId={storeId} items={items} onDone={() => onOpenChange(false)} />}
+        {open && <OrderList storeId={storeId} items={items} onDone={() => onOpenChange(false)} {...options} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function OrderList({ storeId, items, onDone }: { storeId: string; items: ZeroStockItem[]; onDone: () => void }) {
+function OrderList({
+  storeId,
+  items,
+  onDone,
+  initialQuantity,
+  orderPath,
+  onSaved,
+}: OrderOptions & { storeId: string; items: ZeroStockItem[]; onDone: () => void }) {
   const folder = useProtoFolder(storeId)
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
   const [quantities, setQuantities] = useState<Record<string, string>>({})
@@ -49,7 +68,7 @@ function OrderList({ storeId, items, onDone }: { storeId: string; items: ZeroSto
 
   const orderable = items.filter((item) => item.ean && ORDER_EAN.test(item.ean))
   const chosen = orderable.filter((item) => !unchecked.has(item.itm8))
-  const quantityOf = (item: ZeroStockItem) => quantities[item.itm8] ?? DEFAULT_QUANTITY
+  const quantityOf = (item: ZeroStockItem) => quantities[item.itm8] ?? initialQuantity?.(item) ?? DEFAULT_QUANTITY
   const badQuantity = (item: ZeroStockItem) => !validQuantity(Number(quantityOf(item)))
 
   // Ten sam EAN przy dwóch artykułach to jedna linia pliku.
@@ -79,12 +98,13 @@ function OrderList({ storeId, items, onDone }: { storeId: string; items: ZeroSto
       // Zgoda na folder zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
       const folderReady = await ensureFolderAccess(folder.key)
       const { fileName, blob } = await fetchPostedFile(
-        `/stores/${storeId}/reports/zero-stock/order`,
+        orderPath ?? `/stores/${storeId}/reports/zero-stock/order`,
         { lines },
         'COMMANDE.traite0',
       )
       if (folderReady) await saveToFolder(folder.key, fileName, blob)
       else saveBlob(blob, fileName)
+      await onSaved?.(fileName)
       toast.success('Zapisano zamówienie', {
         description: [
           fileName,

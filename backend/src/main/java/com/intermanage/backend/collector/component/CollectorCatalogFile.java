@@ -49,12 +49,14 @@ public final class CollectorCatalogFile {
      * <li>{@code codes}: inne kody z multikodów do cenówki, rozdzielone {@code |}, każdy
      * {@code EAN;mnożnik ceny;wartość kaucji;nazwa kaucji;nazwa kodu} (cena kodu = cena artykułu × mnożnik, np. puszka
      * z czteropaka 0,25).</li>
+     * <li>{@code cadencierPurchase}: cena zakupu netto sztuki z dzisiejszego pliku TOP, tylko artykułu aktywnego
+     * w cadencier (od programu 1.8.3, okno ilości w protokole); pusta = poza cadencier.</li>
      * </ul>
      */
     public static final List<String> FIELDS = List.of("itm8", "ean", "name", "brand", "subfamily", "salePrice",
             "promoPrice", "promoFrom", "promoTo", "promoRegular", "stock", "rotation", "caseSize", "unit", "netContent",
             "cadencierPrice", "active", "cadencier", "supplier", "lastDelivery", "eans", "multipack", "deposit",
-            "codes");
+            "codes", "cadencierPurchase");
 
     /**
      * Artykuł: wartości pól w kolejności {@link #FIELDS}, kody od najpewniejszych (główny, multikody, dawne pary) i

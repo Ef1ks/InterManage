@@ -26,6 +26,7 @@ import com.intermanage.backend.collector.dto.CollectorListDetails;
 import com.intermanage.backend.collector.dto.CollectorListResponse;
 import com.intermanage.backend.collector.entity.CollectorList;
 import com.intermanage.backend.collector.entity.CollectorListLine;
+import com.intermanage.backend.collector.entity.CollectorListOutput;
 import com.intermanage.backend.collector.entity.CollectorListProtocol;
 import com.intermanage.backend.collector.entity.StoreCollector;
 import com.intermanage.backend.collector.mapper.CollectorListMapper;
@@ -162,7 +163,8 @@ public class CollectorListService {
     }
 
     @Transactional
-    public List<CollectorListResponse> markSaved(UUID storeId, ProtocolKind kind, Collection<UUID> ids, String fileName,
+    public List<CollectorListResponse> markSaved(UUID storeId, CollectorListOutput kind, Collection<UUID> ids,
+            String fileName,
             UUID actorId) {
         if (fileName == null || fileName.isBlank()) {
             throw ApiException.badRequest("Brak nazwy pliku protokołu");

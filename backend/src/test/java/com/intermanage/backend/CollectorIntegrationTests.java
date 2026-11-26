@@ -310,6 +310,15 @@ class CollectorIntegrationTests {
 
         mvc.perform(delete(base + "/" + id + "/protocols/" + protocolId).cookie(owner).with(csrf()))
                 .andExpect(jsonPath("$[0].protocols.length()").value(0));
+        // Zamówienie z listy (plik z /data-entry/export/order) oznacza listę jak protokół, z „Cofnij oznaczenie”.
+        String orderId = JsonPath.read(mvc.perform(post(base + "/order/saved").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ids\":[\"" + id + "\"],\"fileName\":\"COMMANDE_x.traite0\"}"))
+                .andExpect(jsonPath("$[0].protocols[0].kind").value("ORDER"))
+                .andReturn().getResponse().getContentAsString(), "$[0].protocols[0].id");
+        mvc.perform(get(base + "/count").cookie(owner)).andExpect(jsonPath("$.waiting").value(0));
+        mvc.perform(delete(base + "/" + id + "/protocols/" + orderId).cookie(owner).with(csrf()))
+                .andExpect(jsonPath("$[0].protocols.length()").value(0));
         mvc.perform(delete(base + "/" + id).cookie(owner).with(csrf())).andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get(base + "/details?ids=" + id).cookie(owner)).andExpect(status().isNotFound());
         mvc.perform(post(base + "/" + id + "/restore").cookie(owner).with(csrf()))

@@ -30,6 +30,8 @@ namespace Intermanage.Collector
         /// zawsze: drukarka po przywróceniu ustawień fabrycznych traci pliki, a wysłanie trwa ułamek sekundy.
         /// </summary>
         public bool FontSent;
+        /// <summary>Drukarka ma plik czcionki ceny (sprawdzone ^HW); bez niego cena idzie czcionką 0.</summary>
+        public bool FontReady;
     }
 
     /// <summary>
@@ -262,19 +264,33 @@ namespace Intermanage.Collector
                 }
                 if (!printer.FontSent)
                 {
-                    // Plik czcionki ceny w pamięci drukarki (E:); odpowiedź = drukarka go przyjęła.
-                    link.Send(LabelFont.Download());
-                    link.GetVar("device.friendly_name");
-                    printer.FontSent = true;
-                    Log.Write("Czcionka ceny wysłana do " + BluetoothLink.Bar(printer.Mac));
+                    PrepareFont(link, printer);
                 }
-                string zpl = LabelZpl.Build(label, dpi);
+                string zpl = LabelZpl.Build(label, dpi, printer.FontReady);
                 link.Send(Encoding.UTF8.GetBytes(zpl));
                 // Odpowiedź przychodzi dopiero po przyjęciu etykiety.
                 link.GetVar("device.friendly_name");
                 Log.Write("Cenówka " + label.Ean + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
                 return "Wydrukowano cenówkę na: " + printer.Name + " (" + dpi + " dpi).";
             }
+        }
+
+        /// <summary>
+        /// Czcionka ceny w pamięci drukarki: sprawdzenie listą plików (^HW), a bez pliku wysłanie (~DY) i sprawdzenie
+        /// jeszcze raz. Raz na uruchomienie programu; plik, którego drukarka nie przyjęła, daje cenę czcionką 0.
+        /// </summary>
+        private static void PrepareFont(BluetoothLink link, Printer printer)
+        {
+            string directory = link.Query(LabelFont.Directory, "free");
+            if (!LabelFont.Listed(directory))
+            {
+                link.Send(LabelFont.Download());
+                directory = link.Query(LabelFont.Directory, "free");
+            }
+            printer.FontReady = LabelFont.Listed(directory);
+            printer.FontSent = true;
+            Log.Write("Czcionka ceny na " + BluetoothLink.Bar(printer.Mac) + ": " + (printer.FontReady ? "jest"
+                : "brak, cena czcionką drukarki. Lista plików: " + directory.Replace((char)13, (char)32).Replace((char)10, (char)32)));
         }
 
         /// <summary>Domyślne położenie cenówki w mm: ustawione na QLn w sklepie (3 mm w lewo i 3 mm w górę).</summary>

@@ -32,6 +32,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.intermanage.backend.cadtop.dto.CadPrices;
+import com.intermanage.backend.cadtop.service.CadPriceService;
 import com.intermanage.backend.collector.component.CollectorCatalogFile;
 import com.intermanage.backend.collector.repository.CollectorCatalogRepository;
 import com.intermanage.backend.common.component.StoreTime;
@@ -69,14 +71,16 @@ public class CollectorCatalogService {
     private final DocumentLineRepository lines;
     private final StoreRepository stores;
     private final DepositKindRepository depositKinds;
+    private final CadPriceService cadPrices;
     private final TransactionTemplate readOnly;
     private final Map<UUID, CatalogFile> files = new ConcurrentHashMap<>();
     private final Map<UUID, Object> locks = new ConcurrentHashMap<>();
 
     public CollectorCatalogService(CollectorCatalogRepository catalog, ProductImportRepository imports,
             NomenclatureRepository nomenclatures, DocumentLineRepository lines, StoreRepository stores,
-            DepositKindRepository depositKinds, PlatformTransactionManager transactions) {
+            DepositKindRepository depositKinds, CadPriceService cadPrices, PlatformTransactionManager transactions) {
         this.depositKinds = depositKinds;
+        this.cadPrices = cadPrices;
         this.catalog = catalog;
         this.imports = imports;
         this.nomenclatures = nomenclatures;
@@ -139,8 +143,14 @@ public class CollectorCatalogService {
                 .findLastDeliveries(storeId, LocalDateTime.now(StoreTime.ZONE).minusYears(1)).stream()
                 .collect(Collectors.toMap(DocumentLineRepository.LastDelivery::getItm8, row -> row, (a, b) -> a));
 
+        List<CollectorCatalogRepository.Article> rows = catalog.findArticles(storeId, importId);
+        // Cena zakupu z cadencier (dzisiejszy plik TOP) tylko artykułów aktywnych w cadencier: to cena centrali dla całej
+        // sieci, a nie cena zakupu sklepu, więc kolektor bez logowania osoby może ją pokazać (okno ilości w protokole).
+        Map<String, CadPrices.Price> cadencier = cadPrices.current(storeId, rows.stream()
+                .filter(row -> Boolean.TRUE.equals(row.getCadencier())).map(CollectorCatalogRepository.Article::getItm8)
+                .toList()).byItm8();
         List<CollectorCatalogFile.Article> articles = new ArrayList<>();
-        for (CollectorCatalogRepository.Article row : catalog.findArticles(storeId, importId)) {
+        for (CollectorCatalogRepository.Article row : rows) {
             Collection<String> current = codes.getOrDefault(row.getItm8(), Set.of());
             Collection<String> former = formerCodes.getOrDefault(row.getItm8(), Set.of());
             List<String> fields = new ArrayList<>(fields(row, promos.get(row.getItm8()), deliveries.get(row.getItm8()),
@@ -148,6 +158,8 @@ public class CollectorCatalogService {
                             pieceCodes.getOrDefault(row.getItm8(), Set.of()))));
             fields.add(deposit(deposits, row.getDepositCode()));
             fields.add(labelCodes(row, codeRows.getOrDefault(row.getItm8(), List.of()), deposits));
+            CadPrices.Price cad = cadencier.get(row.getItm8());
+            fields.add(cad == null ? "" : number(cad.purchasePrice()));
             articles.add(new CollectorCatalogFile.Article(fields,
                     row.getItm8(), row.getName(), brand(row), row.getEan(), current, former,
                     packs.getOrDefault(row.getItm8(), Map.of())));

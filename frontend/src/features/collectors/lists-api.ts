@@ -52,6 +52,13 @@ export function useMarkProtocolSaved(storeId: string) {
   )
 }
 
+/** Plik zamówienia z artykułów list leży już w folderze: listy przestają czekać jak po protokole. */
+export function useMarkOrderSaved(storeId: string) {
+  return useListMutation(storeId, ({ ids, fileName }: { ids: string[]; fileName: string }) =>
+    api<CollectorList[]>(`${basePath(storeId)}/order/saved`, { method: 'POST', json: { ids, fileName } }),
+  )
+}
+
 export function useUndoProtocol(storeId: string) {
   return useListMutation(storeId, ({ listId, protocolId }: { listId: string; protocolId: string }) =>
     api<CollectorList[]>(`${basePath(storeId)}/${listId}/protocols/${protocolId}`, { method: 'DELETE' }),

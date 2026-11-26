@@ -135,6 +135,32 @@ namespace Intermanage.Collector
             return quotes == 2 && value != "?" ? value : "";
         }
 
+        /// <summary>
+        /// Polecenie z odpowiedzią tekstową (np. ^HW: lista plików w pamięci drukarki); czyta, aż w odpowiedzi pojawi się
+        /// <paramref name="end"/> albo minie czas. Pusty tekst, gdy drukarka nie odpowiedziała.
+        /// </summary>
+        public string Query(string command, string end)
+        {
+            Send(command);
+            StringBuilder reply = new StringBuilder();
+            byte[] buffer = new byte[256];
+            int until = Environment.TickCount + ReplyWait;
+            while (Environment.TickCount - until < 0 && reply.ToString().IndexOf(end) < 0)
+            {
+                if (!socket.Poll(200 * 1000, SelectMode.SelectRead))
+                {
+                    continue;
+                }
+                int read = socket.Receive(buffer, 0, buffer.Length, SocketFlags.None);
+                if (read <= 0)
+                {
+                    break;
+                }
+                reply.Append(Encoding.ASCII.GetString(buffer, 0, read));
+            }
+            return reply.ToString();
+        }
+
         public void Dispose()
         {
             try

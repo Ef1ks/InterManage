@@ -6,7 +6,6 @@ import java.util.UUID;
 import org.hibernate.annotations.UuidGenerator;
 
 import com.intermanage.backend.auth.entity.AppUser;
-import com.intermanage.backend.store.entity.ProtocolKind;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +31,7 @@ public class CollectorListProtocol {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false, length = 30)
-    private ProtocolKind kind;
+    private CollectorListOutput kind;
 
     @Column(name = "file_name", nullable = false, updatable = false, length = 200)
     private String fileName;
@@ -54,7 +53,7 @@ public class CollectorListProtocol {
     protected CollectorListProtocol() {
     }
 
-    public CollectorListProtocol(UUID listId, ProtocolKind kind, String fileName, AppUser createdBy) {
+    public CollectorListProtocol(UUID listId, CollectorListOutput kind, String fileName, AppUser createdBy) {
         this.listId = listId;
         this.kind = kind;
         this.fileName = fileName;
@@ -75,7 +74,7 @@ public class CollectorListProtocol {
         return listId;
     }
 
-    public ProtocolKind getKind() {
+    public CollectorListOutput getKind() {
         return kind;
     }
 

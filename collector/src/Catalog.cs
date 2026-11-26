@@ -54,6 +54,12 @@ namespace Intermanage.Collector
         public string Deposit { get { return Optional(22); } }
 
         /// <summary>
+        /// Cena zakupu netto z cadencier (dzisiejszy plik TOP), tylko artykułu aktywnego w cadencier; pusta = poza
+        /// cadencier albo plik ze starszego serwera (od 1.8.3, okno ilości w protokole).
+        /// </summary>
+        public string CadencierPurchase { get { return Optional(24); } }
+
+        /// <summary>
         /// Kod z multikodów do cenówki: nazwa, mnożnik ceny i kaucja tego kodu; null, gdy to główny EAN albo kod
         /// spoza multikodów. Pole: „EAN;mnożnik;wartość kaucji;nazwa kaucji;nazwa kodu” rozdzielone „|”.
         /// </summary>

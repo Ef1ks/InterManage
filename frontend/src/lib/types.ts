@@ -5320,12 +5320,15 @@ export type CollectorList = {
   lineCount: number
   protocols: {
     id: string
-    kind: ProtocolKind
+    /** ORDER: zamówienie z artykułów listy (oznaczenie jak po protokole). */
+    kind: CollectorListOutput
     fileName: string
     createdAt: string
     createdBy: string | null
   }[]
 }
+
+export type CollectorListOutput = ProtocolKind | 'ORDER'
 
 /** Zawartość wybranych list razem (CollectorListDetails). */
 export type CollectorListDetails = {
