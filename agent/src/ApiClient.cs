@@ -46,15 +46,17 @@ internal sealed class HelloResponse
     /// <summary>Główny agent sklepu: pilnuje folderów i aktualizuje dane z Mercalys (brak = starszy serwer, tak).</summary>
     public bool? Leader { get; set; }
     public bool Preferred { get; set; }
-    /// <summary>Obowiązująca wersja agenta z „Do pobrania” (brak = bez automatycznej aktualizacji).</summary>
+    /// <summary>Obowiązująca wersja agenta z „Do pobrania” (brak = nie ma paczki agenta); agent tylko o niej mówi.</summary>
     public AgentUpdateInfo? Update { get; set; }
+    /// <summary>Program Mercalys w tym sklepie (ścieżka sklepu albo domyślna; brak = starszy serwer).</summary>
+    public string? MercalysPath { get; set; }
     /// <summary>Codzienne czyszczenie folderu nowych artykułów (brak = starszy serwer, tak).</summary>
     public bool? CleanProductFiles { get; set; }
     /// <summary>Czasy i limity (<see cref="Agent.Limits"/>; brak = starszy serwer, domyślne).</summary>
     public Dictionary<string, int>? Limits { get; set; }
 }
 
-/// <summary>Paczka agenta do automatycznej aktualizacji: wersja, SHA-256 (hex) i rozmiar pliku ZIP.</summary>
+/// <summary>Paczka agenta w „Do pobrania”: wersja, SHA-256 (hex) i rozmiar pliku ZIP.</summary>
 internal sealed class AgentUpdateInfo
 {
     public string Version { get; set; } = "";
@@ -264,15 +266,6 @@ internal sealed class ApiClient : IDisposable
             server + "/api/store-agent/file-queue/" + Uri.EscapeDataString(id) + "/file"), TimeSpan.FromSeconds(60),
             cancel).ConfigureAwait(false);
         return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-    }
-
-    /// <summary>Paczka agenta (ZIP) do pliku; przy łączu sklepu 200 kB/s kilka MB to kilkadziesiąt sekund.</summary>
-    public async Task DownloadUpdateAsync(string path, CancellationToken cancel)
-    {
-        using var response = await SendAsync(new HttpRequestMessage(HttpMethod.Get, server + "/api/store-agent/update/file"),
-            TimeSpan.FromMinutes(10), cancel).ConfigureAwait(false);
-        using var file = File.Create(path);
-        await response.Content.CopyToAsync(file).ConfigureAwait(false);
     }
 
     public async Task SavedAsync(string id, CancellationToken cancel)

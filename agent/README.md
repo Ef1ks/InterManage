@@ -89,9 +89,11 @@ Robi:
   działa AutoJob (od 0.64) i czy trwa makro. Serwer wybiera najdłużej nieużywany komputer, a agent pokazuje „Makro
   rozpocznie się za 5…” (pliki nowych artykułów 2 s) z „Anuluj”, które oddaje makro kolejnemu
   komputerowi (ruch myszy nie anuluje od 1.7.2). Wyłączony Mercalys makro uruchamia z położenia w ustawieniach agenta
-  („Program Mercalys”), a nieznane agent bierze z działającego Mercalys,
+  („Program Mercalys”), a nieznane agent bierze ze ścieżki sklepu z serwera (`mercalysPath` w `/hello`, klucz
+  `mercalys:path` w ścieżkach sklepu, od 1.14.0), a bez niej
   z `N:\AvisoConfig\UTILITAIRES\ClientLourd\Mercalys.exe` (od 1.7.3). Treść
-  składa serwer, agent wkłada ją do schowka i naciska Alt+E, a wynik odtwarzacz zapisuje w
+  składa serwer, agent zostawia ją AutoJobowi w pliku `<id>.macro` (AutoJob od 0.73; starszemu przez schowek i Alt+E),
+  a wynik odtwarzacz zapisuje w
   `%LOCALAPPDATA%\Intermanage\Agent\makra` (plik znika po odesłaniu). Komputer z zablokowanym ekranem makra nie dostanie.
   Od 1.8.0 po makrze „Wprowadź dostawę” agent wysyła też bony dostawy zapisane przez to makro w folderze z ustawień
   sklepu (domyślnie `P:\Production\INTERMANAGE\EXCEL`; potrzebny AutoJob 0.67).
@@ -101,58 +103,51 @@ Nie robi:
 - nie wymaga administratora (`asInvoker`), nie instaluje usługi, nie pisze do HKLM ani Program Files;
 - nie uruchamia PowerShella, cmd, skryptów ani żadnego programu poza przeglądarką i Eksploratorem, otwieranymi
   kliknięciem w menu ikony (od 1.12.3 także nowej wersji agenta nie uruchamia);
-- nie zamyka innych programów i nie przegląda ich: otwiera tylko proces odtwarzacza makr (po nazwie `player*`,
-  `autojob*`) i Mercalys, żeby odczytać ścieżkę pliku (od 1.12.3);
-- nie klika w Mercalys sam: makra wykonuje odtwarzacz, a agent tylko wkłada makro aktualizacji do schowka i naciska
-  za pracownika Alt+E;
+- nie zamyka innych programów, nie przegląda ich i nie otwiera cudzych procesów (od 1.14.0): działający AutoJob 0.73
+  poznaje po nazwanym mutexie `Local\Intermanage.AutoJob`, a jego wersję z pliku `makra\autojob.txt`, który AutoJob
+  zapisuje raz przy starcie. Starszy AutoJob szuka jak dotąd po nazwie programu (`player*`, `autojob*`), najwyżej raz
+  na minutę (`legacyPlayerScanSeconds`); do usunięcia, gdy wszystkie sklepy będą miały AutoJob 0.73;
+- nie klika w Mercalys sam i nie naciska klawiszy (od 1.14.0 z AutoJob 0.73): makro trafia do pliku `makra\<id>.macro`,
+  który AutoJob sprawdza co sekundę i kasuje od razu po odczycie (w pierwszej linii bywa hasło Mercalys; plik starszy
+  niż minuta jest pomijany), a zatrzymanie to plik `makra\<id>.stop` zamiast Esc. Starszy AutoJob dostaje makro jak
+  dotąd przez schowek i Alt+E;
+- niczego nie pobiera poza danymi dla sklepu (od 1.14.0 także nowej wersji agenta);
 - nie jest pakowany, zaciemniany ani szyfrowany (UPX itp.), więc programy antywirusowe widzą zwykły exe.
 
-## Pobieranie nowej wersji (od 1.6.0)
+## Nowa wersja
 
-Pozycja w Intermanage → Do pobrania z włączonym przełącznikiem **Paczka agenta sklepu** to wersja, do której pobierają
-się wszystkie agenty (najwyżej jedna taka pozycja). Plik to ZIP z zawartością `bin\Release\net48` (może być w jednym
-folderze), a wersja jak w `Intermanage.Agent.csproj` (np. `1.6.0`); serwer odrzuca paczkę bez `IntermanageAgent.exe`
-albo bez wersji.
+Pozycja w Intermanage → Do pobrania z włączonym przełącznikiem **Paczka agenta sklepu** to obowiązująca wersja agenta
+(najwyżej jedna taka pozycja). Plik to ZIP z zawartością `bin\Release\net48` (może być w jednym folderze), a wersja jak
+w `Intermanage.Agent.csproj` (np. `1.14.0`); serwer odrzuca paczkę bez `IntermanageAgent.exe` albo bez wersji.
 
-Serwer podaje wersję, SHA-256 i rozmiar paczki w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją
-**tylko pobiera** paczkę (ZIP) do folderu `aktualizacja` obok siebie (na dysku sieciowym pierwszy komputer pobiera,
-reszta widzi gotowy plik), sprawdza rozmiar i SHA-256 i pokazuje przy ikonie „Nowa wersja … pobrana”. W menu ikony
-„Pokaż pobraną aktualizację” otwiera ZIP w Eksploratorze.
+Serwer podaje tę wersję w każdej odpowiedzi `/hello` (co 5 min). Agent ze starszą wersją **tylko o niej mówi**: w menu
+ikony „Nowa wersja … w „Do pobrania”” i „Otwórz „Do pobrania””. Od 1.14.0 agent paczki nie pobiera (wcześniej pobierał
+ZIP do folderu `aktualizacja`): program, który sam ściąga z internetu inny program, antywirus sklepów traktuje jak atak.
+Paczkę pobiera człowiek w przeglądarce.
 
-### Stała ścieżka (zalecane)
+### Stała ścieżka
 
 Agent leży na dysku sieciowym w każdym sklepie w tym samym miejscu, `P:\Production\INTERMANAGE\AGENT`, a każdy komputer
-uruchamia się z Windows stamtąd (raz dwuklik na komputerze, agent wpisuje wtedy tę ścieżkę do autostartu). Nową wersję
-wgrywa człowiek raz na sklep, także przy działających agentach (sprawdzone na P: w 10023, 25.11.2026: nazwę działającego
+uruchamia się z Windows stamtąd (autostart włącza się raz w menu ikony albo w ustawieniach agenta). Nową wersję wgrywa
+człowiek raz na sklep, także przy działających agentach (sprawdzone na P: w 10023, 25.11.2026: nazwę działającego
 pliku da się zmienić):
 
 1. `IntermanageAgent.exe` → zmień nazwę na `IntermanageAgent-stary.exe` (zeszły stary plik najpierw usuń).
-2. Z pobranej paczki `aktualizacja\agent-….zip` skopiuj do folderu nowy `IntermanageAgent.exe`. Biblioteki DLL zmieniają się
+2. Z paczki pobranej z „Do pobrania” skopiuj do folderu nowy `IntermanageAgent.exe`. Biblioteki DLL zmieniają się
    rzadko; gdy opis wersji o tym mówi, podmień wszystkie pliki przy wyłączonych komputerach.
-3. Działające komputery pracują dalej na starym pliku (menu ikony: „Wersja … ruszy po ponownym włączeniu komputera”),
-   nową biorą przy następnym włączeniu. W Intermanage widać, które jeszcze czekają.
+3. Działające komputery pracują dalej na starym pliku, nową biorą przy następnym włączeniu. W Intermanage widać, które
+   jeszcze czekają. Nowa wersja uruchomiona dwuklikiem przy działającej nie startuje, tylko o tym mówi: od 1.14.0 agent
+   nie przejmuje pracy po działającym (bez folderów wersji, `VersionWatch`, `Handover` i przestawiania autostartu przy
+   starcie).
 
 Tak samo AutoJob, w tym samym folderze: `P:\Production\INTERMANAGE\AGENT\AutoJob.exe` (od 0.71 pyta raz, czy startować z Windows z tego
 miejsca, i nie zapisuje wpisu sam).
 
-### Foldery wersji
+Powrót: przywróć nazwę `IntermanageAgent-stary.exe` i uruchom ponownie komputery.
 
-**Rozpakowania i uruchomienia agent nie robi**, tylko człowiek, raz na sklep (od 1.7.5 bez zamykania agentów):
-
-1. „Wyodrębnij wszystkie” przy ZIP-ie. Powstaje folder `agent-1.7.6` (w `aktualizacja` albo w folderze agenta; nazwa
-   `1.7.6` też działa), więc żaden plik działającego agenta nie jest nadpisywany.
-2. Agent na każdym komputerze w ciągu ok. 2 minut zauważa nowszą wersję (`VersionWatch`, wersja z pliku exe, po dwóch
-   takich samych sprawdzeniach, żeby nie wziąć rozpakowywanego folderu) i pokazuje w menu ikony „Pokaż nową wersję”
-   (plik w Eksploratorze). Autostartu nie zmienia i niczego nie uruchamia (od 1.12.3).
-3. Uruchomiona dwuklikiem nowa wersja prosi działającą o zamknięcie (`Handover`); stara kończy makro oraz
-   trwający zapis i wysyłkę (do 10 min), a nowa startuje sama i ustawia autostart na siebie.
-
-Powrót: usuń folder nowej wersji i uruchom starą dwuklikiem (ustawi autostart na siebie). Starego folderu nie usuwaj, dopóki któryś komputer z niego działa. Agenci do 1.7.4 nie znają prośby
-o zamknięcie: na nich trzeba ostatni raz kliknąć „Zakończ”.
-
-Agent celowo nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu (SentinelOne)
-traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 razem z jego odtwarzaczem makr (10023,
-23.11.2026). Samo pobranie pliku przez HTTPS i zapis do folderu jest dla niego zwykłą pracą agenta. **Z tego samego
+Agent celowo nie pobiera, nie rozpakowuje ani nie uruchamia żadnego programu: program ochronny komputerów sklepu
+(SentinelOne) traktuje „rozpakuj exe i uruchom go” jak atak i zablokował tak agenta 1.5.0 razem z jego odtwarzaczem makr
+(10023, 23.11.2026). **Z tego samego
 powodu paczka nie zawiera odtwarzacza makr** (niepodpisany `player.exe` z AutoHotkey jest kasowany przez SentinelOne):
 odtwarzacz AutoJob zostaje osobny, pobierany z „Do pobrania” przez przeglądarkę i uruchamiany ręcznie, a agent go nie
 uruchamia ani nie zamyka.

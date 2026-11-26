@@ -52,6 +52,10 @@ public final class SuggestionPrompt {
               gramatura -> unit "kg" i net_content w kg (150 g -> 0.15), pojemność -> "L" (330 ml -> 0.33),
               wielopak -> suma (5x14 g -> 0.07), towar na wagę -> "kg" i 1, bez gramatury i pojemności -> "szt." i 1.
               Opis kartonu ("8/360 g" = karton 8 sztuk po 360 g) nie zmienia sztuki: 0.36 kg.
+              Produkt w zalewie (ogórki, grzyby, oliwki, kukurydza, fasola, owoce w syropie, tuńczyk w oleju):
+              gdy pozycja podaje kilka mas (masa netto i masa po odsączeniu), bierz NAJMNIEJSZĄ, czyli masę
+              po odsączeniu, do net_content i do miary w nazwie, nigdy pojemności słoika ani masy z zalewą:
+              "Ogórki konserwowe 900ml/450g" -> "OGÓRKI KONSERWOWE 450G", net_content 0.45.
             - deposit: true, gdy artykuł ma kaucję: pozycja mówi o kaucji ("KAUCJA", "+KAUCJA", "KAUC"), to butelka
               zwrotna ("BUT ZW") albo napój w systemie kaucyjnym: butelka plastikowa do 3 l, puszka do 1 l.
               false dla reszty, także butelki bezzwrotnej ("BZ", "BEZZW"), "BEZ KAUCJI" i mleka.

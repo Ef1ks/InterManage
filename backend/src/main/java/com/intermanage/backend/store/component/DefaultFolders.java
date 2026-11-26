@@ -20,12 +20,16 @@ public final class DefaultFolders {
 
     /** Klucz bez sklepu → domyślna ścieżka, w kolejności strony „Ścieżki folderów”. */
     public static final Map<String, String> PATHS;
+    /** Program Mercalys sklepu: agent podaje go odtwarzaczowi makr, żeby ten uruchomił wyłączony program. */
+    public static final String MERCALYS = "mercalys:path";
     /**
      * Domyślne ścieżki plików (klucz ze ścieżek sklepu, nie folder): zapis listy dostawców z Mercalys, żeby codzienny
-     * raport działał w każdym sklepie bez ustawiania.
+     * raport działał w każdym sklepie bez ustawiania, i program Mercalys (agent od 1.14.0 nie odczytuje jego ścieżki
+     * z działającego programu).
      */
     public static final Map<String, String> FILES = Map.of("import:SUPPLIERS:path",
-            "P:\\Production\\INTERMANAGE\\DOSTAWCY\\DOSTAWCY.xlsx");
+            "P:\\Production\\INTERMANAGE\\DOSTAWCY\\DOSTAWCY.xlsx",
+            MERCALYS, "N:\\AvisoConfig\\UTILITAIRES\\ClientLourd\\Mercalys.exe");
     /** Kolejność kluczy (Map.copyOf jej nie trzyma). */
     public static final List<String> ORDER;
 

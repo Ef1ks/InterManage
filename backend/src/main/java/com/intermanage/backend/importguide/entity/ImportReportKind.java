@@ -9,5 +9,7 @@ public enum ImportReportKind {
     DOCUMENTS,
     SUPPLIERS,
     NOMENCLATURES,
-    CADENCIER
+    CADENCIER,
+    /** Lista opakowań zwrotnych (kody kaucji z wartością), wgrywana na życzenie. */
+    DEPOSIT_KINDS
 }

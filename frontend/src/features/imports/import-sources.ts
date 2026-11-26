@@ -31,6 +31,7 @@ export const REPORT_TITLES: Record<ImportReportKind, string> = {
   CADENCIER: 'Obecne w cadencier',
   SUPPLIERS: 'Lista dostawców',
   NOMENCLATURES: 'Lista nomenklatur',
+  DEPOSIT_KINDS: 'Lista opakowań zwrotnych',
 }
 
 export const XLSX_EXTENSIONS = ['.xlsx', '.xlsm']

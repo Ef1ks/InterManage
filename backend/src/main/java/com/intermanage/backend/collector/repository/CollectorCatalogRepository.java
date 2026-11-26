@@ -25,7 +25,8 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
                 (select cast(max(imported_at) as text) from promotion_imports where store_id = :storeId),
                 (select cast(max(imported_at) as text) from document_imports where store_id = :storeId),
                 (select cast(max(imported_at) as text) from cadencier_imports where store_id = :storeId),
-                (select cast(max(imported_at) as text) from nomenclature_imports where store_id = :storeId))""")
+                (select cast(max(imported_at) as text) from nomenclature_imports where store_id = :storeId),
+                (select cast(max(imported_at) as text) from deposit_kind_imports where store_id = :storeId))""")
     String fingerprint(UUID storeId);
 
     interface Article {
@@ -62,6 +63,9 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
         Boolean getActive();
 
         Boolean getCadencier();
+
+        /** Kod kaucji z kartoteki (lista opakowań zwrotnych); 0 i pusty = bez kaucji. */
+        Short getDepositCode();
     }
 
     /** Artykuły najnowszego raportu kartoteki, jak na liście Magazynu: najpierw aktywne, alfabetycznie. */
@@ -69,7 +73,8 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
             select p.itm8, p.ean, p.name, p.brand, p.subfamily_code as subfamilyCode, p.sale_price as salePrice,
                    p.promo_price as promoPrice, p.promo_from as promoFrom, p.promo_to as promoTo, p.stock, p.rotation,
                    p.case_size as caseSize, p.unit, p.net_content as netContent,
-                   p.cadencier_price as cadencierPrice, p.active, (c.itm8 is not null) as cadencier
+                   p.cadencier_price as cadencierPrice, p.active, (c.itm8 is not null) as cadencier,
+                   p.deposit_code as depositCode
             from products p
             left join cadencier_items c on c.store_id = p.store_id and c.itm8 = p.itm8
             where p.store_id = :storeId and p.last_seen_import_id = :importId
@@ -86,11 +91,21 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
 
         /** Jednostka sprzedaży kodu, np. Szt albo kg. */
         String getUnit();
+
+        /** Nazwa kodu z multikodów (puszka z czteropaka ma własną); w dawnych parach pusta. */
+        String getName();
+
+        /** Współczynnik ceny kodu (cena kodu = cena artykułu × opakowanie × współczynnik); pusty = 1. */
+        BigDecimal getFactor();
+
+        /** Kod kaucji kodu z multikodów; 0 i pusty = bez kaucji. */
+        Short getDepositCode();
     }
 
     /** Obowiązujące multikody artykułów najnowszego raportu. */
     @Query(nativeQuery = true, value = """
-            select c.itm8, c.ean, c.sale_pack as pack, c.sale_unit as unit from product_codes c
+            select c.itm8, c.ean, c.sale_pack as pack, c.sale_unit as unit, c.name, c.price_factor as factor,
+                   c.deposit_code as depositCode from product_codes c
             join products p on p.store_id = c.store_id and p.itm8 = c.itm8 and p.last_seen_import_id = :importId
             where c.store_id = :storeId and c.current""")
     List<Code> findCodes(UUID storeId, UUID importId);
@@ -98,7 +113,8 @@ public interface CollectorCatalogRepository extends Repository<Product, UUID> {
     /** Dawne pary ITM8 + EAN artykułów najnowszego raportu (kod działa, gdy nie ma go dziś inny artykuł). */
     @Query(nativeQuery = true, value = """
             select p.itm8, e.ean, cast(null as numeric) as pack,
-                   cast(null as varchar) as unit from product_eans e
+                   cast(null as varchar) as unit, cast(null as varchar) as name, cast(null as numeric) as factor,
+                   cast(null as smallint) as depositCode from product_eans e
             join products p on p.id = e.product_id
             where p.store_id = :storeId and p.last_seen_import_id = :importId""")
     List<Code> findFormerCodes(UUID storeId, UUID importId);

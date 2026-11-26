@@ -22,7 +22,10 @@ import com.intermanage.backend.nomenclature.repository.NomenclatureImportReposit
 import com.intermanage.backend.pricecheck.entity.CadencierImport;
 import com.intermanage.backend.pricecheck.mapper.PriceCheckMapper;
 import com.intermanage.backend.pricecheck.repository.CadencierImportRepository;
+import com.intermanage.backend.product.entity.DepositKindImport;
 import com.intermanage.backend.product.entity.ProductCodeImport;
+import com.intermanage.backend.product.mapper.DepositKindMapper;
+import com.intermanage.backend.product.repository.DepositKindImportRepository;
 import com.intermanage.backend.product.entity.ProductImport;
 import com.intermanage.backend.product.mapper.ProductImportMapper;
 import com.intermanage.backend.product.repository.ProductCodeImportRepository;
@@ -65,13 +68,18 @@ public class ImportHistoryService {
     private final PriceCheckMapper priceCheckMapper;
     private final SupplierMapper supplierMapper;
     private final NomenclatureMapper nomenclatureMapper;
+    private final DepositKindImportRepository depositKinds;
+    private final DepositKindMapper depositKindMapper;
 
     public ImportHistoryService(ProductImportRepository products, ProductCodeImportRepository productCodes,
             PromotionImportRepository promotions, SalesImportRepository sales, DocumentImportRepository documents,
             CadencierImportRepository cadencier, SupplierImportRepository suppliers,
             NomenclatureImportRepository nomenclatures, ProductImportMapper productMapper,
             PromotionMapper promotionMapper, SalesMapper salesMapper, DocumentMapper documentMapper,
-            PriceCheckMapper priceCheckMapper, SupplierMapper supplierMapper, NomenclatureMapper nomenclatureMapper) {
+            PriceCheckMapper priceCheckMapper, SupplierMapper supplierMapper, NomenclatureMapper nomenclatureMapper,
+            DepositKindImportRepository depositKinds, DepositKindMapper depositKindMapper) {
+        this.depositKinds = depositKinds;
+        this.depositKindMapper = depositKindMapper;
         this.products = products;
         this.productCodes = productCodes;
         this.promotions = promotions;
@@ -111,6 +119,8 @@ public class ImportHistoryService {
                 SupplierImport::getImportedAt, supplierMapper::toResponse);
         add(entries, "nomenclatures", nomenclatures.findLatestBefore(storeId, cursor, limit),
                 NomenclatureImport::getImportedAt, nomenclatureMapper::toResponse);
+        add(entries, "depositKinds", depositKinds.findLatestBefore(storeId, cursor, limit),
+                DepositKindImport::getImportedAt, depositKindMapper::toResponse);
         entries.sort(Comparator.comparing(ImportHistoryPage.Entry::importedAt).reversed());
         boolean hasMore = entries.size() > PAGE_SIZE;
         return new ImportHistoryPage(hasMore ? List.copyOf(entries.subList(0, PAGE_SIZE)) : entries, hasMore);
@@ -142,7 +152,7 @@ public class ImportHistoryService {
                     .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
             case SUPPLIERS -> suppliers.findLatest(storeId, max).stream()
                     .map(item -> new ImportedFile(item.getFileName(), item.getImportedAt())).toList();
-            case NOMENCLATURES -> List.of();
+            case NOMENCLATURES, DEPOSIT_KINDS -> List.of();
         };
     }
 

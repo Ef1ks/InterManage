@@ -9,6 +9,8 @@ import { importProgress, uploadReport } from './report-upload'
 import type {
   AgentReportFile,
   CadTopOverview,
+  DepositKindImport,
+  DepositKindImportOverview,
   DocumentImport,
   EanChange,
   ImportGuide,
@@ -168,6 +170,27 @@ export function useImportNomenclatures(storeId: string) {
       queryClient.invalidateQueries({ queryKey: nomenclatureImportsKey(storeId) })
       queryClient.invalidateQueries({ queryKey: reportsKey(storeId) })
     },
+  })
+}
+
+const depositKindImportsKey = (storeId: string) => ['stores', storeId, 'imports', 'deposit-kinds'] as const
+const depositKindImportsPath = (storeId: string) => `/stores/${storeId}/imports/deposit-kinds`
+
+/** Opakowania zwrotne sklepu (kody kaucji z wartością) i historia wgrań ich listy. */
+export function useDepositKindImports(storeId: string) {
+  return useQuery({
+    queryKey: depositKindImportsKey(storeId),
+    queryFn: () => api<DepositKindImportOverview>(depositKindImportsPath(storeId)),
+  })
+}
+
+/** Wgranie listy opakowań zwrotnych (PDF); z niej kolektor drukuje kaucję na cenówkach. */
+export function useImportDepositKinds(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) =>
+      uploadReport<DepositKindImport>(queryClient, storeId, 'DEPOSIT_KINDS', depositKindImportsPath(storeId), file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: depositKindImportsKey(storeId) }),
   })
 }
 

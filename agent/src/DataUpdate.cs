@@ -181,8 +181,13 @@ internal sealed class DataUpdate
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
             Log.Info("Aktualizacja danych przerwana przyciskiem");
-            // Bez odtwarzania makro może właśnie startować; Esc bez makra nic nie robi.
-            if (run.Playback == null || run.Playback.Check().State == MacroPlayback.PlayState.Running)
+            // Bez odtwarzania makro może właśnie startować (starszy AutoJob: Esc bez makra nic nie robi, nowszy: makro
+            // przerwane przed podjęciem zatrzymuje samo StartAsync).
+            if (run.Playback != null)
+            {
+                if (run.Playback.Check().State == MacroPlayback.PlayState.Running) run.Playback.Stop();
+            }
+            else if (!(MacroRunner.FindPlayer()?.Version >= MacroPlayback.FilesFrom))
             {
                 MacroRunner.PressEsc();
             }
@@ -603,7 +608,7 @@ internal sealed class DataUpdate
             if (gaveUp)
             {
                 // Makro, które od 90 minut stoi, zatrzymujemy: inaczej odtwarzacz nie podjąłby następnego.
-                if (!macroEnded) MacroRunner.PressEsc();
+                if (!macroEnded) playback!.Stop();
                 outcome.Stopped = true;
                 foreach (var file in waiting)
                 {

@@ -31,6 +31,8 @@ import {
   useImportGuides,
   useImportHistory,
   useImportNomenclatures,
+  useDepositKindImports,
+  useImportDepositKinds,
   useImportProductCodes,
   useImportProducts,
   useImportPromotions,
@@ -79,6 +81,7 @@ import type {
   ImportHistoryEntry,
   ImportReportKind,
   NomenclatureImport,
+  DepositKindImport,
   ProductCodeImport,
   ProductImport,
   PromotionImport,
@@ -109,6 +112,8 @@ const REPORT_DESCRIPTIONS: Record<ImportReportKind, string> = {
     'Artykuły z formularza zamówień do bazy, kolumny ITM i EAN (np. obecne w cad.xlsx). Nowa lista zastępuje poprzednią w całości: raporty zakupu bazowego poza bazą, marż i zerówek, wprowadzanie danych (niebieska cena) i lista towarów biorą zawsze najnowszą.',
   NOMENCLATURES:
     'Rejony, rodziny i podrodziny z nazwami do raportów (PDF, np. nomenklatury.pdf). Wgraj ją ponownie, gdy w systemie sklepu zmieni się nomenklatura.',
+  DEPOSIT_KINDS:
+    'Kody opakowań zwrotnych z nazwą i wartością kaucji (PDF, Lista opakowań zwrotnych wg kodu). Z niej kolektor drukuje kaucję na cenówkach. Wgraj ją ponownie, gdy w systemie sklepu zmieni się kaucja.',
 }
 
 /** Kolumny, bez których raport jest odrzucany (ta sama lista w ProductReportParser). */
@@ -195,6 +200,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
   const suppliers = useSupplierImports(store.id)
   const sales = useSalesImports(store.id)
   const nomenclatures = useNomenclatureImports(store.id)
+  const depositKinds = useDepositKindImports(store.id)
   const promotions = usePromotionImports(store.id)
   const productCodes = useProductCodeImports(store.id)
   const cadencier = useCadencier(store.id)
@@ -208,6 +214,7 @@ function StoreImports({ store }: { store: StoreSummary }) {
     CADENCIER: useImportCadencier(store.id),
     SUPPLIERS: useImportSuppliers(store.id),
     NOMENCLATURES: useImportNomenclatures(store.id),
+    DEPOSIT_KINDS: useImportDepositKinds(store.id),
   }
   const [eanChangesOf, setEanChangesOf] = useState<ProductImport | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -636,6 +643,34 @@ function StoreImports({ store }: { store: StoreSummary }) {
             <ReadOnlyNote />
           )}
         </ReportCard>
+
+        <ReportCard
+          {...cardProps('DEPOSIT_KINDS')}
+          meta={
+            depositKinds.data && (
+              <>
+                {depositKinds.data.kinds.length > 0
+                  ? `W bazie ${numberFormat.format(depositKinds.data.kinds.length)} kodów kaucji`
+                  : 'Brak listy: cenówki drukują się bez kaucji'}
+                {newestReport(depositKinds.data.imports) && (
+                  <> · lista z {formatReportDate(newestReport(depositKinds.data.imports)!)}</>
+                )}
+              </>
+            )
+          }
+        >
+          {canImport ? (
+            <ReportUpload
+              upload={uploads.DEPOSIT_KINDS}
+              progress={<ImportProgressBar storeId={store.id} kind="DEPOSIT_KINDS" />}
+              accept={PDF_EXTENSIONS}
+              pdf
+              result={(result) => <DepositKindImportResult result={result} />}
+            />
+          ) : (
+            <ReadOnlyNote />
+          )}
+        </ReportCard>
       </div>
 
       <CadTopsCard storeId={store.id} canImport={canImport} />
@@ -1031,6 +1066,25 @@ function NomenclatureImportResult({ result }: { result: NomenclatureImport }) {
   )
 }
 
+function DepositKindImportResult({ result }: { result: DepositKindImport }) {
+  return (
+    <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <CircleCheckIcon className="text-emerald-600 dark:text-emerald-400" />
+      <AlertTitle>
+        Zaimportowano {numberFormat.format(result.totalRows)} kodów kaucji
+        {result.reportGeneratedAt && <> z listy {formatReportDate(result.reportGeneratedAt)}</>}
+      </AlertTitle>
+      <AlertDescription>
+        <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 tabular-nums">
+          <ResultCount label="Nowe" value={result.createdCount} />
+          <ResultCount label="Zmienione" value={result.updatedCount} />
+          <ResultCount label="Brak w pliku" value={result.missingCount} />
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 function PromotionImportResult({ result }: { result: PromotionImport }) {
   return (
     <Alert className="animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
@@ -1107,6 +1161,7 @@ const REPORT_NAMES: Record<HistoryRow['kind'], string> = {
   promotions: 'Lista promocji',
   productCodes: 'Multikody',
   cadencier: 'Obecne w cadencier',
+  depositKinds: 'Lista opakowań zwrotnych',
 }
 
 /**
@@ -1215,6 +1270,8 @@ function historySummary(row: HistoryRow) {
       return supplierSummary(row.item)
     case 'nomenclatures':
       return nomenclatureSummary(row.item)
+    case 'depositKinds':
+      return mergeSummary(row.item, 'kodów kaucji')
     case 'promotions':
       return mergeSummary(row.item, 'promocji')
     case 'productCodes':
@@ -1231,7 +1288,7 @@ function historySummary(row: HistoryRow) {
 }
 
 /** Import scalany z bazą: ile pozycji w pliku, nowych, zmienionych i brakujących. */
-function mergeSummary(item: PromotionImport | ProductCodeImport, unit: string) {
+function mergeSummary(item: PromotionImport | ProductCodeImport | DepositKindImport, unit: string) {
   return [
     `${numberFormat.format(item.totalRows)} ${unit}`,
     `${numberFormat.format(item.createdCount)} nowych`,

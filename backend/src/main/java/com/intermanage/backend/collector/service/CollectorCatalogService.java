@@ -39,7 +39,9 @@ import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.nomenclature.entity.Nomenclature;
 import com.intermanage.backend.nomenclature.repository.NomenclatureRepository;
+import com.intermanage.backend.product.entity.DepositKind;
 import com.intermanage.backend.product.entity.ProductImport;
+import com.intermanage.backend.product.repository.DepositKindRepository;
 import com.intermanage.backend.product.repository.ProductImportRepository;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -66,13 +68,15 @@ public class CollectorCatalogService {
     private final NomenclatureRepository nomenclatures;
     private final DocumentLineRepository lines;
     private final StoreRepository stores;
+    private final DepositKindRepository depositKinds;
     private final TransactionTemplate readOnly;
     private final Map<UUID, CatalogFile> files = new ConcurrentHashMap<>();
     private final Map<UUID, Object> locks = new ConcurrentHashMap<>();
 
     public CollectorCatalogService(CollectorCatalogRepository catalog, ProductImportRepository imports,
             NomenclatureRepository nomenclatures, DocumentLineRepository lines, StoreRepository stores,
-            PlatformTransactionManager transactions) {
+            DepositKindRepository depositKinds, PlatformTransactionManager transactions) {
+        this.depositKinds = depositKinds;
         this.catalog = catalog;
         this.imports = imports;
         this.nomenclatures = nomenclatures;
@@ -112,6 +116,10 @@ public class CollectorCatalogService {
 
         List<CollectorCatalogRepository.Code> multiCodes = catalog.findCodes(storeId, importId);
         Map<String, Set<String>> codes = grouped(multiCodes);
+        Map<String, List<CollectorCatalogRepository.Code>> codeRows = multiCodes.stream()
+                .collect(Collectors.groupingBy(CollectorCatalogRepository.Code::getItm8));
+        Map<Short, DepositKind> deposits = new HashMap<>();
+        depositKinds.findAllByStore(storeId).forEach(kind -> deposits.put(kind.getCode(), kind));
         Map<String, Map<Long, BigDecimal>> packs = new HashMap<>();
         Map<String, Set<Long>> pieceCodes = new HashMap<>();
         for (CollectorCatalogRepository.Code code : multiCodes) {
@@ -135,10 +143,12 @@ public class CollectorCatalogService {
         for (CollectorCatalogRepository.Article row : catalog.findArticles(storeId, importId)) {
             Collection<String> current = codes.getOrDefault(row.getItm8(), Set.of());
             Collection<String> former = formerCodes.getOrDefault(row.getItm8(), Set.of());
-            articles.add(new CollectorCatalogFile.Article(
-                    fields(row, promos.get(row.getItm8()), deliveries.get(row.getItm8()), current, today,
-                            multipack(row, packs.getOrDefault(row.getItm8(), Map.of()),
-                                    pieceCodes.getOrDefault(row.getItm8(), Set.of()))),
+            List<String> fields = new ArrayList<>(fields(row, promos.get(row.getItm8()), deliveries.get(row.getItm8()),
+                    current, today, multipack(row, packs.getOrDefault(row.getItm8(), Map.of()),
+                            pieceCodes.getOrDefault(row.getItm8(), Set.of()))));
+            fields.add(deposit(deposits, row.getDepositCode()));
+            fields.add(labelCodes(row, codeRows.getOrDefault(row.getItm8(), List.of()), deposits));
+            articles.add(new CollectorCatalogFile.Article(fields,
                     row.getItm8(), row.getName(), brand(row), row.getEan(), current, former,
                     packs.getOrDefault(row.getItm8(), Map.of())));
         }
@@ -194,6 +204,51 @@ public class CollectorCatalogService {
             }
         }
         return result;
+    }
+
+    /** Kaucja do cenówki: {@code wartość;nazwa} z listy opakowań zwrotnych; bez kodu, 0 zł albo nieznany kod pusta. */
+    private static String deposit(Map<Short, DepositKind> deposits, Short code) {
+        DepositKind kind = code == null ? null : deposits.get(code);
+        if (kind == null || kind.getValue() == null || kind.getValue().signum() <= 0) {
+            return "";
+        }
+        return number(kind.getValue()) + ";" + part(kind.getName());
+    }
+
+    /**
+     * Inne kody artykułu z multikodów do cenówki: nazwa kodu, mnożnik ceny i kaucja kodu. Mnożnik = opakowanie kodu
+     * przez opakowanie głównego EAN-u razy współczynnik ceny (puszka z czteropaka: 0,25; z sześciopaku 0,166 × 1,006).
+     */
+    private static String labelCodes(CollectorCatalogRepository.Article row, List<CollectorCatalogRepository.Code> rows,
+            Map<Short, DepositKind> deposits) {
+        long main = CollectorCatalogFile.number(row.getEan());
+        BigDecimal mainPack = BigDecimal.ONE;
+        for (CollectorCatalogRepository.Code code : rows) {
+            if (CollectorCatalogFile.number(code.getEan()) == main && code.getPack() != null
+                    && code.getPack().signum() > 0) {
+                mainPack = code.getPack();
+            }
+        }
+        List<String> entries = new ArrayList<>();
+        for (CollectorCatalogRepository.Code code : rows) {
+            long ean = CollectorCatalogFile.number(code.getEan());
+            if (ean <= 0 || ean == main) {
+                continue;
+            }
+            BigDecimal pack = code.getPack() == null || code.getPack().signum() <= 0 ? mainPack : code.getPack();
+            BigDecimal factor = code.getFactor() == null || code.getFactor().signum() <= 0 ? BigDecimal.ONE
+                    : code.getFactor();
+            BigDecimal multiplier = pack.multiply(factor).divide(mainPack, 6, java.math.RoundingMode.HALF_UP);
+            String deposit = deposit(deposits, code.getDepositCode());
+            entries.add(ean + ";" + number(multiplier) + ";" + (deposit.isEmpty() ? ";" : deposit) + ";"
+                    + part(code.getName()));
+        }
+        return String.join("|", entries);
+    }
+
+    /** Tekst w polu z separatorami: bez {@code |}, {@code ;} i tabulatorów. */
+    private static String part(String value) {
+        return value == null ? "" : value.replaceAll("[|;\\t\\r\\n]+", " ").strip();
     }
 
     /** Promocja z listy: trwająca dziś, a bez niej najbliższa przyszła. */

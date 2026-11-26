@@ -191,7 +191,8 @@ namespace Intermanage.Collector
                 FocusInput();
                 return;
             }
-            PriceLabel label = PriceLabel.Of(shownArticle);
+            // Zeskanowany kod decyduje o nazwie, cenie i kaucji: puszka z czteropaka ma swoje.
+            PriceLabel label = PriceLabel.Of(shownArticle, shownMatch);
             if (label == null)
             {
                 Native.ErrorBeep();

@@ -22,6 +22,8 @@ public final class AgentLimits {
             Map.entry("serverRetrySeconds", 20),
             Map.entry("macroPickUpSeconds", 15),
             Map.entry("playerGoneSeconds", 20),
+            // AutoJob sprzed 0.73 (bez mutexu) agent 1.14.0 szuka po nazwie programu najwyżej tak często.
+            Map.entry("legacyPlayerScanSeconds", 60),
             // Raporty z Excela: tyle bez zmian pliku, zanim pójdzie, i tyle czekania na koniec zapisu.
             Map.entry("reportSteadySeconds", 2),
             Map.entry("reportSaveSeconds", 60),

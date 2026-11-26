@@ -140,21 +140,4 @@ internal sealed class AgentSettings
         }
     }
 
-    /// <summary>Włączony autostart wskazuje wersję, którą właśnie uruchomiono (nowy folder wersji albo powrót).</summary>
-    public static void MoveAutostartHere()
-    {
-        try
-        {
-            var own = System.Windows.Forms.Application.ExecutablePath;
-            var current = AutostartPath;
-            if (current == null || string.Equals(current, own, StringComparison.OrdinalIgnoreCase)) return;
-            AutostartPath = own;
-            Log.Info("Autostart: " + own + " zamiast " + current);
-        }
-        catch (Exception error)
-        {
-            Log.Warn("Autostart: " + error.Message);
-        }
-    }
-
 }

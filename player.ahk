@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.72.0.0
+;@Ahk2Exe-SetVersion 0.73.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.72" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.73" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
@@ -32,6 +32,14 @@ global IdleTip := "Intermanage Makra " PlayerVersion
 ; uruchamia i pilnuje. Wtedy bez własnej ikony i autostartu, bo jest tylko ikona agenta. Plik, a nie parametr,
 ; bo Reload (Esc w trakcie makra) nie przekazuje parametrów nowemu procesowi.
 global AgentMode := FileExist(A_ScriptDir "\agent-mode") != ""
+; Agent sklepu od 1.14.0 nie przegląda programów komputera ani nie naciska Alt+E (antywirus sklepów, SentinelOne):
+; działający odtwarzacz poznaje po nazwanym mutexie, wersję z pliku zapisanego raz przy starcie, a makro zostawia
+; w pliku <id>.macro w swoim folderze (od 0.73). Mutex zdejmuje Windows, gdy odtwarzacz się zamknie albo padnie.
+global RemoteFolder := EnvGet("LOCALAPPDATA") "\Intermanage\Agent\makra"
+global PresenceMutex := DllCall("CreateMutex", "Ptr", 0, "Int", 0, "Str", "Local\Intermanage.AutoJob", "Ptr")
+AnnounceVersion()
+SetTimer CheckRemoteMacro, 1000
+SetTimer CheckRemoteStop, 1000
 
 if AgentMode {
     A_IconHidden := true
@@ -247,12 +255,69 @@ DescribeGridRows(doc) {
 ; powtórzyć zamknięcia dostawy ani przeceny.
 #HotIf !MacroRunning && ClipboardHasMacro()
 <!e:: {
-    global MacroRunning, PartMode
+    global MacroRunning
     macro := Trim(A_Clipboard)
     A_Clipboard := ""
     MacroRunning := true
     KeyWait "LAlt" ; wciśnięty Alt zmieszałby się z klawiszami makra
     KeyWait "e"
+    RunMacro(macro)
+}
+#HotIf
+
+; Wersja dla agenta sklepu: plik zapisany raz przy starcie (agent czyta go tylko, gdy mutex mówi, że odtwarzacz działa).
+AnnounceVersion() {
+    try {
+        DirCreate RemoteFolder
+        temp := RemoteFolder "\autojob.tmp"
+        try FileDelete temp
+        FileAppend PlayerVersion "`n" A_ScriptFullPath, temp, "UTF-8-RAW"
+        FileMove temp, RemoteFolder "\autojob.txt", 1
+    }
+}
+
+; Makro od agenta sklepu (od 0.73): plik <id>.macro z pierwszą linią #RESULT|<id>. Plik znika od razu po odczycie, bo
+; w pierwszej linii poleceń bywa hasło Mercalys. Plik starszy niż minuta to makro, z którego agent już zrezygnował.
+CheckRemoteMacro() {
+    global MacroRunning
+    if (MacroRunning || ScanMode)
+        return
+    loop files RemoteFolder "\*.macro" {
+        path := A_LoopFileFullPath
+        id := SubStr(A_LoopFileName, 1, -6)
+        stale := DateDiff(A_Now, A_LoopFileTimeModified, "Seconds") > 60
+        macro := ""
+        if !stale
+            try macro := Trim(FileRead(path, "UTF-8"))
+        try FileDelete path
+        if (stale || !RegExMatch(id, "^[0-9a-f]{32}$") || !RegExMatch(macro, "^#RESULT\|" id "[ \t]*\r?\n") || !IsMacro(macro))
+            continue
+        MacroRunning := true
+        RunMacro(macro)
+        return
+    }
+}
+
+; Zatrzymanie makra przez agenta (od 0.73): plik <id>.stop zamiast naciśniętego Esc. Osobny zegar, bo makro od agenta
+; działa w wątku zegara CheckRemoteMacro, a ten nie rusza drugi raz, póki pierwszy trwa.
+CheckRemoteStop() {
+    if (MacroRunning && RemoteId != "") {
+        stop := RemoteFolder "\" RemoteId ".stop"
+        if !FileExist(stop)
+            return
+        try FileDelete stop
+        FinishRemote("ERROR", "Makro zatrzymane przez agenta sklepu. Sprawdź w Mercalys, co zostało zrobione.")
+        Reload
+        return
+    }
+    if !MacroRunning ; prośby do makr, które już się skończyły
+        loop files RemoteFolder "\*.stop"
+            try FileDelete A_LoopFileFullPath
+}
+
+; Wykonanie makra (Alt+E ze Schowka albo plik od agenta); MacroRunning jest już ustawione.
+RunMacro(macro) {
+    global MacroRunning, PartMode
     A_IconTip := "Intermanage Makra: makro w toku, Esc zatrzymuje"
     if AgentMode
         A_IconHidden := false

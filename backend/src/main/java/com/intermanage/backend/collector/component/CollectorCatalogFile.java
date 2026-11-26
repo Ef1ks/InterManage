@@ -41,10 +41,20 @@ public final class CollectorCatalogFile {
 
     public static final String MAGIC = "IMKATAL2";
 
-    /** Kolejność pól wiersza; to samo w {@code Catalog.cs}. */
+    /**
+     * Kolejność pól wiersza; to samo w {@code Catalog.cs}. Nowe pola dochodzą tylko na końcu: starszy program czyta
+     * pierwsze, których się spodziewa, więc plik nie potrzebuje nowego {@link #MAGIC}.
+     * <ul>
+     * <li>{@code deposit}: kaucja głównego EAN-u (kod kaucji z kartoteki) jako {@code wartość;nazwa}, pusta = bez;</li>
+     * <li>{@code codes}: inne kody z multikodów do cenówki, rozdzielone {@code |}, każdy
+     * {@code EAN;mnożnik ceny;wartość kaucji;nazwa kaucji;nazwa kodu} (cena kodu = cena artykułu × mnożnik, np. puszka
+     * z czteropaka 0,25).</li>
+     * </ul>
+     */
     public static final List<String> FIELDS = List.of("itm8", "ean", "name", "brand", "subfamily", "salePrice",
             "promoPrice", "promoFrom", "promoTo", "promoRegular", "stock", "rotation", "caseSize", "unit", "netContent",
-            "cadencierPrice", "active", "cadencier", "supplier", "lastDelivery", "eans", "multipack");
+            "cadencierPrice", "active", "cadencier", "supplier", "lastDelivery", "eans", "multipack", "deposit",
+            "codes");
 
     /**
      * Artykuł: wartości pól w kolejności {@link #FIELDS}, kody od najpewniejszych (główny, multikody, dawne pary) i

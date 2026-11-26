@@ -7,6 +7,9 @@ namespace Intermanage.Agent;
 
 internal static class Program
 {
+    /// <summary>Ta sama nazwa co we wcześniejszych wersjach, żeby stara i nowa nie działały naraz.</summary>
+    private const string InstanceName = @"Local\Intermanage.Agent";
+
     public static readonly string Version =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
 
@@ -15,9 +18,16 @@ internal static class Program
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        // Jedna instancja na użytkownika; nowa wersja przejmuje pracę po działającej.
-        using var mutex = Handover.Acquire();
-        if (mutex == null) return;
+        // Jedna instancja na użytkownika. Od 1.14.0 nowa wersja nie przejmuje pracy po działającej (agent nie zamyka
+        // innych programów ani nie przestawia autostartu): podmieniony plik rusza przy następnym włączeniu komputera.
+        using var mutex = new Mutex(true, InstanceName, out var created);
+        if (!created)
+        {
+            Log.Info("Agent " + Version + " nie wystartował: na tym koncie działa już agent");
+            MessageBox.Show("Agent sklepu już działa (ikona przy zegarze). Nowa wersja ruszy po ponownym włączeniu komputera.",
+                "Intermanage – agent sklepu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         Application.ThreadException += (_, e) => Log.Error("Nieobsłużony błąd okna", e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -27,7 +37,6 @@ internal static class Program
         Log.Info("Start agenta " + Version + " na " + Environment.MachineName + " z " + AppDomain.CurrentDomain.BaseDirectory);
         try
         {
-            AgentSettings.MoveAutostartHere();
             Application.Run(new TrayApp());
         }
         catch (Exception error)

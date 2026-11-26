@@ -1141,7 +1141,41 @@ export type SupplierImportOverview = {
 
 /** Raporty z Importu danych (nazwy jak w backendzie, `ImportReportKind`). */
 export type ImportReportKind =
-  'PRODUCTS' | 'PRODUCT_CODES' | 'PROMOTIONS' | 'SALES' | 'DOCUMENTS' | 'CADENCIER' | 'SUPPLIERS' | 'NOMENCLATURES'
+  | 'PRODUCTS'
+  | 'PRODUCT_CODES'
+  | 'PROMOTIONS'
+  | 'SALES'
+  | 'DOCUMENTS'
+  | 'CADENCIER'
+  | 'SUPPLIERS'
+  | 'NOMENCLATURES'
+  | 'DEPOSIT_KINDS'
+
+/** Wgranie listy opakowań zwrotnych (kody kaucji z wartością). */
+export type DepositKindImport = {
+  id: string
+  fileName: string
+  reportGeneratedAt: string | null
+  importedBy: string | null
+  importedAt: string
+  totalRows: number
+  createdCount: number
+  updatedCount: number
+  missingCount: number
+}
+
+/** Rodzaj opakowania zwrotnego: kod kaucji z kartoteki i multikodów, nazwa i wartość w zł. */
+export type DepositKind = {
+  code: number
+  name: string
+  vatCode: number | null
+  value: number
+}
+
+export type DepositKindImportOverview = {
+  kinds: DepositKind[]
+  imports: DepositKindImport[]
+}
 
 /** Instrukcja właściciela do raportu: jak wygenerować plik i w jakim folderze go szukać. */
 export type ImportGuide = {
@@ -3100,6 +3134,7 @@ export type ImportHistoryEntry =
   | { kind: 'promotions'; importedAt: string; item: PromotionImport }
   | { kind: 'productCodes'; importedAt: string; item: ProductCodeImport }
   | { kind: 'cadencier'; importedAt: string; item: CadencierImport }
+  | { kind: 'depositKinds'; importedAt: string; item: DepositKindImport }
 
 /** Porcja historii importów (po 30, od najnowszego); kolejna od {@code importedAt} ostatniej pozycji. */
 export type ImportHistoryPage = {

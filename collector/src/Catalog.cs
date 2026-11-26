@@ -47,6 +47,61 @@ namespace Intermanage.Collector
         /// <summary>Ile sztuk ma wielopak (główny kod to wielopak, inny kod jego sztuka); 0 = nie dotyczy.</summary>
         public int Multipack { get { return fields[21].Length == 0 ? 0 : int.Parse(fields[21]); } }
 
+        /// <summary>
+        /// Kaucja głównego EAN-u z kartoteki jako „wartość;nazwa”; pusta = bez kaucji (także w pliku ze starszego
+        /// serwera, który tego pola nie ma).
+        /// </summary>
+        public string Deposit { get { return Optional(22); } }
+
+        /// <summary>
+        /// Kod z multikodów do cenówki: nazwa, mnożnik ceny i kaucja tego kodu; null, gdy to główny EAN albo kod
+        /// spoza multikodów. Pole: „EAN;mnożnik;wartość kaucji;nazwa kaucji;nazwa kodu” rozdzielone „|”.
+        /// </summary>
+        public LabelCode CodeFor(string code)
+        {
+            string digits = code == null ? "" : code.TrimStart('0');
+            if (digits.Length == 0 || digits == Ean.TrimStart('0'))
+            {
+                return null;
+            }
+            foreach (string entry in Optional(23).Split('|'))
+            {
+                string[] parts = entry.Split(';');
+                if (parts.Length >= 5 && parts[0].TrimStart('0') == digits)
+                {
+                    LabelCode found = new LabelCode();
+                    found.Multiplier = decimal.Parse(parts[1], CultureInfo.InvariantCulture);
+                    found.Deposit = parts[2].Length == 0 ? "" : parts[2] + ";" + parts[3];
+                    found.Name = parts[4];
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Kaucja sztuki wielopaku („wartość;nazwa”): czteropak ma w danych kod kaucji 0, a kaucję ma kod puszki
+        /// z multikodów (mnożnik ceny poniżej 1). Pusta, gdy żadna sztuka nie ma kaucji.
+        /// </summary>
+        public string PieceDeposit()
+        {
+            foreach (string entry in Optional(23).Split('|'))
+            {
+                string[] parts = entry.Split(';');
+                if (parts.Length >= 5 && parts[2].Length > 0
+                    && decimal.Parse(parts[1], CultureInfo.InvariantCulture) < 1)
+                {
+                    return parts[2] + ";" + parts[3];
+                }
+            }
+            return "";
+        }
+
+        private string Optional(int index)
+        {
+            return fields.Length > index ? fields[index] : "";
+        }
+
         public bool HasPromotion
         {
             get { return PromoPrice.Length > 0 && PromoTo != DateTime.MinValue; }
@@ -77,6 +132,18 @@ namespace Intermanage.Collector
             return value.Length != 8 ? DateTime.MinValue : new DateTime(int.Parse(value.Substring(0, 4)),
                 int.Parse(value.Substring(4, 2)), int.Parse(value.Substring(6, 2)));
         }
+    }
+
+    /// <summary>Kod artykułu z multikodów do cenówki (puszka z czteropaka): własna nazwa, cena i kaucja.</summary>
+    internal class LabelCode
+    {
+        /// <summary>Cena kodu = cena artykułu × mnożnik (puszka z czteropaka 0,25).</summary>
+        public decimal Multiplier = 1;
+
+        /// <summary>„wartość;nazwa” kaucji kodu, pusta = bez kaucji.</summary>
+        public string Deposit = "";
+
+        public string Name = "";
     }
 
     /// <summary>

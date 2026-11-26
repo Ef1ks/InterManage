@@ -15,10 +15,18 @@ namespace Intermanage.Collector
         /// <summary>„CENA ZA kg 151.96zł”; pusty = bez ceny jednostkowej.</summary>
         public string UnitPrice = "";
         public string Ean = "";
+        /// <summary>Kaucja za opakowanie (doliczana na kasie, nie wchodzi w cenę); 0 = bez.</summary>
+        public decimal Deposit;
+        /// <summary>Kaucja jest za sztukę wielopaku (czteropak: 0,50 zł za każdą puszkę), a nie za całą cenówkę.</summary>
+        public bool DepositPerPiece;
         public DateTime PrintedOn = DateTime.Today;
 
-        /// <summary>Cenówka artykułu z kartoteki na dziś (w promocji cena promocyjna); null, gdy nie ma ceny.</summary>
-        public static PriceLabel Of(Article article)
+        /// <summary>
+        /// Cenówka artykułu z kartoteki na dziś (w promocji cena promocyjna); null, gdy nie ma ceny. Zeskanowany kod
+        /// z multikodów (puszka z czteropaka) daje nazwę, cenę i kaucję tego kodu i jego EAN na kodzie kreskowym;
+        /// główny EAN, ITM8 albo nazwa: dane z kartoteki.
+        /// </summary>
+        public static PriceLabel Of(Article article, Match match)
         {
             string price = article.PriceOn(DateTime.Today);
             if (Theme.IsNegativeOrZero(price))
@@ -26,12 +34,54 @@ namespace Intermanage.Collector
                 return null;
             }
             PriceLabel label = new PriceLabel();
-            label.Name = article.Name;
             label.Brand = article.Brand;
-            label.Price = Parse(price);
-            label.Ean = article.Ean;
-            Measure(label, article.Unit, article.NetContent);
+            LabelCode code = match == null || match.ScaleCode.Length > 0 ? null : article.CodeFor(match.Code);
+            decimal articlePrice = Parse(price);
+            string deposit = article.Deposit;
+            decimal contentShare = 1;
+            if (code == null)
+            {
+                label.Name = article.Name;
+                label.Price = articlePrice;
+                label.Ean = article.Ean;
+                // Wielopak bez własnej kaucji (czteropak ma w danych kod 0): kaucja sztuki, na cenówce za sztukę.
+                // Własna kaucja opakowania (skrzynka: transporter 15 zł) jest za całość, bez „/szt.”.
+                if (article.Multipack > 1 && DepositValue(deposit) <= 0)
+                {
+                    deposit = article.PieceDeposit();
+                    label.DepositPerPiece = true;
+                }
+            }
+            else
+            {
+                label.Name = code.Name.Length > 0 ? code.Name : article.Name;
+                label.Price = decimal.Round(articlePrice * code.Multiplier, 2);
+                label.Ean = match.Code;
+                deposit = code.Deposit;
+                // Zawartość sztuki z przelicznika opakowań (puszka z czteropaka: 1/4 zawartości czteropaku).
+                contentShare = (decimal)match.Numerator / match.Denominator;
+            }
+            label.Deposit = DepositValue(deposit);
+            Measure(label, article.Unit, article.NetContent, contentShare);
             return label;
+        }
+
+        /// <summary>Wartość z „wartość;nazwa”; brak = 0.</summary>
+        private static decimal DepositValue(string deposit)
+        {
+            if (deposit == null || deposit.Length == 0)
+            {
+                return 0;
+            }
+            int at = deposit.IndexOf(';');
+            try
+            {
+                return Parse(at < 0 ? deposit : deposit.Substring(0, at));
+            }
+            catch (FormatException)
+            {
+                return 0;
+            }
         }
 
         /// <summary>Cenówka próbna: ta sama co na wzorze ze sklepu, żeby dało się je porównać.</summary>
@@ -49,7 +99,7 @@ namespace Intermanage.Collector
         /// <summary>
         /// Cena jednostkowa jak na cenówkach sklepu: za kg albo l z zawartości, towar na wagę (A.Wa) za kg, reszta za szt.
         /// </summary>
-        private static void Measure(PriceLabel label, string unit, string netContent)
+        private static void Measure(PriceLabel label, string unit, string netContent, decimal contentShare)
         {
             string kind = unit.Trim().ToLower();
             if (kind == "a.wa")
@@ -64,6 +114,7 @@ namespace Intermanage.Collector
             {
                 content = content / 1000m;
             }
+            content = content * contentShare;
             if (per.Length == 0 || content <= 0)
             {
                 label.UnitPrice = "CENA ZA szt. " + Money(label.Price) + "zł";
@@ -144,6 +195,15 @@ namespace Intermanage.Collector
             z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
             z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
             z.Block(140, 214, Width - 140, 1, 18, 16, 'R', label.UnitPrice);
+
+            // Kaucja osobno od ceny (doliczana na kasie), po prawej obok kodu kreskowego.
+            if (label.Deposit > 0)
+            {
+                string deposit = "+ KAUCJA " + PriceLabel.Money(label.Deposit) + "zł"
+                    + (label.DepositPerPiece ? "/szt." : "");
+                // Obok kodu kreskowego jest ok. 22 mm: dłuższy napis (15.00zł/szt.) węższą czcionką.
+                z.Block(202, 236, Width - 202, 1, 20, deposit.Length > 18 ? 13 : 16, 'R', deposit);
+            }
 
             // Kreski 24 punkty, a paski skrajne i środkowy EAN-13 schodzą jeszcze ok. 10 punktów niżej: data pod nimi.
             z.Barcode(8, 220, 24, label.Ean);

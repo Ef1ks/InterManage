@@ -84,6 +84,7 @@ class StoreAgentIntegrationTests {
                 .andExpect(jsonPath("$.folders['deli-order-proto']").value("N:\\AVISOCONFIG\\BACKUP"))
                 .andExpect(jsonPath("$.watches[0].kind").value("TRACEART"))
                 .andExpect(jsonPath("$.limits.updateGiveUpSeconds").value(5400))
+                .andExpect(jsonPath("$.mercalysPath").value("N:\\AvisoConfig\\UTILITAIRES\\ClientLourd\\Mercalys.exe"))
                 .andExpect(jsonPath("$.longPollSeconds").value(25));
         hello("ima_zly-klucz").andExpect(status().isForbidden());
         mvc.perform(post("/api/store-agent/hello").contentType(MediaType.APPLICATION_JSON).content("{}"))

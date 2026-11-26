@@ -34,6 +34,7 @@ import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.download.dto.AgentUpdateInfo;
 import com.intermanage.backend.download.service.DownloadService;
+import com.intermanage.backend.store.component.DefaultFolders;
 import com.intermanage.backend.store.dto.ProtoSettingsResponse;
 import com.intermanage.backend.store.entity.Store;
 import com.intermanage.backend.store.repository.StoreRepository;
@@ -238,7 +239,8 @@ public class StoreAgentService {
         return new AgentApi.HelloResponse(agent.storeId(), agent.storeNumber(), agent.storeName(), agent.agentName(),
                 enabled(agent.storeId()), folders(agent.storeId()), watches(agent.storeId()), LONG_POLL_SECONDS,
                 agent.leader(), agent.preferred(), downloads.agentUpdate().orElse(null),
-                features.isOn(agent.storeId(), AgentFeature.PRODUCT_FILE_CLEANUP), AgentLimits.VALUES);
+                features.isOn(agent.storeId(), AgentFeature.PRODUCT_FILE_CLEANUP), AgentLimits.VALUES,
+                locations.get(agent.storeId()).locations().get(DefaultFolders.MERCALYS));
     }
 
     /**

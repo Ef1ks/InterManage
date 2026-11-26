@@ -12,11 +12,25 @@ import { OrderDownloads } from '@/features/deli-order/OrderDownloads'
 import { OrderStatusBadge } from '@/features/deli-order/OrderStatusBadge'
 import { deliPaths } from '@/features/deli-order/paths'
 import { storeLabel } from '@/features/stores/current-store'
-import { formatShortDate } from '@/lib/dates'
+import { formatShortDate, todayIso } from '@/lib/dates'
 import type { DeliOrderSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
+
+const PAST_DIVIDER = 'past-divider' as const
+
+/**
+ * Zamówienia z dostawą od dziś na górze, pod grubą linią te, których data dostawy minęła.
+ * W obu częściach zostaje kolejność z serwera.
+ */
+function splitByDelivery(orders: DeliOrderSummary[]): (DeliOrderSummary | typeof PAST_DIVIDER)[] {
+  const today = todayIso()
+  const upcoming = orders.filter((order) => order.deliveryDate >= today)
+  const past = orders.filter((order) => order.deliveryDate < today)
+  if (past.length === 0 || upcoming.length === 0) return [...upcoming, ...past]
+  return [...upcoming, PAST_DIVIDER, ...past]
+}
 
 /**
  * Historia zamówień: wysłane przez sklep albo przychodzące do niego jako dostawcy.
@@ -40,7 +54,9 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
   if (!isPending && orders.length === 0) {
     return (
       <Card className="items-center px-6 py-10 text-center">
-        <p className="font-medium">{incoming ? 'Nie przyszło jeszcze żadne zamówienie' : 'Nie wysłano jeszcze żadnego zamówienia'}</p>
+        <p className="font-medium">
+          {incoming ? 'Nie przyszło jeszcze żadne zamówienie' : 'Nie wysłano jeszcze żadnego zamówienia'}
+        </p>
         <p className="max-w-sm text-sm text-muted-foreground">
           {incoming
             ? 'Zamówienia ze sklepów, które przyjęły zaproszenie do Twojego formularza, pojawią się tutaj.'
@@ -78,7 +94,19 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
             {isPending ? (
               <TableSkeletonRows columns={6} />
             ) : (
-              orders.map((order) => {
+              splitByDelivery(orders).map((order) => {
+                if (order === PAST_DIVIDER) {
+                  return (
+                    <TableRow key="past-divider" className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={6}
+                        className="border-t-4 border-foreground/25 bg-muted/50 py-1.5 pl-4 text-xs font-medium text-muted-foreground"
+                      >
+                        Data dostawy minęła
+                      </TableCell>
+                    </TableRow>
+                  )
+                }
                 const deleted = Boolean(order.storeDeletedAt || order.formStoreDeletedAt)
                 // Nowe do realizacji: wyróżnione, dopóki nikt ich nie zrealizował ani nie usunął.
                 const fresh = incoming && order.status === 'NEW' && !deleted
@@ -97,7 +125,9 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
                     )}
                   >
                     <TableCell className="py-3 pl-4">
-                      <div className={cn(fresh && 'font-semibold')}>{storeLabel(incoming ? order.store : order.formStore)}</div>
+                      <div className={cn(fresh && 'font-semibold')}>
+                        {storeLabel(incoming ? order.store : order.formStore)}
+                      </div>
                       {order.submittedBy && <div className="text-xs text-muted-foreground">{order.submittedBy}</div>}
                     </TableCell>
                     <TableCell className={cn(fresh && 'font-semibold')}>
@@ -108,7 +138,9 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{dateTime.format(new Date(order.submittedAt))}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {dateTime.format(new Date(order.submittedAt))}
+                    </TableCell>
                     <TableCell className="text-right">{order.itemCount}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -118,7 +150,11 @@ export function OrdersList({ storeId, kind }: { storeId: string; kind: 'sent' | 
                       </div>
                     </TableCell>
                     {/* Menu pobierania nie otwiera zamówienia. */}
-                    <TableCell className="pr-4 text-right" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                    <TableCell
+                      className="pr-4 text-right"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
                       <div className="flex items-center justify-end gap-1">
                         <OrderDownloads storeId={storeId} orderId={order.id} compact />
                         <ChevronRightIcon aria-hidden className="size-4 text-muted-foreground" />

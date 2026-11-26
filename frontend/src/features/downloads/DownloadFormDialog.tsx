@@ -146,8 +146,8 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
         label="Paczka agenta sklepu"
         description={
           agentPackage
-            ? 'Agenty w sklepach same pobiorą tę paczkę do P:\\Production\\INTERMANAGE\\AGENT\\aktualizacja, a człowiek podmieni plik raz na sklep. Plik: ZIP z zawartością bin\\Release\\net48, wersja jak w Intermanage.Agent.csproj (np. 1.5.0).'
-            : 'Włącz dla pozycji z agentem sklepu, żeby agenty pobierały nową wersję same.'
+            ? 'Agenty w sklepach pokażą przy ikonie, że czeka ta wersja. Paczkę pobiera i podmienia człowiek raz na sklep w P:\\Production\\INTERMANAGE\\AGENT. Plik: ZIP z zawartością bin\\Release\\net48, wersja jak w Intermanage.Agent.csproj (np. 1.14.0).'
+            : 'Włącz dla pozycji z agentem sklepu, żeby agenty pokazywały, że czeka nowa wersja.'
         }
         checked={agentPackage}
         onCheckedChange={setAgentPackage}
@@ -195,7 +195,7 @@ function Body({ download, onDone }: { download?: Download; onDone: () => void })
               autoComplete="off"
               hint={
                 agentPackage
-                  ? 'Jak w Intermanage.Agent.csproj, np. 1.5.0. Agenty pobierają tylko wersję nowszą od swojej.'
+                  ? 'Jak w Intermanage.Agent.csproj, np. 1.14.0. Agenty mówią tylko o wersji nowszej od swojej.'
                   : 'Np. v37 - widać ją w powiadomieniu i przy przycisku pobierania.'
               }
               {...register('version', {

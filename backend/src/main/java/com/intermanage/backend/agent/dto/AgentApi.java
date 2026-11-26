@@ -28,13 +28,16 @@ public final class AgentApi {
      * wybrał pracę przez agenta (bez tego agent tylko utrzymuje kontakt). {@code leader}: ten agent jest głównym agentem
      * sklepu, więc pilnuje folderów i aktualizuje dane z Mercalys (każda odpowiedź API niesie to też w nagłówku
      * {@code X-Agent-Leader}); {@code preferred}: agent preferowany, który odbiera tę rolę pozostałym.
-     * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = bez pobierania); agent nowszą pobiera
-     * z {@code /update/file}, a podmienia ją człowiek. {@code cleanProductFiles}: agent od 1.12.2 czyści folder nowych
-     * artykułów z plików z poprzednich dni. {@code limits}: czasy i limity agenta od 1.13.0 ({@code AgentLimits}).
+     * {@code update}: obowiązująca wersja agenta z „Do pobrania” (brak = nie ma paczki); agent od 1.14.0 tylko o niej
+     * mówi, a pobiera i podmienia ją człowiek (starsze pobierały ją z {@code /update/file}). {@code cleanProductFiles}:
+     * agent od 1.12.2 czyści folder nowych artykułów z plików z poprzednich dni. {@code limits}: czasy i limity agenta
+     * od 1.13.0 ({@code AgentLimits}). {@code mercalysPath}: program Mercalys sklepu (ścieżka sklepu
+     * {@code mercalys:path} albo domyślna), z którego odtwarzacz makr uruchamia wyłączony Mercalys (agent od 1.14.0).
      */
     public record HelloResponse(UUID storeId, String storeNumber, String storeName, String agentName, boolean enabled,
             Map<String, String> folders, List<Watch> watches, int longPollSeconds, boolean leader,
-            boolean preferred, AgentUpdateInfo update, boolean cleanProductFiles, Map<String, Integer> limits) {
+            boolean preferred, AgentUpdateInfo update, boolean cleanProductFiles, Map<String, Integer> limits,
+            String mercalysPath) {
     }
 
     /**

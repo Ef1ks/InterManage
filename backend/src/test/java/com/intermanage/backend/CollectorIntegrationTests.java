@@ -168,6 +168,22 @@ class CollectorIntegrationTests {
         pack(codes, HAM, "2436010000000", "1");
         pack(codes, HAM, "2436010000109", "0.100");
         jdbc.update("update product_codes set sale_unit = 'kg' where store_id = ?::uuid and itm8 = ?", storeId, HAM);
+        // Cenówka: puszka ma własną nazwę i kaucję, kod sześciu sztuk współczynnik ceny, chleb kaucję 0 zł.
+        String deposits = jdbc.queryForObject("""
+                insert into deposit_kind_imports (store_id, file_name, total_rows) values (?::uuid, 'kaucje.pdf', 2)
+                returning id""", String.class, storeId);
+        jdbc.update("""
+                insert into deposit_kinds (store_id, code, name, vat_code, value, first_import_id, last_import_id)
+                values (?::uuid, 70, 'KAUCJA PUSZKA METALOWA', 7, 0.50, ?::uuid, ?::uuid),
+                       (?::uuid, 99, 'BEZ OPŁATY/KAUCJI', 7, 0, ?::uuid, ?::uuid)""",
+                storeId, deposits, deposits, storeId, deposits, deposits);
+        jdbc.update("""
+                update product_codes set name = 'PIWO 0.5L PUSZ', deposit_code = 70
+                where store_id = ?::uuid and ean = '5903538900765'""", storeId);
+        jdbc.update("update product_codes set price_factor = 1.006 where store_id = ?::uuid and ean = '5903538900772'",
+                storeId);
+        jdbc.update("update products set deposit_code = 99 where store_id = ?::uuid and itm8 = ?", storeId, BREAD);
+        jdbc.update("update products set deposit_code = 70 where store_id = ?::uuid and itm8 = ?", storeId, BUTTER);
         String promotions = jdbc.queryForObject("""
                 insert into promotion_imports (store_id, file_name, total_rows) values (?::uuid, 'Taryfy.pdf', 1)
                 returning id""", String.class, storeId);
@@ -216,6 +232,13 @@ class CollectorIntegrationTests {
         assertThat(file.ratio(5903538900789L)).isEqualTo("6/1");
         assertThat(file.ratio(5900000000001L)).isEqualTo("1/1");
         assertThat(file.byItm8(6893790L)).containsExactly("MASŁO EXTRA 200G");
+        // Cenówka: kaucja głównego EAN-u z kartoteki (0 zł = bez), a multikody z nazwą, mnożnikiem ceny i kaucją.
+        assertThat(file.article("MASŁO EXTRA 200G")).containsEntry("deposit", "0.5;KAUCJA PUSZKA METALOWA");
+        assertThat(file.article("CHLEB ŻYTNI 500G")).containsEntry("deposit", "");
+        assertThat(file.article("CHLEB ŻYTNI 500G").get("codes").split("\\|")).contains(
+                "5903538900765;0.25;0.5;KAUCJA PUSZKA METALOWA;PIWO 0.5L PUSZ",
+                "5903538900772;0.166996;;;",
+                "5903538900789;6;;;");
 
         mvc.perform(post("/api/collector/synced").header(HttpHeaders.AUTHORIZATION, "Bearer " + key)
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED).content("version=" + version))

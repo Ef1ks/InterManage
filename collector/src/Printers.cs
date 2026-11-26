@@ -205,6 +205,11 @@ namespace Intermanage.Collector
                         .Append('\n');
                 }
                 text.Append(MediaReport(link));
+                string awake = KeepAwake(link);
+                if (awake.Length > 0)
+                {
+                    text.Append(awake).Append('\n');
+                }
                 return text.ToString().TrimEnd('\n');
             }
         }
@@ -220,6 +225,7 @@ namespace Intermanage.Collector
                 if (!printer.OffsetsRead)
                 {
                     ReadOffsets(link, printer);
+                    KeepAwake(link);
                 }
                 if (printer.OffsetsChanged)
                 {
@@ -271,6 +277,41 @@ namespace Intermanage.Collector
             printer.Shift = -(int)decimal.Round(DefaultLeftMm * printer.Dpi / 25.4m, 0);
             printer.Top = (int)decimal.Round(DefaultUpMm * printer.Dpi / 25.4m, 0);
             printer.OffsetsChanged = true;
+        }
+
+        /// <summary>
+        /// Po ilu sekundach bez pracy drukarka może się sama wyłączyć. Fabrycznie QLn wyłącza się po minucie, co przy
+        /// pracy kolektorem jest za krótko; godzina chroni jeszcze baterię, gdy drukarka zostanie włączona na noc.
+        /// </summary>
+        public const int AwakeSeconds = 3600;
+
+        /// <summary>
+        /// Wydłuża czas do samowyłączenia drukarki (power.inactivity_timeout), gdy jest krótszy niż AwakeSeconds; 0 =
+        /// nie wyłącza się wcale i tak zostaje. Drukarka zapamiętuje ustawienie. Zwraca opis do ekranu drukarki.
+        /// </summary>
+        private static string KeepAwake(BluetoothLink link)
+        {
+            int seconds;
+            try
+            {
+                seconds = int.Parse(link.GetVar("power.inactivity_timeout"));
+            }
+            catch (FormatException)
+            {
+                return "";
+            }
+            if (seconds > 0 && seconds < AwakeSeconds)
+            {
+                link.Send("! U1 setvar \"power.inactivity_timeout\" \"" + AwakeSeconds + "\"\r\n");
+                Log.Write("Drukarka: samowyłączenie po " + seconds + " s zmienione na " + AwakeSeconds + " s");
+                return "Wyłączała się po " + Minutes(seconds) + " bez pracy, teraz po " + Minutes(AwakeSeconds) + ".";
+            }
+            return seconds == 0 ? "Nie wyłącza się sama." : "Wyłącza się po " + Minutes(seconds) + " bez pracy.";
+        }
+
+        private static string Minutes(int seconds)
+        {
+            return seconds < 60 ? seconds + " s" : seconds / 60 + " min";
         }
 
         /// <summary>Przesunięcie wydruku i rozdzielczość z drukarki (zpl.left_position, zpl.label_top).</summary>

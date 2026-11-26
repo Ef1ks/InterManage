@@ -29,17 +29,32 @@ internal static class MacroRunner
     /// <summary>Produkt z <c>;@Ahk2Exe-SetName</c> w player.ahk.</summary>
     private const string Product = "Intermanage Makra";
 
+    /// <summary>Mutex zakładany przez działający AutoJob (player.ahk od 0.73).</summary>
+    private const string PresenceName = @"Local\Intermanage.AutoJob";
+
+    private static readonly object Lock = new();
     private static int lastPid;
     private static RunningPlayer? last;
+    private static DateTime lastScan = DateTime.MinValue;
+
+    /// <summary>Plik wersji, który AutoJob od 0.73 zapisuje raz przy starcie (player.ahk, AnnounceVersion).</summary>
+    private static string AnnounceFile => Path.Combine(AgentSettings.Folder, "makra", "autojob.txt");
+
+    /// <summary>Starszy AutoJob bez mutexu szukany po nazwie programu najwyżej tak często.</summary>
+    private static TimeSpan LegacyScanEvery => Limits.Seconds("legacyPlayerScanSeconds", 60, 10, 3600);
 
     /// <summary>
-    /// Działający odtwarzacz makr albo null. Znaleziony wcześniej wystarczy sprawdzić po numerze procesu, bez
-    /// przeglądania wszystkich programów co kilka sekund.
+    /// Działający odtwarzacz makr albo null. AutoJob od 0.73 zgłasza się nazwanym mutexem i plikiem wersji, więc agent
+    /// nie przegląda programów komputera ani nie otwiera cudzego procesu (antywirus sklepów, SentinelOne). Starszy
+    /// AutoJob szukany jest jak dotąd po nazwie programu, ale najwyżej raz na minutę; do usunięcia, gdy wszystkie sklepy
+    /// będą miały 0.73.
     /// </summary>
     public static RunningPlayer? FindPlayer()
     {
-        lock (Gate)
+        lock (Lock)
         {
+            var announced = Announced();
+            if (announced != null) return announced;
             if (last != null)
             {
                 try
@@ -51,14 +66,40 @@ internal static class MacroRunner
                 {
                     // Odtwarzacz zakończony albo uruchomiony ponownie (Esc): szukamy od nowa.
                 }
+                last = null;
             }
+            if (DateTime.UtcNow - lastScan < LegacyScanEvery) return null;
+            lastScan = DateTime.UtcNow;
             return last = Scan();
         }
     }
 
+    /// <summary>AutoJob od 0.73: mutex mówi, że działa, a wersja jest w pliku zapisanym przy jego starcie.</summary>
+    private static RunningPlayer? Announced()
+    {
+        if (!Mutex.TryOpenExisting(PresenceName, out var presence)) return null;
+        presence.Dispose();
+        Version? version = null;
+        var name = "AutoJob";
+        try
+        {
+            var lines = File.ReadAllLines(AnnounceFile);
+            if (lines.Length > 0 && System.Version.TryParse(lines[0].Trim(), out var parsed))
+            {
+                version = new Version(parsed.Major, parsed.Minor);
+            }
+            if (lines.Length > 1 && lines[1].Trim().Length > 0) name = Path.GetFileNameWithoutExtension(lines[1].Trim());
+        }
+        catch (Exception)
+        {
+            // Plik właśnie podmieniany: działa AutoJob co najmniej 0.73.
+        }
+        return new RunningPlayer(name, version ?? MacroPlayback.FilesFrom);
+    }
+
     /// <summary>
-    /// Szuka odtwarzacza po nazwie programu (player.exe, player-v60.exe, AutoJob.exe). Zagląda tylko do niego (wersja
-    /// z pliku), innych programów nie otwiera.
+    /// Starszy AutoJob (przed 0.73): szuka po nazwie programu (player.exe, player-v60.exe, AutoJob.exe) i zagląda tylko
+    /// do niego (wersja z pliku).
     /// </summary>
     private static RunningPlayer? Scan()
     {
@@ -108,7 +149,10 @@ internal static class MacroRunner
     private const uint KeyUp = 0x0002;
     private const byte Escape = 0x1B;
 
-    /// <summary>Lewy Alt+E jak pracownik: odtwarzacz wykonuje makro ze schowka po puszczeniu Alta.</summary>
+    /// <summary>
+    /// Lewy Alt+E jak pracownik: odtwarzacz wykonuje makro ze schowka po puszczeniu Alta. Tylko dla AutoJob sprzed 0.73;
+    /// nowszy dostaje makro plikiem (<see cref="MacroPlayback"/>).
+    /// </summary>
     public static void PressAltE()
     {
         keybd_event(LeftAlt, 0, 0, UIntPtr.Zero);
@@ -117,7 +161,7 @@ internal static class MacroRunner
         keybd_event(LeftAlt, 0, KeyUp, UIntPtr.Zero);
     }
 
-    /// <summary>Esc zatrzymuje trwające makro odtwarzacza.</summary>
+    /// <summary>Esc zatrzymuje trwające makro odtwarzacza sprzed 0.73 (nowszy: <see cref="MacroPlayback.Stop"/>).</summary>
     public static void PressEsc()
     {
         keybd_event(Escape, 0, 0, UIntPtr.Zero);
@@ -158,7 +202,7 @@ internal static class MacroRunner
     [DllImport("kernel32.dll")]
     private static extern bool CloseHandle(IntPtr handle);
 
-    /// <summary>Ścieżka pliku procesu (odtwarzacza albo Mercalys), także 64-bitowego.</summary>
+    /// <summary>Ścieżka pliku procesu starszego odtwarzacza, także 64-bitowego.</summary>
     public static string? ImagePath(int processId)
     {
         var handle = OpenProcess(QueryLimitedInformation, false, processId);
