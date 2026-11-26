@@ -300,10 +300,10 @@ namespace Intermanage.Collector
             Printer printer = checkedPrinter;
             string where = printer == null || !printer.OffsetsRead ? "Położenie cenówki: nieznane (połącz z drukarką)"
                 : "Położenie cenówki" + (printer.OffsetsChanged ? " (zapisze się w drukarce przy Enter)" : " w drukarce")
-                    + ": " + ShiftText(-printer.Shift, printer.Dpi, "w lewo", "w prawo") + ", "
-                    + ShiftText(printer.Top, printer.Dpi, "w górę", "w dół");
+                    + ": " + ShiftText(printer.Shift, printer.Dpi, "w lewo", "w prawo") + ", "
+                    + ShiftText(-printer.Top, printer.Dpi, "w górę", "w dół");
             return "\n\n" + where
-                + "\n4 / 6: w lewo / w prawo, 8 / 2: w górę / w dół (o 0,5 mm), 5: bez przesunięcia"
+                + "\n4 / 6: w lewo / w prawo, 8 / 2: w górę / w dół (o 0,5 mm), 5: domyślne (3 mm w lewo i w górę)"
                 + "\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.";
         }
 
@@ -337,21 +337,22 @@ namespace Intermanage.Collector
             int max = (int)decimal.Round(MaxShiftMm * printer.Dpi / 25.4m, 0);
             switch (key)
             {
+                // Cenówka jest obrócona o 180° (^POI), więc ^LS i ^LT działają na niej odwrotnie: ujemne ^LS przesuwa
+                // ją w lewo, dodatnie ^LT w górę (sprawdzone na QLn).
                 case '4':
-                    printer.Shift += step;
-                    break;
-                case '6':
                     printer.Shift -= step;
                     break;
-                case '8':
-                    printer.Top -= step;
+                case '6':
+                    printer.Shift += step;
                     break;
-                case '2':
+                case '8':
                     printer.Top += step;
                     break;
+                case '2':
+                    printer.Top -= step;
+                    break;
                 default:
-                    printer.Shift = 0;
-                    printer.Top = 0;
+                    Printers.DefaultOffsets(printer);
                     break;
             }
             printer.Shift = Math.Max(-max, Math.Min(max, printer.Shift));

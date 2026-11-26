@@ -9,24 +9,18 @@ namespace Intermanage.Collector
     {
         public string Name = "";
         public string Brand = "";
-        /// <summary>Zawartość do napisu, np. „500 g”; pusta = bez.</summary>
-        public string Content = "";
         public decimal Price;
-        /// <summary>„1 kg = 25,98 zł”; pusty = bez ceny jednostkowej.</summary>
+        /// <summary>Jednostka sprzedaży w prawym rogu: „Szt” albo „kg” (towar na wagę).</summary>
+        public string SaleUnit = "Szt";
+        /// <summary>„CENA ZA kg 151.96zł”; pusty = bez ceny jednostkowej.</summary>
         public string UnitPrice = "";
-        public bool Promotion;
-        public DateTime PromoTo = DateTime.MinValue;
-        /// <summary>Cena zwykła przy promocji; 0 = bez.</summary>
-        public decimal Regular;
         public string Ean = "";
-        public string Itm8 = "";
         public DateTime PrintedOn = DateTime.Today;
 
-        /// <summary>Cenówka artykułu z kartoteki na dziś; null, gdy artykuł nie ma ceny.</summary>
+        /// <summary>Cenówka artykułu z kartoteki na dziś (w promocji cena promocyjna); null, gdy nie ma ceny.</summary>
         public static PriceLabel Of(Article article)
         {
-            DateTime today = DateTime.Today;
-            string price = article.PriceOn(today);
+            string price = article.PriceOn(DateTime.Today);
             if (Theme.IsNegativeOrZero(price))
             {
                 return null;
@@ -35,76 +29,47 @@ namespace Intermanage.Collector
             label.Name = article.Name;
             label.Brand = article.Brand;
             label.Price = Parse(price);
-            label.Promotion = article.PromotionOn(today);
-            if (label.Promotion)
-            {
-                label.PromoTo = article.PromoTo;
-                string regular = article.RegularOn(today);
-                label.Regular = Theme.IsNegativeOrZero(regular) ? 0 : Parse(regular);
-                if (label.Regular <= label.Price)
-                {
-                    label.Regular = 0;
-                }
-            }
             label.Ean = article.Ean;
-            label.Itm8 = article.Itm8.TrimStart('0');
             Measure(label, article.Unit, article.NetContent);
             return label;
         }
 
-        /// <summary>Cenówka próbna do ustawienia drukarki: długa nazwa z polskimi literami i promocja.</summary>
+        /// <summary>Cenówka próbna: ta sama co na wzorze ze sklepu, żeby dało się je porównać.</summary>
         public static PriceLabel Sample()
         {
             PriceLabel label = new PriceLabel();
-            label.Name = "CZEKOLADA MLECZNA Z ORZECHAMI LASKOWYMI ŻÓŁĆ";
-            label.Brand = "ZAŻÓŁĆ GĘŚLĄ JAŹŃ";
-            label.Content = "100 g";
-            label.Price = 12.99m;
-            label.UnitPrice = "1 kg = 129,90 zł";
-            label.Promotion = true;
-            label.PromoTo = DateTime.Today.AddDays(7);
-            label.Regular = 15.99m;
-            label.Ean = "5901234123457";
-            label.Itm8 = "1234567";
+            label.Name = "KAWA BRAZIL SANTOS 250G M.";
+            label.Brand = "VASPIATTA";
+            label.Price = 37.99m;
+            label.UnitPrice = "CENA ZA kg 151.96zł";
+            label.Ean = "5906660548089";
             return label;
         }
 
         /// <summary>
-        /// Zawartość i cena za kilogram albo litr. Towar na wagę (A.Wa) ma cenę za kilogram. Sztuki bez ceny jednostkowej.
+        /// Cena jednostkowa jak na cenówkach sklepu: za kg albo l z zawartości, towar na wagę (A.Wa) za kg, reszta za szt.
         /// </summary>
         private static void Measure(PriceLabel label, string unit, string netContent)
         {
             string kind = unit.Trim().ToLower();
             if (kind == "a.wa")
             {
-                label.UnitPrice = "cena za 1 kg";
+                label.SaleUnit = "kg";
+                label.UnitPrice = "CENA ZA kg " + Money(label.Price) + "zł";
                 return;
             }
             decimal content = netContent.Length == 0 ? 0 : Parse(netContent);
-            if (content <= 0)
-            {
-                return;
-            }
-            string per;
-            if (kind == "kg" || kind == "g")
-            {
-                per = "kg";
-            }
-            else if (kind == "l" || kind == "ml")
-            {
-                per = "l";
-            }
-            else
-            {
-                return;
-            }
+            string per = kind == "kg" || kind == "g" ? "kg" : kind == "l" || kind == "ml" ? "l" : "";
             if (kind == "g" || kind == "ml")
             {
                 content = content / 1000m;
             }
-            label.Content = content < 1 ? Number(content * 1000m) + (per == "kg" ? " g" : " ml")
-                : Number(content) + " " + per;
-            label.UnitPrice = "1 " + per + " = " + Money(label.Price / content) + " zł";
+            if (per.Length == 0 || content <= 0)
+            {
+                label.UnitPrice = "CENA ZA szt. " + Money(label.Price) + "zł";
+                return;
+            }
+            label.UnitPrice = "CENA ZA " + per + " " + Money(label.Price / content) + "zł";
         }
 
         private static decimal Parse(string value)
@@ -112,21 +77,19 @@ namespace Intermanage.Collector
             return decimal.Parse(value.Replace(',', '.'), CultureInfo.InvariantCulture);
         }
 
-        private static string Number(decimal value)
-        {
-            return decimal.Round(value, 3).ToString("0.###", CultureInfo.InvariantCulture).Replace('.', ',');
-        }
-
+        /// <summary>Kwota z kropką, jak na cenówkach sklepu: 37.99.</summary>
         public static string Money(decimal value)
         {
-            return decimal.Round(value, 2).ToString("0.00", CultureInfo.InvariantCulture).Replace('.', ',');
+            return decimal.Round(value, 2).ToString("0.00", CultureInfo.InvariantCulture);
         }
     }
 
     /// <summary>
-    /// Cenówka w ZPL na etykietę 52 × 38 mm (realnie ok. 51,5 × 37,5 mm, więc z marginesem 2 mm z każdej strony).
-    /// Układ rysowany w punktach drukarki 203 dpi (8 punktów na mm) i przeliczany do rozdzielczości drukarki.
-    /// Polskie litery przez ^CI28 (UTF-8) i czcionkę 0. Obrót o 180° (^POI): bez niego cenówka wychodziła do góry nogami.
+    /// Cenówka w ZPL na etykietę 52 × 38 mm (realnie ok. 51,5 × 37,5 mm, z marginesem 2 mm), w układzie cenówek sklepu:
+    /// nazwa, marka, wielka cena (złote, mniejsze grosze z kropką i „zł”), pod nią EAN, kod kreskowy i data, po prawej
+    /// jednostka i cena za kg / l / szt. Układ w punktach 203 dpi (8 na mm) przeliczany do rozdzielczości drukarki.
+    /// Polskie litery przez ^CI28 (UTF-8) i czcionkę 0. Obrót o 180° (^POI): bez niego cenówka wychodziła do góry
+    /// nogami.
     /// </summary>
     internal static class LabelZpl
     {
@@ -134,9 +97,21 @@ namespace Intermanage.Collector
         public const decimal HeightMm = 37.5m;
         public const decimal MarginMm = 2m;
         private const int BaseDpi = 203;
-        /// <summary>Pole na treść przy 203 dpi: (52 − 2 × 2) × 8 i (38 − 2 × 2) × 8.</summary>
-        private const int Width = 384;
-        private const int Height = 272;
+        /// <summary>Pole na treść przy 203 dpi: (51,5 − 2 × 2) × 8 i (37,5 − 2 × 2) × 8.</summary>
+        private const int Width = 380;
+
+        /// <summary>Linia dołu ceny (złote i grosze stoją na niej razem).</summary>
+        private const int PriceBase = 190;
+        private const int WholeHeight = 160;
+        private const int WholeWidth = 96;
+        private const int CentsHeight = 96;
+        private const int CentsWidth = 60;
+
+        /// <summary>
+        /// Szerokość cyfry czcionki 0 jako część szerokości z ^A0 (szacunek: na niej stoją grosze za złotymi; do
+        /// poprawienia po wydruku, gdy grosze nachodzą na złote albo stoją za daleko).
+        /// </summary>
+        private const decimal DigitAdvance = 0.6m;
 
         /// <summary>
         /// Cenówka w ZPL. Przesunięcia wydruku (^LS, ^LT) nie ma w cenówce: trzyma je drukarka (Menu, Drukarka), bo
@@ -149,38 +124,28 @@ namespace Intermanage.Collector
             s.Append("^XA^CI28^POI^MMT^LH0,0");
             s.Append("^PW").Append(z.Mm(WidthMm)).Append("^LL").Append(z.Mm(HeightMm));
 
-            // Nazwa: dwie linie, za długa jest ucinana przez drukarkę.
-            z.Block(0, 0, Width, 2, 28, 24, 'L', label.Name);
-            string second = (label.Brand + "  " + label.Content).Trim();
-            z.Block(0, 62, Width, 1, 20, 18, 'L', second);
+            z.Block(0, 0, Width, 1, 22, 20, 'L', label.Name);
+            z.Block(0, 36, Width, 1, 22, 18, 'L', label.Brand);
 
-            if (label.Promotion)
-            {
-                string until = label.PromoTo == DateTime.MinValue ? ""
-                    : " do " + label.PromoTo.ToString("dd.MM", CultureInfo.InvariantCulture);
-                z.Box(0, 88, 196, 26);
-                z.Inverse(6, 92, 186, 20, 18, "PROMOCJA" + until);
-                if (label.Regular > 0)
-                {
-                    z.Block(204, 92, Width - 204, 1, 20, 18, 'R', "zwykła " + PriceLabel.Money(label.Regular) + " zł");
-                }
-            }
-
-            // Cena: złote duże, grosze mniejsze u góry, „zł” pod groszami.
+            // Cena: wszystkie części na wspólnej linii dołu (^FT), grosze zaraz za złotymi.
             string money = PriceLabel.Money(label.Price);
-            int comma = money.IndexOf(',');
-            string whole = money.Substring(0, comma);
-            string cents = money.Substring(comma + 1);
-            z.Block(0, 118, 300, 1, 96, 80, 'R', whole + ",");
-            z.Block(302, 124, 82, 1, 46, 40, 'L', cents);
-            z.Block(302, 172, 82, 1, 30, 28, 'L', "zł");
+            int dot = money.IndexOf('.');
+            string whole = money.Substring(0, dot);
+            string cents = money.Substring(dot);
+            int x = 0;
+            z.Baseline(x, PriceBase, WholeHeight, WholeWidth, whole);
+            x += (int)(whole.Length * WholeWidth * DigitAdvance) + 2;
+            z.Baseline(x, PriceBase, CentsHeight, CentsWidth, cents);
+            x += (int)((cents.Length - 0.5m) * CentsWidth * DigitAdvance) + 2;
+            // „zł” małe, równo z górą groszy.
+            z.Baseline(x, PriceBase - CentsHeight * 7 / 10 + 26, 36, 30, "zł");
 
-            z.Block(0, 214, 230, 1, 20, 18, 'L', label.UnitPrice);
-            z.Block(230, 214, Width - 230, 1, 18, 16, 'R', label.PrintedOn.ToString("dd.MM.yyyy",
-                CultureInfo.InvariantCulture));
+            z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
+            z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
+            z.Block(140, 214, Width - 140, 1, 18, 16, 'R', label.UnitPrice);
 
-            z.Barcode(12, 238, label.Ean);
-            z.Block(230, 246, Width - 230, 1, 20, 18, 'R', label.Itm8.Length > 0 ? "ITM " + label.Itm8 : "");
+            z.Barcode(8, 222, 30, label.Ean);
+            z.Block(8, 256, 200, 1, 18, 16, 'L', label.PrintedOn.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture));
             s.Append("^PQ1^XZ");
             return s.ToString();
         }
@@ -199,12 +164,6 @@ namespace Intermanage.Collector
                 top = Mm(topMm);
             }
 
-            /// <summary>^FO z punktu układu (203 dpi) przesuniętego o początek treści.</summary>
-            private StringBuilder At(int x, int y)
-            {
-                return Text.Append("^FO").Append(left + D(x)).Append(',').Append(top + D(y));
-            }
-
             public int Mm(decimal mm)
             {
                 return (int)decimal.Round(mm * dpi / 25.4m, 0);
@@ -213,6 +172,12 @@ namespace Intermanage.Collector
             private int D(int dots)
             {
                 return (dots * dpi + BaseDpi / 2) / BaseDpi;
+            }
+
+            /// <summary>^FO z punktu układu (203 dpi) przesuniętego o początek treści.</summary>
+            private StringBuilder At(int x, int y)
+            {
+                return Text.Append("^FO").Append(left + D(x)).Append(',').Append(top + D(y));
             }
 
             public void Block(int x, int y, int width, int lines, int height, int fontWidth, char align, string text)
@@ -227,23 +192,16 @@ namespace Intermanage.Collector
                     .Append("^FD").Append(Clean(text)).Append("^FS");
             }
 
-            public void Box(int x, int y, int width, int height)
+            /// <summary>Napis stojący na linii dołu (^FT): y to dół liter, nie góra pola.</summary>
+            public void Baseline(int x, int y, int height, int fontWidth, string text)
             {
-                At(x, y)
-                    .Append("^GB").Append(D(width)).Append(',').Append(D(height)).Append(',').Append(D(height))
-                    .Append("^FS");
-            }
-
-            /// <summary>Biały napis na czarnym polu (^FR odwraca to, co pod nim).</summary>
-            public void Inverse(int x, int y, int width, int height, int fontWidth, string text)
-            {
-                At(x, y)
+                Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
                     .Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth))
-                    .Append("^FB").Append(D(width)).Append(",1,0,C,0^FR^FD").Append(Clean(text)).Append("^FS");
+                    .Append("^FD").Append(Clean(text)).Append("^FS");
             }
 
-            /// <summary>EAN-13 albo EAN-8 z cyframi pod kodem; inny kod Code 128.</summary>
-            public void Barcode(int x, int y, string code)
+            /// <summary>EAN-13 albo EAN-8 bez cyfr pod kodem (cyfry stoją nad nim); inny kod Code 128.</summary>
+            public void Barcode(int x, int y, int height, string code)
             {
                 if (code == null || code.Length == 0)
                 {
@@ -252,15 +210,15 @@ namespace Intermanage.Collector
                 At(x, y).Append("^BY").Append(Math.Max(1, D(2)));
                 if (code.Length == 13 && Catalog.IsDigits(code))
                 {
-                    Text.Append("^BEN,").Append(D(20)).Append(",Y,N^FD").Append(code.Substring(0, 12));
+                    Text.Append("^BEN,").Append(D(height)).Append(",N,N^FD").Append(code.Substring(0, 12));
                 }
                 else if (code.Length == 8 && Catalog.IsDigits(code))
                 {
-                    Text.Append("^B8N,").Append(D(20)).Append(",Y,N^FD").Append(code.Substring(0, 7));
+                    Text.Append("^B8N,").Append(D(height)).Append(",N,N^FD").Append(code.Substring(0, 7));
                 }
                 else
                 {
-                    Text.Append("^BCN,").Append(D(20)).Append(",Y,N,N^FD").Append(Clean(code));
+                    Text.Append("^BCN,").Append(D(height)).Append(",N,N,N^FD").Append(Clean(code));
                 }
                 Text.Append("^FS");
             }

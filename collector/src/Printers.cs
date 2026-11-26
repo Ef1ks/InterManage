@@ -16,7 +16,8 @@ namespace Intermanage.Collector
         public bool Unlisted;
 
         /// <summary>
-        /// Przesunięcie wydruku zapisane w drukarce, w punktach: ^LS (dodatnie = w lewo) i ^LT (dodatnie = w dół).
+        /// Przesunięcie wydruku zapisane w drukarce, w punktach: ^LS i ^LT. Na obróconej cenówce (^POI) ujemne ^LS
+        /// przesuwa ją w lewo, a dodatnie ^LT w górę.
         /// Znane po połączeniu (OffsetsRead); OffsetsChanged = zmienione na kolektorze, jeszcze nie zapisane w drukarce.
         /// </summary>
         public int Shift;
@@ -216,6 +217,10 @@ namespace Intermanage.Collector
         {
             using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
             {
+                if (!printer.OffsetsRead)
+                {
+                    ReadOffsets(link, printer);
+                }
                 if (printer.OffsetsChanged)
                 {
                     // Zapis w drukarce (^JUS), więc działa też z innych kolektorów i po wyłączeniu drukarki.
@@ -248,9 +253,24 @@ namespace Intermanage.Collector
                 link.Send(Encoding.UTF8.GetBytes(zpl));
                 // Odpowiedź przychodzi dopiero po przyjęciu etykiety.
                 link.GetVar("device.friendly_name");
-                Log.Write("Cenówka " + label.Itm8 + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
+                Log.Write("Cenówka " + label.Ean + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
                 return "Wydrukowano cenówkę na: " + printer.Name + " (" + dpi + " dpi).";
             }
+        }
+
+        /// <summary>Domyślne położenie cenówki w mm: ustawione na QLn w sklepie (3 mm w lewo i 3 mm w górę).</summary>
+        public const decimal DefaultLeftMm = 3m;
+        public const decimal DefaultUpMm = 3m;
+
+        /// <summary>
+        /// Ustawia domyślne położenie (zapis w drukarce przy najbliższym wydruku). Przy obróconej cenówce (^POI)
+        /// ujemne ^LS przesuwa ją w lewo, a dodatnie ^LT w górę.
+        /// </summary>
+        public static void DefaultOffsets(Printer printer)
+        {
+            printer.Shift = -(int)decimal.Round(DefaultLeftMm * printer.Dpi / 25.4m, 0);
+            printer.Top = (int)decimal.Round(DefaultUpMm * printer.Dpi / 25.4m, 0);
+            printer.OffsetsChanged = true;
         }
 
         /// <summary>Przesunięcie wydruku i rozdzielczość z drukarki (zpl.left_position, zpl.label_top).</summary>
@@ -270,6 +290,11 @@ namespace Intermanage.Collector
                 printer.Top = int.Parse(link.GetVar("zpl.label_top"));
                 printer.OffsetsRead = true;
                 printer.OffsetsChanged = false;
+                // Drukarka bez ustawionego położenia dostaje domyślne; zapisze się w niej przy najbliższym wydruku.
+                if (printer.Shift == 0 && printer.Top == 0)
+                {
+                    DefaultOffsets(printer);
+                }
             }
             catch (FormatException)
             {
