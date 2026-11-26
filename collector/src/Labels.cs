@@ -28,8 +28,26 @@ namespace Intermanage.Collector
         /// <summary>Czy odpowiedź ^HW ma plik czcionki.</summary>
         public static bool Listed(string directory)
         {
-            return directory.ToUpper().IndexOf("IMCENA.TTF") >= 0;
+            // Sama nazwa, a nie jej początek: 1.8.3 mógł zostawić plik pod inną nazwą (np. IMCENA.TTF.TTF), a 1.8.4 brał
+            // go za dobry i nie wysyłał czcionki jeszcze raz.
+            string text = directory.ToUpper();
+            int at = text.IndexOf("IMCENA.TTF");
+            while (at >= 0)
+            {
+                int after = at + "IMCENA.TTF".Length;
+                if (after >= text.Length || text[after] != '.')
+                {
+                    return true;
+                }
+                at = text.IndexOf("IMCENA.TTF", after);
+            }
+            return false;
         }
+
+        /// <summary>Usunięcie wszystkich plików czcionki ceny w drukarce (też pod złą nazwą z 1.8.3).</summary>
+        public const string Delete = "^XA^IDE:IMCENA*.*^XZ";
+        /// <summary>Wszystkie pliki w pamięci E: drukarki (test ceny).</summary>
+        public const string AllFiles = "^XA^HWE:*.*^XZ";
 
         /// <summary>Szerokości znaków jako część wysokości czcionki (hmtx / unitsPerEm 2048).</summary>
         public const decimal Digit = 0.6958m;
@@ -213,6 +231,17 @@ namespace Intermanage.Collector
         /// <summary>Pole na treść przy 203 dpi: (51,5 − 2 × 2) × 8 i (37,5 − 2 × 2) × 8.</summary>
         private const int Width = 380;
 
+        /// <summary>Własna czcionka ceny; wyłączona od 1.8.5 (puste cenówki w 1.8.3 i 1.8.4), cena jak w 1.8.2.</summary>
+        public const bool UseOwnFont = false;
+
+        /// <summary>
+        /// Cena czcionką 0 jak w 1.8.2 (^FT, złote od lewej, podwójny druk dla grubości), z większym odstępem groszy:
+        /// przy 0,6 szerokości cyfry kropka chowała się pod jedną cyfrą (5.99), a dwie cyfry stały dobrze, więc dochodzi
+        /// stały odstęp zamiast większej szerokości cyfry.
+        /// </summary>
+        private const decimal Font0Advance = 0.6m;
+        private const int Font0CentsGap = 14;
+
         /// <summary>Linia dołu ceny (złote i grosze stoją na niej razem).</summary>
         private const int PriceBase = 190;
         /// <summary>
@@ -236,13 +265,35 @@ namespace Intermanage.Collector
         private const int Font0WholeWidth = 96;
         private const int Font0CentsHeight = 96;
         private const int Font0CentsWidth = 60;
-        private const decimal Font0Digit = 0.66m;
-        private const decimal Font0Dot = 0.3m;
 
         /// <summary>
         /// Cenówka w ZPL. Przesunięcia wydruku (^LS, ^LT) nie ma w cenówce: trzyma je drukarka (Menu, Drukarka), bo
         /// zależą od drukarki i rolki, a nie od kolektora.
         /// </summary>
+        /// <summary>
+        /// Test ceny (od 1.8.6, ekran drukarki, klawisz 9): pięć razy 5.99 różnymi sposobami, każdy z numerem po lewej.
+        /// Które numery się wydrukowały, mówi, co nie działa: 1 czcionka drukarki (jak cenówka), 2 czcionka drukarki
+        /// wyrównana do prawej (^FT z ^FB), 3 własna czcionka (^A@), 4 własna wyrównana do prawej, 5 własna przez ^CW.
+        /// </summary>
+        public static string PriceTest(int dpi)
+        {
+            Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi, MarginMm, MarginMm);
+            StringBuilder s = z.Text;
+            s.Append("^XA^CI28^POI^MMT^LH0,0");
+            s.Append("^PW").Append(z.Mm(WidthMm)).Append("^LL").Append(z.Mm(HeightMm));
+            s.Append("^CWZ,").Append(LabelFont.File);
+            string[] names = { "1 drukarki", "2 drukarki ^FB", "3 IMCENA", "4 IMCENA ^FB", "5 IMCENA ^CW" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int y = 46 + i * 52;
+                z.Block(0, y - 26, 140, 1, 20, 16, 'L', names[i]);
+                string font = i < 2 ? "0" : i < 4 ? "@" : "Z";
+                z.TestField(150, y, font, 44, 30, i == 1 || i == 3 ? 200 : 0, "5.99 zł");
+            }
+            s.Append("^PQ1^XZ");
+            return s.ToString();
+        }
+
         public static string Build(PriceLabel label, int dpi)
         {
             return Build(label, dpi, true);
@@ -266,27 +317,21 @@ namespace Intermanage.Collector
             int dot = money.IndexOf('.');
             string whole = money.Substring(0, dot);
             string cents = money.Substring(dot);
-            int wholeHeight = ownFont ? WholeHeight : Font0WholeHeight;
-            int centsHeight = ownFont ? CentsHeight : Font0CentsHeight;
-            int centsWidth = ownFont ? CentsWidth : Font0CentsWidth;
-            decimal digit = ownFont ? LabelFont.Digit : Font0Digit;
-            decimal dotWidth = ownFont ? LabelFont.Dot : Font0Dot;
-            // Od czterech cyfr (1000 zł) węższe złote, żeby grosze i „zł” zmieściły się na etykiecie.
-            int wholeWidth = ownFont ? WholeWidth : Font0WholeWidth;
-            if (whole.Length >= 4)
+            if (!ownFont)
             {
-                wholeWidth = wholeWidth * 3 / 4;
+                int wholeWidth0 = whole.Length >= 4 ? Font0WholeWidth * 3 / 4 : Font0WholeWidth;
+                int x0 = 0;
+                z.Bold(x0, PriceBase, Font0WholeHeight, wholeWidth0, whole);
+                x0 += (int)(whole.Length * wholeWidth0 * Font0Advance) + Font0CentsGap;
+                z.Bold(x0, PriceBase, Font0CentsHeight, Font0CentsWidth, cents);
+                x0 += (int)((cents.Length - 0.5m) * Font0CentsWidth * Font0Advance) + 4;
+                // „zł” małe, równo z górą groszy.
+                z.Bold(x0, PriceBase - Font0CentsHeight * 7 / 10 + 26, 36, 30, "zł");
             }
-            // Pole złotych o 8 punktów szersze niż napis: gdyby drukarka skalowała szerokość inaczej, napis i tak mieści się
-            // w jednym wierszu pola (za szeroki ^FB zawija albo nadpisuje), a koniec zostaje przed kropką.
-            int x = Advance(whole.Length * digit, wholeWidth) + 8;
-            z.Price(ownFont, 0, PriceBase, x, 'R', wholeHeight, wholeWidth, whole);
-            x += PriceGap;
-            z.Price(ownFont, x, PriceBase, 0, 'L', centsHeight, centsWidth, cents);
-            x += Advance(dotWidth + (cents.Length - 1) * digit, centsWidth) + PriceGap;
-            // „zł” małe, górą równo z górą groszy.
-            int unitBase = PriceBase - (int)(LabelFont.DigitHeight * (centsHeight - UnitHeight));
-            z.Price(ownFont, x, unitBase, 0, 'L', UnitHeight, UnitWidth, "zł");
+            else
+            {
+                OwnFontPrice(z, whole, cents);
+            }
 
             z.Block(8, 198, 200, 1, 20, 16, 'L', label.Ean);
             z.Block(200, 196, Width - 200, 1, 16, 14, 'R', label.SaleUnit);
@@ -306,6 +351,24 @@ namespace Intermanage.Collector
             z.Block(8, 258, 200, 1, 16, 14, 'L', label.PrintedOn.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture));
             s.Append("^PQ1^XZ");
             return s.ToString();
+        }
+
+        /// <summary>
+        /// Cena własną czcionką (LabelFont), złote wyrównane do prawej w polu kończącym się przed kropką (^FT z ^FB).
+        /// Nieużywana od 1.8.5 (UseOwnFont): w 1.8.3 i 1.8.4 cenówki wychodziły bez ceny.
+        /// </summary>
+        private static void OwnFontPrice(Zpl z, string whole, string cents)
+        {
+            // Od czterech cyfr (1000 zł) węższe złote, żeby grosze i „zł” zmieściły się na etykiecie.
+            int wholeWidth = whole.Length >= 4 ? WholeWidth * 3 / 4 : WholeWidth;
+            int x = Advance(whole.Length * LabelFont.Digit, wholeWidth) + 8;
+            z.Price(true, 0, PriceBase, x, 'R', WholeHeight, wholeWidth, whole);
+            x += PriceGap;
+            z.Price(true, x, PriceBase, 0, 'L', CentsHeight, CentsWidth, cents);
+            x += Advance(LabelFont.Dot + (cents.Length - 1) * LabelFont.Digit, CentsWidth) + PriceGap;
+            // „zł” małe, górą równo z górą groszy.
+            int unitBase = PriceBase - (int)(LabelFont.DigitHeight * (CentsHeight - UnitHeight));
+            z.Price(true, x, unitBase, 0, 'L', UnitHeight, UnitWidth, "zł");
         }
 
         /// <summary>Szerokość napisu w punktach: suma szerokości znaków (część em) razy szerokość czcionki.</summary>
@@ -362,6 +425,31 @@ namespace Intermanage.Collector
                 Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
                     .Append("^A0N,").Append(D(height)).Append(',').Append(D(fontWidth))
                     .Append("^FD").Append(Clean(text)).Append("^FS");
+            }
+
+            /// <summary>
+            /// Pole testu ceny: czcionka 0, @ (plik LabelFont) albo Z (^CW), z box &gt; 0 wyrównane do prawej w polu.
+            /// </summary>
+            public void TestField(int x, int y, string font, int height, int fontWidth, int box, string text)
+            {
+                Text.Append("^FT").Append(left + D(x)).Append(',').Append(top + D(y))
+                    .Append("^A").Append(font).Append("N,").Append(D(height)).Append(',').Append(D(fontWidth));
+                if (font == "@")
+                {
+                    Text.Append(',').Append(LabelFont.File);
+                }
+                if (box > 0)
+                {
+                    Text.Append("^FB").Append(D(box)).Append(",1,0,R,0");
+                }
+                Text.Append("^FD").Append(Clean(text)).Append("^FS");
+            }
+
+            /// <summary>Napis na linii dołu wydrukowany dwa razy, drugi o 2 punkty w prawo: grubsze kreski.</summary>
+            public void Bold(int x, int y, int height, int fontWidth, string text)
+            {
+                Baseline(x, y, height, fontWidth, text);
+                Baseline(x + 2, y, height, fontWidth, text);
             }
 
             /// <summary>

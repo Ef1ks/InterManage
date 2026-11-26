@@ -305,7 +305,7 @@ namespace Intermanage.Collector
                     + ShiftText(-printer.Top, printer.Dpi, "w górę", "w dół");
             return "\n\n" + where
                 + "\n4 / 6: w lewo / w prawo, 8 / 2: w górę / w dół (o 0,5 mm), 5: domyślne (3 mm w lewo i w górę)"
-                + "\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.";
+                + "\nEnter: cenówka testowa, 0: kalibracja, 9: test ceny, Esc: lista drukarek.";
         }
 
         private static string ShiftText(int dots, int dpi, string minus, string plus)
@@ -442,6 +442,59 @@ namespace Intermanage.Collector
             }
         }
 
+        /// <summary>Test ceny (klawisz 9): czcionka ceny od nowa i etykieta z pięcioma sposobami druku ceny.</summary>
+        private void StartPriceTest(Printer printer)
+        {
+            if (printing || checkingPrinter)
+            {
+                return;
+            }
+            printing = true;
+            printedOn = printer;
+            message.Show("Test ceny", printer.Name + "\n\nWysyłam czcionkę ceny i drukuję etykietę testową.", false);
+            ShowView(message);
+            Thread thread = new Thread(new ThreadStart(RunPriceTest));
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void RunPriceTest()
+        {
+            try
+            {
+                printerResult = Printers.PriceTest(printedOn);
+                printerFailed = false;
+            }
+            catch (BluetoothException error)
+            {
+                printerResult = error.Message;
+                printerFailed = true;
+            }
+            catch (Exception error)
+            {
+                Log.Write("Test ceny " + BluetoothLink.Bar(printedOn.Mac) + ": " + error);
+                printerResult = "Nie udało się: " + error.Message;
+                printerFailed = true;
+            }
+            OnUi(new EventHandler(OnPriceTested));
+        }
+
+        private void OnPriceTested(object sender, EventArgs e)
+        {
+            printing = false;
+            checkedPrinter = printedOn;
+            if (printerFailed)
+            {
+                Native.ErrorBeep();
+            }
+            message.Show(printerFailed ? "Test ceny nieudany" : "Test ceny", printerResult, printerFailed);
+            printerFailed = false;
+            if (mode == Mode.Printer)
+            {
+                ShowView(message);
+            }
+        }
+
         private void OnSyncPrinters(object sender, EventArgs e)
         {
             OnUi(new EventHandler(OnPrintersChanged));
@@ -494,6 +547,11 @@ namespace Intermanage.Collector
             {
                 choosingCalibration = false;
                 StartCalibrate(checkedPrinter, e.KeyChar == '2');
+            }
+            else if (!choosingCalibration && e.KeyChar == '9' && view == message && checkedPrinter != null
+                && Settings.PrinterMac == checkedPrinter.Mac)
+            {
+                StartPriceTest(checkedPrinter);
             }
             else if (!choosingCalibration && "24568".IndexOf(e.KeyChar) >= 0 && view == message
                 && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)

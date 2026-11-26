@@ -262,11 +262,13 @@ namespace Intermanage.Collector
                 {
                     dpi = 203;
                 }
-                if (!printer.FontSent)
+                // Własna czcionka ceny (LabelFont) wyłączona od 1.8.5: 1.8.3 i 1.8.4 drukowały cenówki bez ceny, a przyczyny
+                // nie znamy (wysyłanie ~DY, ^A@ albo ^FT z ^FB). Do włączenia po sprawdzeniu na drukarce.
+                if (LabelZpl.UseOwnFont && !printer.FontSent)
                 {
                     PrepareFont(link, printer);
                 }
-                string zpl = LabelZpl.Build(label, dpi, printer.FontReady);
+                string zpl = LabelZpl.Build(label, dpi, LabelZpl.UseOwnFont && printer.FontReady);
                 link.Send(Encoding.UTF8.GetBytes(zpl));
                 // Odpowiedź przychodzi dopiero po przyjęciu etykiety.
                 link.GetVar("device.friendly_name");
@@ -411,6 +413,60 @@ namespace Intermanage.Collector
         /// znacznik na spodzie rolki (czujnik znacznika, ^MNM). Początek wydruku bez przesunięcia, odrywanie, a etykiety
         /// drukarka szuka najwyżej na 80 mm (^ML), żeby przy złym czujniku nie przewinęła pół rolki.
         /// </summary>
+        /// <summary>
+        /// Test ceny (od 1.8.6): pliki w pamięci drukarki, usunięcie starych plików czcionki ceny, wysłanie jej od nowa,
+        /// pliki jeszcze raz i etykieta z pięcioma sposobami druku ceny (LabelZpl.PriceTest). Zwraca opis do ekranu.
+        /// </summary>
+        public static string PriceTest(Printer printer)
+        {
+            using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
+            {
+                string before = link.Query(LabelFont.AllFiles, "free");
+                link.Send(LabelFont.Delete);
+                link.GetVar("device.friendly_name");
+                link.Send(LabelFont.Download());
+                link.GetVar("device.friendly_name");
+                string after = link.Query(LabelFont.AllFiles, "free");
+                printer.FontReady = LabelFont.Listed(after);
+                printer.FontSent = true;
+                int dpi;
+                try
+                {
+                    dpi = int.Parse(link.GetVar("head.resolution.in_dpi"));
+                }
+                catch (FormatException)
+                {
+                    dpi = 203;
+                }
+                link.Send(Encoding.UTF8.GetBytes(LabelZpl.PriceTest(dpi)));
+                link.GetVar("device.friendly_name");
+                Log.Write("Test ceny na " + BluetoothLink.Bar(printer.Mac) + ". Pliki przed: " + OneLine(before)
+                    + " Po wysłaniu: " + OneLine(after));
+                return "Przed: " + Files(before) + "\nPo wysłaniu: " + Files(after)
+                    + "\n\nNa etykiecie: które numery mają cenę 5.99? Zapisano też w dzienniku.";
+            }
+        }
+
+        private static string OneLine(string text)
+        {
+            return text.Replace((char)13, (char)32).Replace((char)10, (char)32).Trim();
+        }
+
+        /// <summary>Same pliki z odpowiedzi ^HW (wiersze z „E:”), krótko na ekran.</summary>
+        private static string Files(string listing)
+        {
+            StringBuilder files = new StringBuilder();
+            foreach (string line in listing.Replace((char)13, (char)10).Split((char)10))
+            {
+                string text = line.Trim();
+                if (text.ToUpper().IndexOf("E:") >= 0 && text.IndexOf("DIR") < 0)
+                {
+                    files.Append(files.Length > 0 ? ", " : "").Append(text.TrimStart('*', ' '));
+                }
+            }
+            return files.Length == 0 ? (listing.Trim().Length == 0 ? "brak odpowiedzi" : "brak plików") : files.ToString();
+        }
+
         public static string Calibrate(Printer printer, bool blackMark)
         {
             using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
