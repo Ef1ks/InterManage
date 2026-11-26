@@ -138,6 +138,7 @@ namespace Intermanage.Collector
             menu.MenuItems.Add(install);
             AddMenu("Drukuj cenówkę", new EventHandler(OnPrintShown));
             AddMenu("Drukarka", new EventHandler(OnPrinterMenu));
+            AddMenu("Kalibruj drukarkę", new EventHandler(OnCalibrateMenu));
             AddMenu("Stan sieci", new EventHandler(OnNetwork));
             AddMenu("O programie", new EventHandler(OnAbout));
             AddMenu("Zamknij program", new EventHandler(OnCloseProgram));

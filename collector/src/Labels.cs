@@ -142,7 +142,7 @@ namespace Intermanage.Collector
         {
             Zpl z = new Zpl(dpi <= 0 ? BaseDpi : dpi);
             StringBuilder s = z.Text;
-            s.Append("^XA^CI28^MMT^LS0^LT0");
+            s.Append("^XA^CI28^MNY^MMT^LS0^LT0");
             s.Append("^PW").Append(z.Mm(WidthMm)).Append("^LL").Append(z.Mm(HeightMm));
             s.Append("^LH").Append(z.Mm(MarginMm)).Append(',').Append(z.Mm(MarginMm));
 

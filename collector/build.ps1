@@ -23,7 +23,7 @@ $dist = Join-Path $root 'dist'
 $work = Join-Path $root 'obj'
 
 # Wersja programu: wyzsza niz na kolektorach = kolektory pobiora ja po wdrozeniu. Zmiana w src = nowa wersja.
-$version = '1.6.0'
+$version = '1.6.1'
 
 if ($TestVersion) {
     $version = $TestVersion

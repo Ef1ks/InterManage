@@ -166,7 +166,7 @@ namespace Intermanage.Collector
                 Settings.ChoosePrinter(printer.Mac, printer.Name);
                 message.Show("Wybrana drukarka: " + printer.Name, printerResult
                     + (printer.Unlisted ? "\n\nDrukarki nie ma na liście sklepu: dodaj ją w Intermanage." : "")
-                    + "\n\nEnter: cenówka testowa, Esc: lista drukarek.", false);
+                    + "\n\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.", false);
             }
             if (mode == Mode.Printer)
             {
@@ -275,7 +275,78 @@ namespace Intermanage.Collector
                 Native.ErrorBeep();
             }
             message.Show(printerFailed ? "Nie wydrukowano" : "Cenówka testowa", printerResult
-                + "\n\nEnter: wydrukuj jeszcze raz, Esc: lista drukarek.", printerFailed);
+                + "\n\nEnter: wydrukuj jeszcze raz, 0: kalibracja, Esc: lista drukarek.", printerFailed);
+            printerFailed = false;
+            if (mode == Mode.Printer)
+            {
+                ShowView(message);
+            }
+        }
+
+        // ---- kalibracja ----
+
+        private void OnCalibrateMenu(object sender, EventArgs e)
+        {
+            Printer printer = Printers.Chosen;
+            if (printer == null || mode == Mode.Pair || Entering || view == ask)
+            {
+                MessageBox.Show("Najpierw wybierz drukarkę: Menu, Drukarka.", "Kalibracja");
+                FocusInput();
+                return;
+            }
+            input.Text = "";
+            searched = "";
+            mode = Mode.Printer;
+            StartCalibrate(printer);
+        }
+
+        private void StartCalibrate(Printer printer)
+        {
+            if (printing || checkingPrinter)
+            {
+                return;
+            }
+            printing = true;
+            printedOn = printer;
+            message.Show("Kalibruję drukarkę", printer.Name + "\n\nDrukarka przesunie kilka pustych etykiet, "
+                + "żeby zmierzyć przerwy między nimi.", false);
+            ShowView(message);
+            Thread thread = new Thread(new ThreadStart(RunCalibrate));
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void RunCalibrate()
+        {
+            try
+            {
+                printerResult = Printers.Calibrate(printedOn);
+                printerFailed = false;
+            }
+            catch (BluetoothException error)
+            {
+                printerResult = error.Message;
+                printerFailed = true;
+            }
+            catch (Exception error)
+            {
+                Log.Write("Kalibracja " + BluetoothLink.Bar(printedOn.Mac) + ": " + error);
+                printerResult = "Nie udało się skalibrować: " + error.Message;
+                printerFailed = true;
+            }
+            OnUi(new EventHandler(OnCalibrated));
+        }
+
+        private void OnCalibrated(object sender, EventArgs e)
+        {
+            printing = false;
+            checkedPrinter = printedOn;
+            if (printerFailed)
+            {
+                Native.ErrorBeep();
+            }
+            message.Show(printerFailed ? "Nie skalibrowano" : "Skalibrowano", printerResult
+                + "\n\nEnter: cenówka testowa, 0: kalibracja, Esc: lista drukarek.", printerFailed);
             printerFailed = false;
             if (mode == Mode.Printer)
             {
@@ -322,6 +393,11 @@ namespace Intermanage.Collector
             else if (enter && printerFailed && checkedPrinter != null && view == message)
             {
                 CheckPrinter(checkedPrinter);
+            }
+            else if (e.KeyChar == '0' && view == message && checkedPrinter != null
+                && Settings.PrinterMac == checkedPrinter.Mac)
+            {
+                StartCalibrate(checkedPrinter);
             }
             else if (enter && view == message && checkedPrinter != null && Settings.PrinterMac == checkedPrinter.Mac)
             {

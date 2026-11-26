@@ -189,8 +189,10 @@ namespace Intermanage.Collector
                 }
                 if (head.Length > 0)
                 {
-                    text.Append("Pokrywa: ").Append(head == "ok" ? "zamknięta" : head == "open" ? "OTWARTA" : head);
+                    text.Append("Pokrywa: ").Append(head == "ok" ? "zamknięta" : head == "open" ? "OTWARTA" : head)
+                        .Append('\n');
                 }
+                text.Append(MediaReport(link));
                 return text.ToString().TrimEnd('\n');
             }
         }
@@ -228,6 +230,66 @@ namespace Intermanage.Collector
                 link.GetVar("device.friendly_name");
                 Log.Write("Cenówka " + label.Itm8 + " na " + BluetoothLink.Bar(printer.Mac) + ", " + dpi + " dpi");
                 return "Wydrukowano cenówkę na: " + printer.Name + " (" + dpi + " dpi).";
+            }
+        }
+
+        /// <summary>
+        /// Ustawienia papieru, od których zależy, gdzie drukarka zaczyna i kończy etykietę: rodzaj papieru, czujnik,
+        /// długość etykiety i przesunięcie początku (w punktach, 8 na mm przy 203 dpi).
+        /// </summary>
+        private static string MediaReport(BluetoothLink link)
+        {
+            string type = link.GetVar("ezpl.media_type");
+            string sense = link.GetVar("media.sense_mode");
+            string length = link.GetVar("zpl.label_length");
+            string top = link.GetVar("zpl.label_top");
+            string mode = link.GetVar("media.printmode");
+            Log.Write("Papier: typ " + type + ", czujnik " + sense + ", długość " + length + ", początek " + top
+                + ", tryb " + mode);
+            StringBuilder text = new StringBuilder();
+            if (type.Length > 0)
+            {
+                text.Append("Papier: ").Append(type == "web" ? "etykiety z przerwą" : type == "continuous" ? "CIĄGŁY"
+                    : type == "mark" ? "ZE ZNACZNIKIEM" : type).Append('\n');
+            }
+            if (sense.Length > 0)
+            {
+                text.Append("Czujnik: ").Append(sense).Append('\n');
+            }
+            if (length.Length > 0)
+            {
+                text.Append("Długość etykiety: ").Append(length).Append(" pkt\n");
+            }
+            if (top.Length > 0 && top != "0" && top != "000")
+            {
+                text.Append("Przesunięcie początku: ").Append(top).Append(" pkt\n");
+            }
+            return text.ToString();
+        }
+
+        /// <summary>
+        /// Ustawia drukarkę pod etykiety z przerwą i mierzy je (~JC): rodzaj papieru, czujnik przerwy, początek wydruku
+        /// bez przesunięcia, odrywanie. Drukarka przesuwa przy tym kilka etykiet. Zwraca nową długość etykiety.
+        /// </summary>
+        public static string Calibrate(Printer printer)
+        {
+            using (BluetoothLink link = BluetoothLink.Connect(printer.Mac, printer.Pin))
+            {
+                if (link.GetVar("head.latch") == "open")
+                {
+                    throw new BluetoothException("Pokrywa drukarki jest otwarta.", 0);
+                }
+                link.Send("! U1 setvar \"ezpl.media_type\" \"web\"\r\n");
+                link.Send("! U1 setvar \"media.sense_mode\" \"gap\"\r\n");
+                link.Send("! U1 setvar \"zpl.label_top\" \"0\"\r\n");
+                link.Send("! U1 setvar \"media.printmode\" \"tear off\"\r\n");
+                link.Send("^XA^MNY^MMT^LT0^XZ~JC");
+                // Pomiar trwa kilka sekund; odpowiedź przychodzi po nim.
+                System.Threading.Thread.Sleep(6000);
+                string length = link.GetVar("zpl.label_length");
+                Log.Write("Kalibracja " + BluetoothLink.Bar(printer.Mac) + ": długość " + length);
+                return "Drukarka zmierzyła etykiety" + (length.Length > 0 ? ": długość " + length + " pkt" : "")
+                    + ".\nEtykieta 38 mm to ok. 300 pkt przy 203 dpi.\n" + MediaReport(link).TrimEnd('\n');
             }
         }
 
