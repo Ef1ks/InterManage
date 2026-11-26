@@ -124,7 +124,10 @@ export function CollectorSettings({ storeId }: { storeId: string }) {
         <div className="grid max-w-prose min-w-0 flex-1 basis-64 gap-1">
           <h3 className="font-medium">Instalator</h3>
           <p className="text-sm text-muted-foreground">
-            Pobierz na komputerze, skopiuj na kolektor i uruchom. Kolejne wersje kolektor pobiera sam na podstawce.
+            Na kolektorze otwórz przeglądarkę, wpisz adres{' '}
+            <span className="font-mono font-medium text-foreground">http://intermanage.pl/k</span> i uruchom pobrany
+            plik. Bez sieci na kolektorze: pobierz instalator na komputerze i skopiuj go na kolektor. Kolejne wersje
+            kolektor pobiera sam na podstawce.
           </p>
         </div>
         <a href="/api/collector/setup" download className={buttonVariants({ variant: 'outline' })}>
