@@ -46,11 +46,28 @@ public class PeriodSalesController {
         return service.articles(storeId, request);
     }
 
+    /** EAN-y wszystkich artykułów raportu (te same filtry) do pliku .lst, od największej sprzedaży. */
+    @GetMapping("/eans")
+    public List<String> eans(@PathVariable UUID storeId, @ModelAttribute PeriodSalesRequest request) {
+        return service.eans(storeId, request);
+    }
+
     /** Wydruk PDF: te same filtry, {@code depth} = REGION, FAMILY (domyślnie), SUBFAMILY albo ARTICLE. */
     @GetMapping("/pdf")
     public ResponseEntity<byte[]> pdf(@PathVariable UUID storeId, @ModelAttribute PeriodSalesRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         ExportFile file = service.pdf(storeId, request, principal.getId());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.content());
+    }
+
+    /** Excel z tymi samymi filtrami i poziomem ({@code depth}) co wydruk. */
+    @GetMapping("/xlsx")
+    public ResponseEntity<byte[]> xlsx(@PathVariable UUID storeId, @ModelAttribute PeriodSalesRequest request) {
+        ExportFile file = service.xlsx(storeId, request);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(file.fileName(), StandardCharsets.UTF_8).build().toString())

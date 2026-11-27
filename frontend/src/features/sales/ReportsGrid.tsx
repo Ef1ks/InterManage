@@ -14,6 +14,7 @@ import {
   type LucideIcon,
   PackageOpenIcon,
   PackageSearchIcon,
+  ListChecksIcon,
   PackageXIcon,
   PercentIcon,
   ScaleIcon,
@@ -223,6 +224,14 @@ const REPORT_GROUPS: { title: string; reports: Report[] }[] = [
         description:
           'Towar ze stanem na minusie bez dostawy od 14 dni (albo w ogóle, albo z dostawą w okresie): sprzedaż pod złym EAN-em i pomieszane stany.',
         icon: CircleMinusIcon,
+      },
+      {
+        path: salesPaths.articleList,
+        title: 'Lista artykułów',
+        description:
+          'Dowolna lista z kartoteki: filtry po każdym polu, podział na rejony, rodziny i podrodziny, wybór kolumn. Wydruk i Excel.',
+        icon: ListChecksIcon,
+        fromDocuments: 'Z kartoteki i przyjęć PZ',
       },
     ],
   },

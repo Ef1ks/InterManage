@@ -2713,6 +2713,17 @@ export type SupplierSalePrice = {
   createdAt: string | null
 }
 
+/** Stała marża dostawcy: domyślna i wyjątki na kodach nomenklatury (rejon, rodzina, podrodzina). */
+export type SupplierMargin = {
+  supplierId: string
+  supplierName: string
+  supplierCode: string | null
+  defaultPercent: number | null
+  rules: { code: string; name: string | null; marginPercent: number }[]
+  updatedBy: string | null
+  updatedAt: string | null
+}
+
 export type NomenclatureMarginImport = { changedCount: number; withMarginCount: number }
 
 /** Status wyjaśniania przyjęcia z ceną wyższą niż baza; brak wpisu = do wyjaśnienia. */
@@ -5734,4 +5745,75 @@ export type AgentActivity = {
   update: { computer: string; startedAt: string } | null
   /** Pliki nowych artykułów czekające na makro (jeszcze bez zlecenia, np. trwa inne makro); `null` = nic nie czeka. */
   waitingFiles: { count: number; since: string; requestedBy: string; fileNames: string[] } | null
+}
+
+/** Grupa listy artykułów: {@code level} 1 rejon, 2 rodzina, 3 podrodzina; pusty kod = bez nomenklatury. */
+export type ArticleListGroup = {
+  code: string
+  level: 1 | 2 | 3
+  name: string | null
+  count: number
+  stockValue: number
+  stockSaleValue: number
+}
+
+export type ArticleListItem = {
+  itm8: string
+  ean: string | null
+  name: string | null
+  brand: string | null
+  catalogSupplier: string | null
+  regionCode: string | null
+  regionName: string | null
+  familyCode: string | null
+  familyName: string | null
+  subfamilyCode: string | null
+  subfamilyName: string | null
+  stock: number | null
+  rotation: number | null
+  purchasePrice: number | null
+  salePrice: number | null
+  vatRate: number | null
+  marginPercent: number | null
+  stockValue: number | null
+  stockSaleValue: number | null
+  unit: string | null
+  netContent: number | null
+  caseSize: number | null
+  active: boolean
+  depositCode: number | null
+  kind: string | null
+  dlv: number | null
+  cnCode: string | null
+  cadencier: boolean
+  cadencierPrice: number | null
+  promoPrice: number | null
+  promoFrom: string | null
+  promoTo: string | null
+  lastDeliveryDate: string | null
+  lastSupplierCode: string | null
+  lastSupplierName: string | null
+  inLastReport: boolean
+}
+
+export type ArticleListOption = { value: string; label: string; count: number }
+
+/** Lista artykułów po filtrach: {@code items} to podgląd (najwyżej {@code shownLimit}), liczby i grupy z całości. */
+export type ArticleListReport = {
+  storeNumber: string
+  storeName: string
+  stockReportGeneratedAt: string | null
+  itemCount: number
+  stockValue: number
+  stockSaleValue: number
+  shownLimit: number
+  groups: ArticleListGroup[]
+  items: ArticleListItem[]
+  options: {
+    brands: ArticleListOption[]
+    suppliers: ArticleListOption[]
+    units: ArticleListOption[]
+    kinds: ArticleListOption[]
+    vatRates: ArticleListOption[]
+  }
 }

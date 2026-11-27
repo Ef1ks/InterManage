@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
 import { PageHeader } from '@/components/PageHeader'
+import { ArticleListReport } from '@/features/sales/ArticleListReport'
 import { ArticleMarginsReport, CurrentPromotionsReport } from '@/features/sales/ArticleMarginReports'
 import { CounterReport } from '@/features/sales/CounterReport'
 import { GratisReport } from '@/features/sales/GratisReport'
@@ -66,6 +67,7 @@ function StoreReports({ store }: { store: StoreSummary }) {
         <Route path="niesprzedajace-sie" element={<SlowMovingReport storeId={store.id} />} />
         <Route path="braki" element={<StockGapReport storeId={store.id} />} />
         <Route path="brakujacy-asortyment" element={<MissingAssortmentReport storeId={store.id} />} />
+        <Route path="lista-artykulow" element={<ArticleListReport storeId={store.id} />} />
         <Route path="ujemne-stany" element={<NegativeStockReport storeId={store.id} />} />
         <Route path="*" element={<Navigate to={salesPaths.overview} replace />} />
       </Routes>

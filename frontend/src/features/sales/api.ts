@@ -63,6 +63,7 @@ import type {
   LossControlGroup,
   LossControlSettlements,
   SlowMovingReport,
+  ArticleListReport,
   StockGapReport,
   BasketArticleDetails,
   MissingAssortmentCategory,
@@ -970,20 +971,31 @@ export function usePeriodSalesArticles(storeId: string, query: PeriodSalesQuery,
 
 export type PeriodSalesPrint = { query: PeriodSalesQuery; depth: PeriodSalesDepth }
 
-const periodSalesPdfPath = (storeId: string, { query, depth }: PeriodSalesPrint) => {
+const periodSalesFilePath = (storeId: string, kind: 'pdf' | 'xlsx', { query, depth }: PeriodSalesPrint) => {
   const params = periodSalesParams(query)
   params.set('depth', depth)
-  return `${reportsPath(storeId)}/period-sales/pdf?${params}`
+  return `${reportsPath(storeId)}/period-sales/${kind}?${params}`
 }
 
 export function usePeriodSalesPdf(storeId: string) {
   return {
     print: useMutation({
-      mutationFn: (print: PeriodSalesPrint) => printFile(periodSalesPdfPath(storeId, print)),
+      mutationFn: (print: PeriodSalesPrint) => printFile(periodSalesFilePath(storeId, 'pdf', print)),
       meta: { invalidates: false },
     }),
     download: useMutation({
-      mutationFn: (print: PeriodSalesPrint) => downloadFile(periodSalesPdfPath(storeId, print), 'sprzedaz.pdf'),
+      mutationFn: (print: PeriodSalesPrint) => downloadFile(periodSalesFilePath(storeId, 'pdf', print), 'sprzedaz.pdf'),
+      meta: { invalidates: false },
+    }),
+    excel: useMutation({
+      mutationFn: (print: PeriodSalesPrint) =>
+        downloadFile(periodSalesFilePath(storeId, 'xlsx', print), 'sprzedaz.xlsx'),
+      meta: { invalidates: false },
+    }),
+    /** EAN-y wszystkich artykułów raportu (te same filtry) do pliku .lst. */
+    eans: useMutation({
+      mutationFn: (query: PeriodSalesQuery) =>
+        api<string[]>(`${reportsPath(storeId)}/period-sales/eans?${periodSalesParams(query)}`),
       meta: { invalidates: false },
     }),
   }
@@ -1461,6 +1473,51 @@ export function useDailySalesPdf(storeId: string) {
     }),
     download: useMutation({
       mutationFn: (print: DailySalesPrint) => downloadFile(dailySalesPdfPath(storeId, print), 'sprzedaz-dzienna.pdf'),
+      meta: { invalidates: false },
+    }),
+  }
+}
+
+/** Filtry, grupowanie i kolumny listy artykułów; puste wartości nie trafiają do adresu zapytania. */
+export type ArticleListQuery = Record<string, string | string[] | boolean | null>
+
+function articleListParams(query: ArticleListQuery) {
+  const params = new URLSearchParams()
+  Object.entries(query).forEach(([key, value]) => {
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, item))
+    else if (value != null && value !== '' && value !== false) params.set(key, String(value))
+  })
+  return params
+}
+
+/** Podgląd listy artykułów: liczby i grupy z całości, artykuły do limitu podglądu. Filtry liczy serwer. */
+export function useArticleList(storeId: string, query: ArticleListQuery) {
+  return useQuery({
+    queryKey: [...reportsKey(storeId), 'article-list', query],
+    staleTime: REPORT_STALE_TIME,
+    queryFn: () => api<ArticleListReport>(`${reportsPath(storeId)}/article-list?${articleListParams(query)}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+const articleListFile = (storeId: string, kind: 'pdf' | 'xlsx', query: ArticleListQuery) =>
+  `${reportsPath(storeId)}/article-list/${kind}?${articleListParams(query)}`
+
+/** Wydruk listy artykułów (PDF od razu w oknie drukowania albo zapis pliku) i Excel. */
+export function useArticleListFiles(storeId: string) {
+  return {
+    print: useMutation({
+      mutationFn: (query: ArticleListQuery) => printFile(articleListFile(storeId, 'pdf', query)),
+      meta: { invalidates: false },
+    }),
+    pdf: useMutation({
+      mutationFn: (query: ArticleListQuery) =>
+        downloadFile(articleListFile(storeId, 'pdf', query), 'lista-artykulow.pdf'),
+      meta: { invalidates: false },
+    }),
+    xlsx: useMutation({
+      mutationFn: (query: ArticleListQuery) =>
+        downloadFile(articleListFile(storeId, 'xlsx', query), 'lista-artykulow.xlsx'),
       meta: { invalidates: false },
     }),
   }

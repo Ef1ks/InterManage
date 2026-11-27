@@ -9,6 +9,8 @@ import {
   normalizeBrand,
   normalizeName,
   paddedScaleCode,
+  priceForMargin,
+  purchasePerPiece,
   suggestedPrice,
   withCatalogProduct,
   withMeasure,
@@ -66,11 +68,19 @@ export const COLUMNS: Column[] = [
   },
   { key: 'vat', header: 'VAT', width: 3.5, align: 'right', kind: 'number' },
   { key: 'salePrice', header: 'Cena sprz.', title: 'Cena sprzedaży brutto', width: 6, align: 'right', kind: 'number' },
-  { key: 'margin', header: 'Marża', width: 6.5, align: 'right', kind: 'computed' },
+  {
+    key: 'margin',
+    header: 'Marża',
+    title: 'Marża % od sprzedaży brutto: wpisana ustawia cenę sprzedaży (z zaokrągleniem cen z ustawień)',
+    width: 6.5,
+    align: 'right',
+    kind: 'number',
+  },
   {
     key: 'suggestedPrice',
     header: 'Cena sug.',
-    title: 'Cena sugerowana: cena sprzedaży brutto, przy której artykuł osiąga marżę wymaganą na nomenklaturze',
+    title:
+      'Cena sugerowana: cena sprzedaży brutto, przy której artykuł osiąga marżę wymaganą na nomenklaturze albo stałą marżę dostawcy',
     width: 6,
     align: 'right',
     kind: 'computed',
@@ -253,7 +263,17 @@ export function parseUnit(text: string): SaleUnit | undefined {
 export type CellResult = { row: DataEntryRow; eanChanged?: boolean } | { error: string }
 
 /** Wpisany albo wklejony tekst w komórce; zmiana rodzaju albo wagi przepisuje miarę w nazwie nowego artykułu. */
-export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names: Names): CellResult {
+/**
+ * Wpisany tekst do wiersza. {@code rounding}: przedziały zaokrąglania cen, z którymi marża wpisana w tabeli zamienia
+ * się w cenę sprzedaży.
+ */
+export function applyText(
+  row: DataEntryRow,
+  key: ColumnKey,
+  text: string,
+  names: Names,
+  rounding: PriceRoundingRule[] = [],
+): CellResult {
   const trimmed = text.trim()
   switch (key) {
     case 'ean': {
@@ -333,7 +353,18 @@ export function applyText(row: DataEntryRow, key: ColumnKey, text: string, names
       if (unitNet < 0) return { error: 'Wartość musi mieć ten sam znak co ilość' }
       return { row: { ...row, unitNet } }
     }
-    case 'margin':
+    case 'margin': {
+      // Marża wpisana ręcznie daje cenę sprzedaży z tą marżą, zaokrągloną jak cena sugerowana (więc marża po
+      // zaokrągleniu bywa trochę wyższa od wpisanej).
+      if (trimmed === '') return { row }
+      const margin = parseNumber(trimmed)
+      if (margin === undefined || margin === null) return { error: 'Wpisz marżę w %' }
+      if (purchasePerPiece(row) === null) return { error: 'Najpierw wpisz cenę netto' }
+      if (row.vatPercent === null) return { error: 'Najpierw wpisz VAT' }
+      const salePrice = priceForMargin(row, margin, rounding)
+      if (salePrice === null || salePrice <= 0) return { error: 'Takiej marży nie da się osiągnąć' }
+      return { row: { ...row, salePrice } }
+    }
     case 'suggestedPrice':
     case 'stock':
     case 'rotation':
@@ -387,7 +418,8 @@ export function clearable(key: ColumnKey) {
     key !== 'itm8' &&
     key !== 'deposit' &&
     key !== 'netContent' &&
-    key !== 'value'
+    key !== 'value' &&
+    key !== 'margin'
   )
 }
 

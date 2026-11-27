@@ -25,4 +25,5 @@ export const salesPaths = {
   stockGaps: `${base}/braki`,
   negativeStock: `${base}/ujemne-stany`,
   missingAssortment: `${base}/brakujacy-asortyment`,
+  articleList: `${base}/lista-artykulow`,
 }

@@ -1,5 +1,5 @@
 import { TOOL_ROUTES } from '@/features/tools/categories'
-import type { SupplierContactKind } from '@/lib/types'
+import type { SupplierContactKind, SupplierMargin } from '@/lib/types'
 
 export const supplierPaths = {
   list: TOOL_ROUTES.SUPPLIERS.path,
@@ -33,3 +33,17 @@ const dateFormat = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium' })
 
 export const formatDateTime = (iso: string) => dateTimeFormat.format(new Date(iso))
 export const formatDate = (iso: string) => dateFormat.format(new Date(iso))
+
+/** Krótki opis marży dostawcy, np. „30% · 2 wyjątki”; null bez marży. */
+export function supplierMarginSummary(margin: SupplierMargin | undefined) {
+  if (!margin) return null
+  const parts = [
+    margin.defaultPercent !== null ? `${String(margin.defaultPercent).replace('.', ',')}%` : 'bez domyślnej',
+  ]
+  if (margin.rules.length > 0) {
+    parts.push(
+      `${margin.rules.length} ${margin.rules.length === 1 ? 'wyjątek' : margin.rules.length < 5 ? 'wyjątki' : 'wyjątków'}`,
+    )
+  }
+  return parts.join(' · ')
+}

@@ -67,7 +67,12 @@ class KsefInvoicePdfTests {
 
         assertThat(new String(file, 0, 4, StandardCharsets.US_ASCII)).isEqualTo("%PDF");
         PdfReader pdfReader = new PdfReader(file);
-        String text = new PdfTextExtractor(pdfReader).getTextFromPage(1);
+        PdfTextExtractor extractor = new PdfTextExtractor(pdfReader);
+        StringBuilder all = new StringBuilder();
+        for (int page = 1; page <= pdfReader.getNumberOfPages(); page++) {
+            all.append(extractor.getTextFromPage(page)).append('\n');
+        }
+        String text = all.toString();
         assertThat(text).contains("Faktura VAT", "FV/2/2026", KSEF_NUMBER, "Okręgowa Spółdzielnia Mleczarska",
                 "TRYTOMA Sp. z o.o.", "Intermarché Zielona Góra", "Mleko 3,2% 1 l karton", "333,00 PLN",
                 "Mechanizm podzielonej płatności", "12 3456 7890 1234 5678 9012 3456", "Strona 1 z");
@@ -86,6 +91,19 @@ class KsefInvoicePdfTests {
         assertThat(text).contains("Mleko 3,2% 1 l karton", "333,00 PLN", "WZ/881/2026, WZ/882/2026",
                 "PARTIA L-123");
         assertThat(text).doesNotContain("poz. 000001");
+        // Numery WZ stoją pod numerem dokumentu, przed pozycjami.
+        assertThat(text.indexOf("WZ/881/2026")).isLessThan(text.indexOf("Mleko 3,2% 1 l karton"));
+    }
+
+    @Test
+    void fullVariantHasDeliveryNotesUnderDocumentNumber() throws IOException {
+        byte[] file = pdf.pdf(fixture(), KSEF_NUMBER, "1111111111", Instant.parse("2026-10-19T09:20:00Z"),
+                KsefInvoicePdf.Variant.FULL);
+
+        String text = new PdfTextExtractor(new PdfReader(file)).getTextFromPage(1);
+        assertThat(text.indexOf("WZ/881/2026")).isPositive()
+                .isLessThan(text.indexOf("Okręgowa Spółdzielnia Mleczarska"));
+        assertThat(text.indexOf("WZ/881/2026")).isEqualTo(text.lastIndexOf("WZ/881/2026"));
     }
 
     @Test

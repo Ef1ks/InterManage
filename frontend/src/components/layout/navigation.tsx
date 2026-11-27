@@ -516,5 +516,32 @@ export function locate(groups: NavGroup[], pathname: string): { group: NavGroup;
   return found
 }
 
+/**
+ * Strona aplikacji, do której należy ścieżka (narzędzie, a bez niego kategoria), bez względu na uprawnienia i
+ * wczytanie listy kategorii: po niej okna aplikacji poznają, czy to to samo miejsce. Ścieżka spoza menu daje swój
+ * pierwszy człon.
+ */
+const itemPath = (item: ItemSpec) => ('category' in item ? TOOL_ROUTES[item.category].path : item.path)
+
+export function pageKey(pathname: string): string {
+  if (pathname === '/') return 'dashboard'
+  let found: string | null = null
+  let length = -1
+  const under = (path: string) => pathname === path || pathname.startsWith(`${path}/`)
+  for (const group of GROUPS) {
+    for (const item of group.items) {
+      if (under(itemPath(item)) && itemPath(item).length > length) {
+        found = `item:${itemPath(item)}`
+        length = itemPath(item).length
+      }
+    }
+    if (pathname === group.path && group.path.length > length) {
+      found = `group:${group.key}`
+      length = group.path.length
+    }
+  }
+  return found ?? `path:${pathname.split('/').slice(0, 2).join('/')}`
+}
+
 /** Dokąd prowadzi grupa w menu: na stronę grupy, a przy jednym narzędziu prosto do niego. */
 export const groupTarget = (group: NavGroup) => (group.items.length === 1 ? group.items[0] : group)

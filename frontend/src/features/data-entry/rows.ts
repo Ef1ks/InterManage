@@ -678,6 +678,11 @@ export type Pricing = {
   required: Map<string, number>
   rounding: PriceRoundingRule[]
   supplierPrice: number | null
+  /**
+   * Stała marża dostawcy dokumentu (Dostawcy, Ustawienia sklepu): zastępuje marżę wymaganą na nomenklaturze. Kod
+   * nomenklatury (rejon, rodzina, podrodzina) -> marża, najbardziej szczegółowy wygrywa, bez kodu domyślna.
+   */
+  supplierMargin?: SupplierMarginRules | null
   /** Cena sugerowana wprost z dokumentu (np. cena dla klienta z pliku bazy przy warzywach); ma pierwszeństwo. */
   rowPrice?: (row: DataEntryRow) => number | null
 }
@@ -702,9 +707,30 @@ export function withSupplierPrice(rows: DataEntryRow[], price: number | null) {
   return changed ? next : rows
 }
 
-/** Marża wymagana na nomenklaturze wiersza: podrodzina albo wybrany dopiero rejon / rodzina. */
+/** Stała marża dostawcy: domyślna i wyjątki na kodach nomenklatury. */
+export type SupplierMarginRules = { defaultPercent: number | null; byCode: Map<string, number> }
+
+/** Marża dostawcy dla kodu nomenklatury: podrodzina, rodzina, rejon, potem domyślna dostawcy. */
+export function supplierMarginFor(rules: SupplierMarginRules, code: string | null) {
+  for (const length of [6, 4, 2]) {
+    if (code && code.length >= length) {
+      const margin = rules.byCode.get(code.slice(0, length))
+      if (margin !== undefined) return margin
+    }
+  }
+  return rules.defaultPercent
+}
+
+/**
+ * Marża wymagana wiersza: stała marża dostawcy dokumentu, jeśli ją ma, a inaczej marża wymagana na nomenklaturze
+ * (podrodzina albo wybrany dopiero rejon / rodzina). Kaucje i dostawa nie mają marży dostawcy.
+ */
 export function requiredMargin(row: DataEntryRow, pricing: Pricing) {
   const code = row.subfamilyCode ?? row.nomenclaturePrefix
+  if (pricing.supplierMargin && serviceKind(row) === null) {
+    const margin = supplierMarginFor(pricing.supplierMargin, code ?? null)
+    if (margin !== null) return margin
+  }
   return code ? (pricing.required.get(code) ?? null) : null
 }
 
@@ -734,10 +760,19 @@ export function suggestedPrice(row: DataEntryRow, pricing: Pricing) {
   const cadencier = cadencierPrice(row)
   if (cadencier !== null) return cadencier
   const required = requiredMargin(row, pricing)
+  return required === null ? null : priceForMargin(row, required, pricing.rounding)
+}
+
+/**
+ * Cena brutto, przy której wiersz ma marżę {@code margin} % (od sprzedaży brutto) z ceny zakupu sztuki, w górę do
+ * grosza, potem do końcówki z przedziałów zaokrąglania. Null bez ceny zakupu, VAT-u albo przy marży nie do
+ * osiągnięcia. Też przy marży wpisanej w tabeli.
+ */
+export function priceForMargin(row: DataEntryRow, margin: number, rounding: PriceRoundingRule[]) {
   const purchase = purchasePerPiece(row)
-  if (required === null || purchase === null || row.vatPercent === null) return null
-  const gross = salePriceFor(purchase, row.vatPercent, required)
-  return gross === null ? null : roundPrice(Math.ceil(gross * 100 - 1e-6) / 100, pricing.rounding)
+  if (purchase === null || row.vatPercent === null) return null
+  const gross = salePriceFor(purchase, row.vatPercent, margin)
+  return gross === null ? null : roundPrice(Math.ceil(gross * 100 - 1e-6) / 100, rounding)
 }
 
 /**

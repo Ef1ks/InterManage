@@ -27,6 +27,14 @@ public interface AgentMacroJobRepository extends JpaRepository<AgentMacroJob, UU
                 com.intermanage.backend.agent.entity.AgentMacroStatus.RUNNING)""")
     List<AgentMacroJob> findActiveForUpdate(UUID storeId);
 
+    /** Czy w sklepie trwa makro albo skończyło się po {@code since} (zdarzenia z folderu przychodzą z opóźnieniem). */
+    @Query("""
+            select count(j) > 0 from AgentMacroJob j
+            where j.store.id = :storeId and (j.status in (
+                com.intermanage.backend.agent.entity.AgentMacroStatus.OFFERED,
+                com.intermanage.backend.agent.entity.AgentMacroStatus.RUNNING) or j.finishedAt > :since)""")
+    boolean anyRunningSince(UUID storeId, Instant since);
+
     /** Kolejka sklepu od najstarszego zlecenia, z blokadą (przydział idzie po jednym żądaniu naraz). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

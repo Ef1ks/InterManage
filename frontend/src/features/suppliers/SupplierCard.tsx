@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Controller, useForm } from 'react-hook-form'
-import { GlobeIcon, MailIcon, PencilIcon, PhoneIcon, PlusIcon, StoreIcon, Trash2Icon } from 'lucide-react'
+import { GlobeIcon, MailIcon, PencilIcon, PercentIcon, PhoneIcon, PlusIcon, StoreIcon, Trash2Icon } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 
@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useCan } from '@/features/auth/api'
+import { useSupplierMargins } from '@/features/store-settings/api'
+import { SupplierMarginDialog } from '@/features/suppliers/SupplierMarginDialog'
 import {
   type SupplierContactForm,
   type SupplierDetailsForm,
@@ -177,6 +179,8 @@ function SupplierView({ storeId, supplier }: { storeId: string; supplier: Suppli
               </p>
             )}
           </Card>
+
+          <MarginCard storeId={storeId} supplier={supplier} />
         </div>
 
         <Card className="gap-3 p-5">
@@ -249,6 +253,58 @@ function SupplierView({ storeId, supplier }: { storeId: string; supplier: Suppli
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/**
+ * Stała marża dostawcy (domyślna i wyjątki na nomenklaturze): z niej wprowadzanie danych liczy cenę sugerowaną
+ * artykułów z dokumentów tego dostawcy. Zmienia ją {@code SUPPLIERS:EDIT} albo {@code DATA_ENTRY:EDIT}.
+ */
+function MarginCard({ storeId, supplier }: { storeId: string; supplier: SupplierDetails }) {
+  const canEditSuppliers = useCan('SUPPLIERS', 'EDIT')
+  const canEditDataEntry = useCan('DATA_ENTRY', 'EDIT')
+  const canEdit = canEditSuppliers || canEditDataEntry
+  const { data: margins } = useSupplierMargins(storeId)
+  const margin = margins?.find((item) => item.supplierId === supplier.id)
+  const [open, setOpen] = useState(false)
+  return (
+    <Card className="gap-3 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-medium">Stała marża</h2>
+        {canEdit && (
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <PercentIcon />
+            {margin ? 'Zmień' : 'Ustaw'}
+          </Button>
+        )}
+      </div>
+      {margin ? (
+        <dl className="grid gap-2.5 text-sm">
+          <Detail label="Domyślna">
+            {margin.defaultPercent !== null ? `${String(margin.defaultPercent).replace('.', ',')}%` : null}
+          </Detail>
+          {margin.rules.map((rule) => (
+            <Detail key={rule.code} label={rule.code}>
+              <span className="flex justify-between gap-2">
+                <span className="min-w-0 truncate text-muted-foreground">{rule.name ?? 'nieznana pozycja'}</span>
+                <span className="font-medium tabular-nums">{String(rule.marginPercent).replace('.', ',')}%</span>
+              </span>
+            </Detail>
+          ))}
+        </dl>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Brak. Ceny sugerowane artykułów od tego dostawcy liczą się z marży wymaganej na nomenklaturze.
+        </p>
+      )}
+      <SupplierMarginDialog
+        storeId={storeId}
+        supplier={{ id: supplier.id, name: supplier.name, code: supplier.code }}
+        canEdit={canEdit}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </Card>
   )
 }
 

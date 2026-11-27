@@ -1,11 +1,11 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { CalendarDaysIcon } from 'lucide-react'
 
 import { FieldShell } from '@/components/form/field-shell'
 import { describedBy, fieldControlClass, floatedLabelClass, floatingLabelClass } from '@/components/form/field-styles'
 import { Calendar } from '@/components/ui/calendar'
-import { addDays, formatLongDate, todayIso } from '@/lib/dates'
+import { addDays, formatTypedDate, parseIsoDate, parseTypedDate, todayIso } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 type DateFieldProps = {
@@ -24,10 +24,23 @@ type DateFieldProps = {
   className?: string
 }
 
-/** Pole daty z pływającą etykietą, spójne z {@link TextField}; kliknięcie otwiera kalendarz marki. */
+const weekday = new Intl.DateTimeFormat('pl-PL', { weekday: 'short' })
+
+/**
+ * Pole daty z pływającą etykietą, spójne z {@link TextField}: datę wpisuje się w całym polu (25.10.2026, 2510, 25),
+ * a ikona kalendarza otwiera kalendarz marki. Wpisana data zapisuje się po Enterze albo wyjściu z pola.
+ */
 export function DateField({ label, value, onChange, min, max, error, hint, shortcuts, className }: DateFieldProps) {
   const id = useId()
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [draft, setText] = useState(() => formatTypedDate(value))
+  const [typedError, setTypedError] = useState<string | null>(null)
+  // Bez fokusu pole pokazuje wartość z formularza; zły wpis zostaje w polu, póki ma opis błędu.
+  const text = focused || typedError ? draft : formatTypedDate(value)
+
   const today = todayIso()
   const quickPicks = (
     shortcuts ?? [
@@ -38,29 +51,101 @@ export function DateField({ label, value, onChange, min, max, error, hint, short
   ).filter((pick) => (!min || pick.value >= min) && (!max || pick.value <= max))
 
   const pick = (next: string) => {
+    setTypedError(null)
+    setText(formatTypedDate(next))
     onChange(next)
     setOpen(false)
   }
 
+  /** Sprawdza wpisany tekst; poprawna data trafia do formularza, zła zostaje w polu z opisem. */
+  const commit = () => {
+    const parsed = parseTypedDate(text)
+    if (parsed === null) {
+      setTypedError('Wpisz datę, np. 25.10.2026')
+      return
+    }
+    if (parsed && ((min && parsed < min) || (max && parsed > max))) {
+      setTypedError(
+        min && parsed < min ? `Najwcześniej ${formatTypedDate(min)}` : `Najpóźniej ${formatTypedDate(max ?? '')}`,
+      )
+      return
+    }
+    setTypedError(null)
+    setText(formatTypedDate(parsed))
+    if (parsed !== value) onChange(parsed)
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      commit()
+    } else if (event.key === 'Escape' && !open) {
+      setTypedError(null)
+      setText(formatTypedDate(value))
+    } else if (event.key === 'ArrowDown' && event.altKey) {
+      event.preventDefault()
+      setOpen(true)
+    }
+  }
+
+  const shownError = typedError ?? error
+  const floated = focused || open || text !== ''
+
   return (
-    <FieldShell id={id} error={error} hint={hint} className={className}>
+    <FieldShell id={id} error={shownError ?? undefined} hint={hint} className={className}>
       <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger
-          id={id}
-          aria-labelledby={`${id}-label`}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={describedBy(id, error, hint)}
-          className={cn(
-            fieldControlClass,
-            'flex items-center justify-between gap-2 py-0 pr-3 text-left data-popup-open:border-ring data-popup-open:ring-3 data-popup-open:ring-ring/30',
+        <div ref={anchorRef} className="relative">
+          <input
+            ref={inputRef}
+            id={id}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={text}
+            placeholder={focused ? 'DD.MM.RRRR' : undefined}
+            aria-invalid={shownError ? true : undefined}
+            aria-describedby={describedBy(id, shownError ?? undefined, hint)}
+            onChange={(event) => {
+              setText(event.target.value)
+              if (typedError) setTypedError(null)
+            }}
+            onFocus={() => {
+              if (!typedError) setText(formatTypedDate(value))
+              setFocused(true)
+            }}
+            onBlur={() => {
+              setFocused(false)
+              commit()
+            }}
+            onKeyDown={onKeyDown}
+            className={cn(
+              fieldControlClass,
+              'pr-20 tabular-nums placeholder:text-muted-foreground/50',
+              open && 'border-ring ring-3 ring-ring/30',
+            )}
+          />
+          {value && !focused && text === formatTypedDate(value) && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 right-11 pt-2.5 text-xs text-muted-foreground -translate-y-1/2"
+            >
+              {weekday.format(parseIsoDate(value))}
+            </span>
           )}
-        >
-          <span className={cn('truncate pt-3.5', !value && 'invisible')}>{value ? formatLongDate(value) : '-'}</span>
-          <CalendarDaysIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        </Popover.Trigger>
+          <Popover.Trigger
+            aria-label="Otwórz kalendarz"
+            title="Otwórz kalendarz"
+            className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted data-popup-open:text-foreground"
+          >
+            <CalendarDaysIcon aria-hidden className="size-4" />
+          </Popover.Trigger>
+        </div>
         <Popover.Portal>
-          <Popover.Positioner sideOffset={6} align="start" className="isolate z-50">
-            <Popover.Popup className="origin-(--transform-origin) rounded-2xl glass-float p-4 text-popover-foreground transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Popover.Positioner anchor={anchorRef} sideOffset={6} align="start" className="isolate z-50">
+            <Popover.Popup
+              finalFocus={inputRef}
+              className="origin-(--transform-origin) rounded-2xl glass-float p-4 text-popover-foreground transition-[opacity,scale] duration-150 ease-out data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0 motion-reduce:transition-none"
+            >
               {quickPicks.length > 0 && (
                 <div className="mb-3 flex gap-1.5">
                   {quickPicks.map((quick) => (
@@ -84,13 +169,12 @@ export function DateField({ label, value, onChange, min, max, error, hint, short
         </Popover.Portal>
       </Popover.Root>
       <label
-        id={`${id}-label`}
         htmlFor={id}
         className={cn(
           floatingLabelClass,
-          (open || value) && floatedLabelClass,
-          open && 'text-foreground',
-          error && 'text-destructive',
+          floated && floatedLabelClass,
+          (focused || open) && 'text-foreground',
+          shownError && 'text-destructive',
         )}
       >
         {label}

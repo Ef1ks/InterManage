@@ -1,6 +1,8 @@
 package com.intermanage.backend.dataentry.service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.intermanage.backend.agent.repository.AgentMacroJobRepository;
 import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.ProtoFile;
@@ -40,6 +43,8 @@ public class DataEntryPriceControlService {
     static final int HISTORY_SIZE = 20;
     /** {@link DataEntryService#lookup} bierze najwyżej 500 kodów naraz. */
     private static final int LOOKUP_BATCH = 500;
+    /** Zmiana nazwy w folderze dochodzi do serwera z opóźnieniem, więc makro liczy się chwilę po swoim końcu. */
+    private static final Duration MACRO_SEEN_DELAY = Duration.ofMinutes(3);
 
     private final DataEntryPriceControlFileRepository files;
     private final PriceControlFileMapper mapper;
@@ -48,10 +53,12 @@ public class DataEntryPriceControlService {
     private final DataEntryService dataEntry;
     private final ProductRepository products;
     private final PriceMarkdownService markdowns;
+    private final AgentMacroJobRepository macroJobs;
 
     public DataEntryPriceControlService(DataEntryPriceControlFileRepository files, PriceControlFileMapper mapper,
             SupplierRepository suppliers, AppUserRepository users, DataEntryService dataEntry,
-            ProductRepository products, PriceMarkdownService markdowns) {
+            ProductRepository products, PriceMarkdownService markdowns, AgentMacroJobRepository macroJobs) {
+        this.macroJobs = macroJobs;
         this.files = files;
         this.mapper = mapper;
         this.suppliers = suppliers;
@@ -138,9 +145,10 @@ public class DataEntryPriceControlService {
         request.files().forEach(seen -> counts.merge(seen.id(), seen.processedCount(), Math::max));
         if (!counts.isEmpty()) {
             AppUser by = userId != null ? users.getReferenceById(userId) : null;
+            boolean duringMacro = macroJobs.anyRunningSince(storeId, Instant.now().minus(MACRO_SEEN_DELAY));
             files.findByStoreIdAndIdIn(storeId, counts.keySet()).stream()
                     .filter(file -> !file.isDeleted())
-                    .forEach(file -> file.seenProcessed(counts.get(file.getId()), by));
+                    .forEach(file -> file.seenProcessed(counts.get(file.getId()), by, duringMacro));
         }
         return history(storeId);
     }

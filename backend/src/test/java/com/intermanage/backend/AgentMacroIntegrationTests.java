@@ -574,6 +574,59 @@ class AgentMacroIntegrationTests {
         assertThat(priceJobs()).hasSize(3);
     }
 
+    @Test
+    void priceChangeLoadedByProgramDuringMacroStillGetsItsMacro() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/stores/" + storeId + "/agents/settings").cookie(owner).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+                .andExpect(status().isOk());
+        String biuro = addAgent("Biuro");
+        poll(biuro, 5, false, true);
+        String first = priceChange();
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"CREATED","folderKey":"CTRLPRIX","fileName":"%s"}]}""".formatted(first))
+                .andExpect(status().isOk());
+        for (int i = 0; i < 50 && priceJobs().isEmpty(); i++) {
+            Thread.sleep(100);
+        }
+        String job = priceJobs().getFirst();
+        poll(biuro, 5, false, true).andExpect(jsonPath("$.offer.id").value(job));
+        agentPost(biuro, "/macro-jobs/" + job + "/start", "").andExpect(status().isOk());
+
+        // W trakcie makra zapisana druga zmiana czeka, a makro (Pobranie danych) wczytuje ją do historii.
+        Thread.sleep(1100);
+        String second = priceChange();
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"CREATED","folderKey":"CTRLPRIX","fileName":"%s"}]}""".formatted(second))
+                .andExpect(status().isOk());
+        for (int i = 0; i < 50 && waitingForMacro() == 0; i++) {
+            Thread.sleep(100);
+        }
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"RENAMED","folderKey":"CTRLPRIX","fileName":"%s"},
+                  {"kind":"RENAMED","folderKey":"CTRLPRIX","fileName":"%s"}]}"""
+                .formatted(first.replace(".traite0", ".Traite1"), second.replace(".traite0", ".Traite1")))
+                .andExpect(status().isOk());
+        priceControl().andExpect(jsonPath("$.pending.length()").value(1))
+                .andExpect(jsonPath("$.pending[0].fileName").value(second))
+                .andExpect(jsonPath("$.pending[0].macroWaiting").value(true));
+        assertThat(waitingForMacro()).isEqualTo(1);
+
+        // Po końcu makra druga zmiana dostaje swoje makro; wgrana jest po kolejnym przetworzeniu.
+        agentPost(biuro, "/macro-jobs/" + job + "/finish", "{\"ok\":true,\"message\":\"\"}")
+                .andExpect(status().isNoContent());
+        poll(biuro, 5, false, true);
+        for (int i = 0; i < 50 && priceJobs().size() < 2; i++) {
+            Thread.sleep(100);
+            priceControlMacros.dispatchWaiting();
+        }
+        assertThat(priceJobs()).hasSize(2);
+        agentPost(biuro, "/events", """
+                {"events":[{"kind":"RENAMED","folderKey":"CTRLPRIX","fileName":"%s"}]}"""
+                .formatted(second.replace(".traite0", ".Traite2"))).andExpect(status().isOk());
+        priceControl().andExpect(jsonPath("$.pending.length()").value(0));
+    }
+
     private String priceChange() throws Exception {
         String disposition = mvc.perform(post("/api/stores/" + storeId + "/data-entry/export/price-control")
                         .cookie(owner).with(csrf()).contentType(MediaType.APPLICATION_JSON)

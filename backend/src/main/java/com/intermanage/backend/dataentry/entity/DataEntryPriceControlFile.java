@@ -124,8 +124,24 @@ public class DataEntryPriceControlFile {
     /**
      * Plik widziany w folderze z końcówką .TraiteN. Niewgrany staje się wgrany; wgrany dostaje tylko wyższą liczbę
      * przetworzeń (program wczytał go ponownie).
+     *
+     * <p>Wyjątek: zmiana czekająca na makro, którą program wczytał w trakcie makra sklepu ({@code duringMacro}).
+     * Trwające makro zmian cen otwiera Pobranie danych, a Mercalys wczytuje wtedy do historii każdy nowy plik z folderu
+     * (.Traite1), choć cen tego pliku nikt nie porównał z MSI. Taki plik zostaje niewgrany z zapamiętaną liczbą
+     * przetworzeń, więc dalej czeka na swoje makro; wgrany jest dopiero po kolejnym przetworzeniu (makro: .Traite2).
      */
-    public boolean seenProcessed(int count, AppUser by) {
+    public boolean seenProcessed(int count, AppUser by, boolean duringMacro) {
+        boolean waiting = macroRequestedAt != null && deletedAt == null
+                && macroRequestedAt.isAfter(Instant.now().minus(MACRO_WAIT));
+        if (loadedAt == null && waiting && processedCount != null && count <= processedCount) {
+            return false;
+        }
+        if (loadedAt == null && waiting && processedCount == null && macroJobId == null && duringMacro) {
+            // Program sklepu wczytał plik do historii przy okazji innego makra (Pobranie danych), ale cen nikt nie
+            // porównał z MSI: zmiana dalej czeka na swoje makro, a wgrana jest dopiero po kolejnym przetworzeniu.
+            processedCount = count;
+            return true;
+        }
         if (loadedAt == null) {
             loadedAt = Instant.now();
             loadedBy = by;
@@ -143,6 +159,9 @@ public class DataEntryPriceControlFile {
     /** Ponowny zapis pod nową nazwą (z bieżącą godziną): folder sprawdza już tę nazwę. */
     public void rename(String newName) {
         fileName = newName;
+        if (loadedAt == null) {
+            processedCount = null; // nowa nazwa: liczba przetworzeń starej nie obowiązuje
+        }
         macroRequestedAt = null;
         macroJobId = null;
         macroRetryAt = null;

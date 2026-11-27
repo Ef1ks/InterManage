@@ -1,6 +1,7 @@
 import {
   ArrowRightLeftIcon,
   BadgePercentIcon,
+  PercentIcon,
   SplitIcon,
   CheckCheckIcon,
   ClipboardCopyIcon,
@@ -80,7 +81,9 @@ import { promoSetupPath, type PromoSetupHandoff } from '@/features/promo-setup/p
 import { documentPrice } from '@/features/base-delivery/base-rows'
 import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
-import { usePriceRoundingRules, useSupplierSalePrices } from '@/features/store-settings/api'
+import { usePriceRoundingRules, useSupplierMargins, useSupplierSalePrices } from '@/features/store-settings/api'
+import { SupplierMarginDialog } from '@/features/suppliers/SupplierMarginDialog'
+import { supplierMarginSummary } from '@/features/suppliers/format'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { setFileQueueDocument } from '@/lib/file-queue'
@@ -445,10 +448,23 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
       supplierPrices?.find((price) => price.supplierId === supplierId)?.salePrice ?? null,
     [supplierPrices],
   )
+  // Stała marża dostawcy (Dostawcy): zastępuje marżę wymaganą na nomenklaturze przy dokumentach tego dostawcy.
+  const { data: supplierMargins } = useSupplierMargins(store.id)
+  const supplierMargin = supplierMargins?.find((margin) => margin.supplierId === supplier?.id)
+  const [supplierMarginOpen, setSupplierMarginOpen] = useState(false)
   // Wiersze z dostawy z bazy (Weryfikuj warzywa / mięso pakowane): cena sugerowana to cena dla klienta z dokumentu.
   const pricing = useMemo(
-    () => ({ ...pricingOf(nomenclature, rounding, supplierPriceFor(supplier?.id)), rowPrice: documentPrice }),
-    [nomenclature, rounding, supplierPriceFor, supplier],
+    () => ({
+      ...pricingOf(nomenclature, rounding, supplierPriceFor(supplier?.id)),
+      supplierMargin: supplierMargin
+        ? {
+            defaultPercent: supplierMargin.defaultPercent,
+            byCode: new Map(supplierMargin.rules.map((rule) => [rule.code, rule.marginPercent])),
+          }
+        : null,
+      rowPrice: documentPrice,
+    }),
+    [nomenclature, rounding, supplierPriceFor, supplier, supplierMargin],
   )
   // Wysokość przyklejonego paska nad tabelą: pod nim przykleja się nagłówek kolumn.
   const [toolbarHeight, setToolbarHeight] = useState(0)
@@ -1145,7 +1161,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const labelSource = chosenArticles.length > 0 ? chosenArticles : rows.filter(isArticle)
   const labelLines: LabelLine[] = labelSource
     .filter((row) => !row.eanFallback && /^(\d{1,6}|\d{8,14})$/.test(row.ean))
-    .map((row) => ({ ean: row.ean, quantity: row.quantity }))
+    .map((row) => ({ ean: row.ean, name: row.name, quantity: row.quantity }))
 
   const conflicts = priceConflicts(rows)
   const duplicates = duplicateGroups(rows)
@@ -1591,6 +1607,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
             }
             onChange={() => setSupplierOpen(true)}
             onCreate={sellerToCreate ? () => setMercalysSupplierOpen(true) : undefined}
+            margin={supplierMarginSummary(supplierMargin)}
+            onMargin={supplier ? () => setSupplierMarginOpen(true) : undefined}
           />
         )}
         <div className="flex shrink-0 gap-1.5" role="group" aria-label="Dokument i pliki">
@@ -2257,6 +2275,16 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
         onSave={(chosen) => void saveChosenArticles(chosen)}
       />
 
+      {supplier && (
+        <SupplierMarginDialog
+          storeId={store.id}
+          supplier={supplier}
+          canEdit={canUseAi}
+          open={supplierMarginOpen}
+          onOpenChange={setSupplierMarginOpen}
+        />
+      )}
+
       <LabelDialog
         storeId={store.id}
         lines={labelLines}
@@ -2589,6 +2617,8 @@ function SupplierNumber({
   changeLabel,
   onChange,
   onCreate,
+  margin,
+  onMargin,
 }: {
   code: string | null
   name: string | null
@@ -2597,6 +2627,10 @@ function SupplierNumber({
   onChange: () => void
   /** Sprzedawcy z faktury nie ma na liście dostawców: założenie go w Mercalys makrem. */
   onCreate?: () => void
+  /** Stała marża dostawcy w skrócie (np. „30% · 2 wyjątki”), null bez niej. */
+  margin?: string | null
+  /** Okno stałej marży dostawcy; bez dostawcy z listy go nie ma. */
+  onMargin?: () => void
 }) {
   return (
     <div
@@ -2625,6 +2659,24 @@ function SupplierNumber({
         >
           <WandSparklesIcon aria-hidden className="size-3" />
           Załóż w Mercalys
+        </button>
+      )}
+      {onMargin && (
+        <button
+          type="button"
+          onClick={onMargin}
+          title={
+            margin ? `Stała marża dostawcy: ${margin}` : 'Ustaw stałą marżę dostawcy (domyślną i na nomenklaturach)'
+          }
+          className={cn(
+            'mt-0.5 inline-flex items-center gap-0.5 rounded px-1 text-xs leading-tight transition-colors duration-150 outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+            margin
+              ? 'bg-violet-200 font-semibold text-violet-950 hover:bg-violet-300 dark:bg-violet-900 dark:text-violet-50'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <PercentIcon aria-hidden className="size-3" />
+          {margin ? `marża ${margin.split(' · ')[0]}` : 'marża'}
         </button>
       )}
       {changeLabel && (

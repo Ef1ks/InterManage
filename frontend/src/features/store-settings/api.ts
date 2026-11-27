@@ -8,6 +8,7 @@ import type {
   NomenclatureMarginImport,
   PriceRoundingRule,
   StorePartners,
+  SupplierMargin,
   SupplierSalePrice,
 } from '@/lib/types'
 
@@ -147,4 +148,33 @@ export function useSupplierSalePriceActions(storeId: string) {
       onSuccess,
     }),
   }
+}
+
+/** Stałe marże dostawców (domyślna i wyjątki na nomenklaturze) do cen sugerowanych we wprowadzaniu danych. */
+export const supplierMarginsKey = (storeId: string) => ['stores', storeId, 'supplier-margins'] as const
+const supplierMarginsPath = (storeId: string) => `/stores/${storeId}/supplier-margins`
+
+export function useSupplierMargins(storeId: string, enabled = true) {
+  return useQuery({
+    queryKey: supplierMarginsKey(storeId),
+    queryFn: () => api<SupplierMargin[]>(supplierMarginsPath(storeId)),
+    enabled,
+    // Jak stałe ceny: zmiana w drugiej karcie od razu zmienia ceny sugerowane.
+    refetchOnWindowFocus: 'always',
+  })
+}
+
+export type SupplierMarginInput = {
+  defaultPercent: number | null
+  rules: { code: string; marginPercent: number }[]
+}
+
+/** Zapis zastępuje całą marżę dostawcy i zwraca listę sklepu, którą od razu podmieniamy. */
+export function useSaveSupplierMargin(storeId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ supplierId, margin }: { supplierId: string; margin: SupplierMarginInput }) =>
+      api<SupplierMargin[]>(`${supplierMarginsPath(storeId)}/${supplierId}`, { method: 'PUT', json: margin }),
+    onSuccess: (margins) => queryClient.setQueryData(supplierMarginsKey(storeId), margins),
+  })
 }

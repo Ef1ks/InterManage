@@ -440,7 +440,7 @@ export const DataEntryGrid = memo(function DataEntryGrid({
   const commitEdit = (state: Editing): boolean => {
     const row = rows[state.r]
     if (!row) return true
-    const result = applyText(row, columns[state.c].key, state.text, names)
+    const result = applyText(row, columns[state.c].key, state.text, names, pricing.rounding)
     if ('error' in result) {
       setEditing({ ...state, error: result.error })
       return false
@@ -525,8 +525,10 @@ export const DataEntryGrid = memo(function DataEntryGrid({
       for (let j = 0; j < width && left + j <= last; j++) {
         const value = cells[i % blockHeight]?.[j % blockWidth]
         // Kolumny tylko do odczytu (np. nazwa i rejon w tabeli protokołów) wklejanie pomija.
+        // Marża wkleja się tylko sama: w bloku kilku kolumn z Excela przeliczyłaby wklejoną cenę sprzedaży.
         if (value === undefined || columns[left + j].kind === 'computed') continue
-        const result = applyText(row, columns[left + j].key, value, names)
+        if (columns[left + j].key === 'margin' && blockWidth > 1) continue
+        const result = applyText(row, columns[left + j].key, value, names, pricing.rounding)
         if ('error' in result) {
           invalid++
           continue

@@ -1,8 +1,10 @@
 import { createContext, Fragment, type ReactNode, useContext, useMemo, useState } from 'react'
-import { ChevronRightIcon, DownloadIcon, PrinterIcon } from 'lucide-react'
+import { ChevronRightIcon, DownloadIcon, FileSpreadsheetIcon, ListIcon, PrinterIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { BackLink } from '@/components/BackLink'
+import { LST_FOLDER, lstFile, lstFileName } from '@/features/data-entry/lst-file'
+import { ensureFolderAccess, saveToFolder } from '@/lib/saved-folders'
 import { MultiComboboxField, SegmentedField, TextField } from '@/components/form'
 import { LoadingPanel } from '@/components/LoadingPanel'
 import { ReportFreshness } from '@/components/ReportFreshness'
@@ -32,7 +34,7 @@ import {
   useReportPeriod,
 } from '@/features/sales/report-period'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
-import { ApiError } from '@/lib/api'
+import { ApiError, saveBlob } from '@/lib/api'
 import type { PeriodSalesDepth, PeriodSalesFigures, PeriodSalesNode } from '@/lib/types'
 import { useSearchParamText } from '@/lib/use-search-param-text'
 import { cn } from '@/lib/utils'
@@ -96,6 +98,33 @@ export function PeriodSalesReport({ storeId }: { storeId: string }) {
   const onPdfError = (error: unknown) =>
     toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować wydruku')
   const empty = !report.data || report.data.articleCount === 0
+
+  // Plik .lst jak we wprowadzaniu danych: ten sam folder list EAN-ów, a bez niego pobranie.
+  const saveLst = async () => {
+    try {
+      // Zgoda na zapis w folderze tylko zaraz po kliknięciu, zanim cokolwiek pójdzie do serwera.
+      const folderReady = await ensureFolderAccess(LST_FOLDER.key)
+      const eans = await pdf.eans.mutateAsync(query)
+      if (eans.length === 0) {
+        toast.error('Artykuły raportu nie mają EAN-ów')
+        return
+      }
+      const fileName = lstFileName('SPRZEDAZ', `${query.range.from}_${query.range.to}`)
+      if (folderReady) await saveToFolder(LST_FOLDER.key, fileName, lstFile(eans))
+      else saveBlob(lstFile(eans), fileName)
+      toast.success('Zapisano listę EAN-ów', {
+        description: [
+          `Kodów: ${eans.length}`,
+          !folderReady &&
+            'pobrany: folder list EAN-ów nie jest wybrany w tej przeglądarce (ustawienia zapisu we wprowadzaniu danych)',
+        ]
+          .filter(Boolean)
+          .join(', '),
+      })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Nie udało się zapisać listy EAN-ów')
+    }
+  }
 
   return (
     <>
@@ -202,7 +231,7 @@ export function PeriodSalesReport({ storeId }: { storeId: string }) {
 
           <Card className="mb-4 flex-row flex-wrap items-end gap-x-4 gap-y-3 p-4">
             <SegmentedField
-              label="Wydruk do poziomu"
+              label="Wydruk i Excel do poziomu"
               options={DEPTHS}
               value={depth}
               onChange={(next) => update({ wydruk: DEPTHS.find((item) => item.value === next)?.param ?? null })}
@@ -221,6 +250,27 @@ export function PeriodSalesReport({ storeId }: { storeId: string }) {
               <Button
                 variant="outline"
                 size="lg"
+                loading={pdf.excel.isPending}
+                disabled={empty}
+                onClick={() => pdf.excel.mutate({ query, depth }, { onError: onPdfError })}
+              >
+                <FileSpreadsheetIcon />
+                Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                loading={pdf.eans.isPending}
+                disabled={empty}
+                title="Lista EAN-ów wszystkich artykułów raportu (te same filtry), jak we wprowadzaniu danych"
+                onClick={() => void saveLst()}
+              >
+                <ListIcon />
+                Plik .lst
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
                 loading={pdf.print.isPending}
                 disabled={empty}
                 onClick={() => pdf.print.mutate({ query, depth }, { onError: onPdfError })}
@@ -230,7 +280,8 @@ export function PeriodSalesReport({ storeId }: { storeId: string }) {
               </Button>
             </div>
             <p className="basis-full text-xs text-muted-foreground">
-              Wydruk ma ten sam okres i filtry co tabela.
+              Wydruk i Excel mają ten sam okres, filtry i poziom co tabela, a plik .lst EAN-y wszystkich artykułów z
+              tymi filtrami.
               {depth === 'ARTICLE' && report.data.articleCount > 2000 && (
                 <span className="text-amber-700 dark:text-amber-300">
                   {' '}

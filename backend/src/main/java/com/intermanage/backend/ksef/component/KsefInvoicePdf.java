@@ -120,9 +120,9 @@ public class KsefInvoicePdf {
     }
 
     /**
-     * Wariant wydruku: pełna faktura albo podstawowa do wprowadzania danych (nagłówek z numerem i sprzedawcą,
-     * korekta, pozycje, sumy według stawek, dokumenty WZ w jednej linii i dodatkowe opisy; bez stron, płatności
-     * i reszty).
+     * Wariant wydruku: pełna faktura albo podstawowa do wprowadzania danych (nagłówek z numerem, pod nim dokumenty WZ
+     * w jednej linii, sprzedawca, korekta, pozycje, sumy według stawek i dodatkowe opisy; bez stron, płatności
+     * i reszty). W obu wariantach numery WZ stoją zaraz pod numerem dokumentu.
      */
     public enum Variant {
         FULL, BASIC
@@ -148,8 +148,13 @@ public class KsefInvoicePdf {
 
             String qr = invoice.issueDate() != null ? verificationUrl(xml, sellerNip, invoice.issueDate()) : null;
             writeHeader(document, writer.getDirectContent(), invoice, ksefNumber, qr);
+            // Numery WZ zaraz pod numerem dokumentu, a nie na końcu wydruku.
+            List<Entry> deliveryNotes = deliveryNotes(invoice.additional());
+            writeDeliveryNotes(document, deliveryNotes);
+            List<Entry> additional = invoice.additional().stream()
+                    .filter(entry -> !deliveryNotes.contains(entry)).toList();
             if (variant == Variant.BASIC) {
-                writeBasic(document, invoice);
+                writeBasic(document, invoice, additional);
                 document.close();
                 return out.toByteArray();
             }
@@ -170,7 +175,7 @@ public class KsefInvoicePdf {
             entries(document, "Płatność", invoice.payment());
             entries(document, "Rozliczenie", invoice.settlement());
             entries(document, "Warunki transakcji", invoice.transaction());
-            entries(document, "Dodatkowe informacje", invoice.additional());
+            entries(document, "Dodatkowe informacje", additional);
             if (!invoice.orderLines().isEmpty()) {
                 document.add(linesTable("Zamówienie" + (invoice.orderValue() != null
                         ? " · wartość " + KsefInvoiceReader.money(invoice.orderValue()) + " " + currency(invoice)
@@ -195,8 +200,8 @@ public class KsefInvoicePdf {
         return out.toByteArray();
     }
 
-    /** Wydruk do wprowadzania: sprzedawca i data jednym wierszem, korekta, pozycje, sumy, WZ i dodatkowe opisy. */
-    private void writeBasic(Document document, Invoice invoice) throws DocumentException {
+    /** Wydruk do wprowadzania: sprzedawca i data jednym wierszem, korekta, pozycje, sumy i dodatkowe opisy (WZ są pod nagłówkiem). */
+    private void writeBasic(Document document, Invoice invoice, List<Entry> additional) throws DocumentException {
         List<Entry> summary = new ArrayList<>();
         if (invoice.seller() != null) {
             summary.add(new Entry("Sprzedawca", Stream.concat(Stream.of(invoice.seller().name()),
@@ -211,7 +216,7 @@ public class KsefInvoicePdf {
         // Opisy pozycji (EAN, partia z numerem wiersza) idą pod nazwę pozycji, w "Opis" zostaje to, co o fakturze.
         Map<String, List<String>> lineNotes = new HashMap<>();
         List<Entry> notes = new ArrayList<>();
-        for (Entry entry : invoice.additional()) {
+        for (Entry entry : additional) {
             Matcher row = LINE_NOTE.matcher(Objects.toString(entry.label(), ""));
             if (row.matches() && entry.value() != null) {
                 lineNotes.computeIfAbsent(lineKey(row.group(2)), key -> new ArrayList<>())
@@ -233,23 +238,32 @@ public class KsefInvoicePdf {
             document.add(linesTable("Pozycje", lines));
         }
         writeTotals(document, invoice);
-        List<Entry> deliveryNotes = notes.stream()
-                .filter(entry -> entry.label() != null && entry.value() != null
-                        && DELIVERY_NOTES.matcher(entry.label()).find())
-                .toList();
-        notes.removeAll(deliveryNotes);
-        if (!deliveryNotes.isEmpty()) {
-            PdfPTable table = sectionTable("Dokumenty WZ", new float[] {1}, 0);
-            String text = deliveryNotes.stream().map(Entry::value).collect(Collectors.joining(", "));
-            float width = document.right() - document.left();
-            PdfPCell cell = cell(new Phrase(text, font(regular, oneLineSize(text, width, 9), INK)));
-            cell.setNoWrap(true);
-            cell.setPaddingTop(2);
-            cell.setPaddingBottom(3);
-            table.addCell(cell);
-            document.add(table);
-        }
         entries(document, "Opis", notes);
+    }
+
+    /** Numery WZ faktury: element WZ i opisy z „WZ” w kluczu, bez opisów przypisanych do pozycji. */
+    private static List<Entry> deliveryNotes(List<Entry> additional) {
+        return additional.stream()
+                .filter(entry -> entry.label() != null && entry.value() != null
+                        && DELIVERY_NOTES.matcher(entry.label()).find()
+                        && !LINE_NOTE.matcher(entry.label()).matches())
+                .toList();
+    }
+
+    /** Numery WZ w jednej linii na całą szerokość, czcionka zmniejszana tak, żeby się zmieściły. */
+    private void writeDeliveryNotes(Document document, List<Entry> deliveryNotes) throws DocumentException {
+        if (deliveryNotes.isEmpty()) {
+            return;
+        }
+        PdfPTable table = sectionTable("Dokumenty WZ", new float[] {1}, 0);
+        String text = deliveryNotes.stream().map(Entry::value).collect(Collectors.joining(", "));
+        float width = document.right() - document.left();
+        PdfPCell cell = cell(new Phrase(text, font(regular, oneLineSize(text, width, 9), INK)));
+        cell.setNoWrap(true);
+        cell.setPaddingTop(2);
+        cell.setPaddingBottom(3);
+        table.addCell(cell);
+        document.add(table);
     }
 
     /** Numer wiersza bez zer wiodących: opis ma "000001", pozycja "1". */

@@ -110,8 +110,20 @@ class PeriodSalesIntegrationTests {
                     .andExpect(content().contentType(MediaType.APPLICATION_PDF))
                     .andReturn().getResponse().getContentAsByteArray();
             assertEquals("%PDF", new String(pdf, 0, 4));
+            byte[] xlsx = mvc.perform(get("/api/stores/" + store + "/reports/period-sales/xlsx?" + PERIOD
+                            + "&depth=" + depth).cookie(owner))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsByteArray();
+            assertEquals("PK", new String(xlsx, 0, 2));
         }
+        // EAN-y do pliku .lst: te same filtry co tabela.
+        mvc.perform(get("/api/stores/" + store + "/reports/period-sales/eans?" + PERIOD + "&brands=SERY")
+                        .cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
         mvc.perform(get("/api/stores/" + store + "/reports/period-sales/pdf?" + PERIOD + "&brands=NIKT")
+                .cookie(owner)).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/stores/" + store + "/reports/period-sales/xlsx?" + PERIOD + "&brands=NIKT")
                 .cookie(owner)).andExpect(status().isBadRequest());
     }
 

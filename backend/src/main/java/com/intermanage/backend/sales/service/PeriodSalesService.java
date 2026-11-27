@@ -23,6 +23,10 @@ import com.intermanage.backend.auth.entity.AppUser;
 import com.intermanage.backend.auth.repository.AppUserRepository;
 import com.intermanage.backend.common.component.Percent;
 import com.intermanage.backend.common.component.ReportPeriod;
+import com.intermanage.backend.common.component.XlsxWriter;
+import com.intermanage.backend.common.component.XlsxWriter.Cell;
+import com.intermanage.backend.common.component.XlsxWriter.Column;
+import com.intermanage.backend.common.component.XlsxWriter.Row;
 import com.intermanage.backend.common.exception.ApiException;
 import com.intermanage.backend.document.repository.DocumentLineRepository;
 import com.intermanage.backend.document.repository.DocumentLineRepository.LastSupplier;
@@ -69,10 +73,11 @@ public class PeriodSalesService {
     private final SupplierRepository supplierList;
     private final AppUserRepository users;
     private final PeriodSalesPdf reportPdf;
+    private final XlsxWriter xlsx;
 
     public PeriodSalesService(SaleRepository sales, NomenclatureRepository nomenclatures,
             DocumentLineRepository lines, StoreRepository stores, SupplierRepository supplierList,
-            AppUserRepository users, PeriodSalesPdf reportPdf) {
+            AppUserRepository users, PeriodSalesPdf reportPdf, XlsxWriter xlsx) {
         this.sales = sales;
         this.nomenclatures = nomenclatures;
         this.lines = lines;
@@ -80,11 +85,22 @@ public class PeriodSalesService {
         this.supplierList = supplierList;
         this.users = users;
         this.reportPdf = reportPdf;
+        this.xlsx = xlsx;
     }
 
     @Transactional(readOnly = true)
     public PeriodSalesReport report(UUID storeId, PeriodSalesRequest request) {
         return compute(storeId, request).report();
+    }
+
+    /**
+     * EAN-y wszystkich artykułów raportu z tymi samymi filtrami, od największej sprzedaży, bez powtórzeń i bez
+     * artykułów bez kodu: do pliku .lst (lista EAN-ów jak we wprowadzaniu danych).
+     */
+    @Transactional(readOnly = true)
+    public List<String> eans(UUID storeId, PeriodSalesRequest request) {
+        return compute(storeId, request).articles().stream().sorted(BY_SALE).map(ArticleSales::getEan)
+                .filter(ean -> ean != null && ean.matches("\\d{1,14}")).distinct().toList();
     }
 
     /** Artykuły jednej podrodziny ({@code parent}) albo pozycji „Bez nomenklatury”, od największej sprzedaży. */
@@ -123,6 +139,97 @@ public class PeriodSalesService {
                 filterNotes(storeId, request, computed.names()), printedBy);
         return new ExportFile("sprzedaz-" + store.getNumber() + "-" + request.from() + "-" + request.to() + ".pdf",
                 "application/pdf", content);
+    }
+
+    /** Excel: te same wiersze co wydruk do wybranego poziomu, kwoty jako liczby. */
+    @Transactional(readOnly = true)
+    public ExportFile xlsx(UUID storeId, PeriodSalesRequest request) {
+        Computed computed = compute(storeId, request);
+        if (computed.articles().isEmpty()) {
+            throw ApiException.badRequest("Brak sprzedaży do eksportu");
+        }
+        PeriodSalesDepth depth = request.depth() == null ? PeriodSalesDepth.FAMILY : request.depth();
+        Map<String, List<Article>> articles = new HashMap<>();
+        if (depth == PeriodSalesDepth.ARTICLE) {
+            computed.articles().stream().sorted(BY_SALE).forEach(article -> articles
+                    .computeIfAbsent(subfamilyOf(article), code -> new ArrayList<>()).add(article(article)));
+        }
+        PeriodSalesReport report = computed.report();
+        BigDecimal total = report.total().saleValueGross();
+        List<Row> rows = new ArrayList<>();
+        for (Node region : report.regions()) {
+            rows.add(nodeRow("Rejon", region, total, true));
+            if (region.code().isEmpty()) {
+                if (depth != PeriodSalesDepth.REGION) {
+                    articleRows(rows, articles.get(UNASSIGNED), total);
+                }
+                continue;
+            }
+            if (depth == PeriodSalesDepth.REGION) {
+                continue;
+            }
+            for (Node family : region.children()) {
+                rows.add(nodeRow("Rodzina", family, total, depth != PeriodSalesDepth.FAMILY));
+                if (depth == PeriodSalesDepth.FAMILY) {
+                    continue;
+                }
+                for (Node subfamily : family.children()) {
+                    rows.add(nodeRow("Podrodzina", subfamily, total, depth == PeriodSalesDepth.ARTICLE));
+                    if (depth == PeriodSalesDepth.ARTICLE) {
+                        articleRows(rows, articles.get(subfamily.code()), total);
+                    }
+                }
+            }
+        }
+        rows.add(figuresRow(Cell.bold("Razem"), null, Cell.bold("Razem"), null, null, null, report.total(), total,
+                true));
+        Store store = stores.findById(storeId).orElseThrow();
+        List<Row> intro = new ArrayList<>();
+        intro.add(Row.of(Cell.bold("Sprzedaż za okres · sklep " + store.getNumber() + " · " + request.from() + " – "
+                + request.to() + " · artykułów: " + report.articleCount())));
+        List<String> notes = filterNotes(storeId, request, computed.names());
+        intro.add(Row.of("Marża od sprzedaży brutto, zakup w cenach FIFO. "
+                + (notes.isEmpty() ? "Cała sprzedaż sklepu." : "Filtry: " + String.join(" · ", notes))));
+        byte[] content = xlsx.writeRows("Sprzedaż", intro, XLSX_COLUMNS, rows);
+        return new ExportFile("sprzedaz-" + store.getNumber() + "-" + request.from() + "-" + request.to() + ".xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content);
+    }
+
+    private static final List<Column> XLSX_COLUMNS = List.of(new Column("Poziom", 12), new Column("Kod", 10),
+            new Column("Nazwa", 40), new Column("ITM8", 10), new Column("EAN", 15), new Column("Marka", 18),
+            new Column("Ilość", 11), new Column("Zakup FIFO", 13), new Column("Sprzedaż netto", 14),
+            new Column("Sprzedaż brutto", 15), new Column("Marża", 13), new Column("Marża %", 9),
+            new Column("Udział %", 9));
+
+    private static Row nodeRow(String level, Node node, BigDecimal total, boolean bold) {
+        String name = node.code().isEmpty() ? "Bez nomenklatury"
+                : node.name() != null ? TopSalesPdf.nomenclatureName(node.name()) : "Brak nazwy w nomenklaturze";
+        Object code = node.code().isEmpty() ? null : TopSalesPdf.spaced(node.code());
+        return figuresRow(bold ? Cell.bold(level) : level, code, bold ? Cell.bold(name) : name, null, null, null,
+                node.figures(), total, bold);
+    }
+
+    private static void articleRows(List<Row> rows, List<Article> articles, BigDecimal total) {
+        if (articles == null) {
+            return;
+        }
+        for (Article article : articles) {
+            rows.add(figuresRow("Artykuł", null, article.name() != null ? article.name() : "Brak w kartotece",
+                    article.itm8().replaceFirst("^0+", ""), article.ean(), article.brand(), article.figures(), total,
+                    false));
+        }
+    }
+
+    private static Row figuresRow(Object level, Object code, Object name, Object itm8, Object ean, Object brand,
+            Figures figures, BigDecimal total, boolean bold) {
+        return Row.of(level, code, name, itm8, ean, brand, bold ? Cell.bold(figures.quantity()) : figures.quantity(),
+                money(figures.costValue(), bold), money(figures.saleValueNet(), bold),
+                money(figures.saleValueGross(), bold), money(figures.marginValue(), bold), figures.marginPercent(),
+                Percent.of(figures.saleValueGross(), total));
+    }
+
+    private static Cell money(BigDecimal value, boolean bold) {
+        return bold ? Cell.boldMoney(value) : Cell.money(value);
     }
 
     private Computed compute(UUID storeId, PeriodSalesRequest request) {

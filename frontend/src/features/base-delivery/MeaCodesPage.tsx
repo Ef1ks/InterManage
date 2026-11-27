@@ -19,6 +19,7 @@ import type { MeaOverview, StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 import { useMeaChange, useMeaOverview } from './api'
+import { ManualMeaCodesButton } from './ManualMeaCodesDialog'
 import { meaFiles, meaResult } from './mea-result'
 import { basePath } from './paths'
 
@@ -126,9 +127,12 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
         title="Kody MEA"
         description={storeLabel(store)}
         actions={
-          <Button variant="outline" nativeButton={false} render={<Link to={basePath} />}>
-            Dostawa z bazy
-          </Button>
+          <>
+            <ManualMeaCodesButton storeId={store.id} overview={overview.data} />
+            <Button variant="outline" nativeButton={false} render={<Link to={basePath} />}>
+              Dostawa z bazy
+            </Button>
+          </>
         }
       />
 
@@ -140,6 +144,7 @@ function StoreMeaCodes({ store }: { store: StoreSummary }) {
           'Lista pokazuje kody MEA z wgranych dokumentów z bazy i gazetek, których jeszcze nie wpisano w Mercalys.',
           'Wpisz kody w Mercalys: „Wpisz na wolnym komputerze” robi to na komputerze sklepu, a „Makro do Mercalys” kopiuje makro, które Alt+E uruchamia tutaj. Makro integruje w Liście Cadencier każdy plik z zaznaczonymi kodami.',
           'Kliknij „Potwierdź wpisanie”: kody znikają z listy i nie wrócą przy kolejnych dostawach. Pomyłkę cofniesz w historii.',
+          'Kody wpisane w Mercalys ręcznie, zanim sklep zaczął korzystać ze strony, dopisz przyciskiem „Wpisane wcześniej”: znikną z listy i nie wrócą.',
         ]}
       />
 

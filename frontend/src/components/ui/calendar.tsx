@@ -1,11 +1,16 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 
 import { addDays, parseIsoDate, toIsoDate, todayIso } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 const WEEKDAYS = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd']
-const monthTitle = new Intl.DateTimeFormat('pl-PL', { month: 'long', year: 'numeric' })
+const MONTHS = Array.from({ length: 12 }, (_, index) =>
+  new Intl.DateTimeFormat('pl-PL', { month: 'long' }).format(new Date(2026, index, 1)),
+)
+const MONTHS_SHORT = Array.from({ length: 12 }, (_, index) =>
+  new Intl.DateTimeFormat('pl-PL', { month: 'short' }).format(new Date(2026, index, 1)).replace('.', ''),
+)
 const dayLabel = new Intl.DateTimeFormat('pl-PL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 type CalendarProps = {
@@ -19,23 +24,42 @@ type CalendarProps = {
   className?: string
 }
 
+type View = 'days' | 'months' | 'years'
+
 /**
  * Kalendarz w barwach marki: wybrany dzień na czerwieni Intermarché, dzisiejszy oznaczony kropką.
- * Tydzień od poniedziałku, polskie nazwy. Klawiatura: strzałki (dzień/tydzień), PageUp/PageDown (miesiąc),
+ * Tydzień od poniedziałku, polskie nazwy. W nagłówku klik w miesiąc daje siatkę miesięcy, a klik w rok siatkę lat
+ * (wybrany rok przechodzi do miesięcy). Klawiatura: strzałki (dzień/tydzień), PageUp/PageDown (miesiąc),
  * Home/End (początek/koniec tygodnia), Enter lub spacja wybiera.
  */
 export function Calendar({ value, onChange, min, max, className }: CalendarProps) {
   const today = todayIso()
   const [focused, setFocused] = useState(value || (min && min > today ? min : max && max < today ? max : today))
   const [month, setMonth] = useState(() => monthStart(focused))
-  // Pierwszy rok widocznej siatki lat; pusty = widać dni. Dawne daty (urodzenie) nie wymagają klikania po miesiącu.
-  const [yearsFrom, setYearsFrom] = useState<number | null>(null)
+  const [view, setView] = useState<View>('days')
+  // Pierwszy rok widocznej siatki lat.
+  const [yearsFrom, setYearsFrom] = useState(() => Number(month.slice(0, 4)) - 7)
   const gridRef = useRef<HTMLDivElement>(null)
 
+  const year = Number(month.slice(0, 4))
+  const monthIndex = Number(month.slice(5, 7)) - 1
   const days = useMemo(() => monthGrid(month), [month])
   const isDisabled = (day: string) => (min ? day < min : false) || (max ? day > max : false)
   const canGoBack = !min || monthStart(min) < month
   const canGoForward = !max || monthStart(max) > month
+  const monthOutside = (index: number) => {
+    const start = `${year}-${String(index + 1).padStart(2, '0')}-01`
+    return (min ? start < monthStart(min) : false) || (max ? start > monthStart(max) : false)
+  }
+  const yearOutside = (candidate: number) =>
+    (min ? candidate < Number(min.slice(0, 4)) : false) || (max ? candidate > Number(max.slice(0, 4)) : false)
+
+  /** Pokazuje miesiąc, przycięty do min i max. */
+  const showMonth = (next: string) => {
+    if (min && monthStart(min) > next) setMonth(monthStart(min))
+    else if (max && monthStart(max) < next) setMonth(monthStart(max))
+    else setMonth(next)
+  }
 
   const focusDay = (day: string) => {
     setFocused(day)
@@ -57,65 +81,98 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
     }
   }
 
+  const back =
+    view === 'days'
+      ? { label: 'Poprzedni miesiąc', disabled: !canGoBack, go: () => setMonth(shiftMonth(month, -1)) }
+      : view === 'months'
+        ? {
+            label: 'Poprzedni rok',
+            disabled: yearOutside(year - 1),
+            go: () => showMonth(`${year - 1}${month.slice(4)}`),
+          }
+        : { label: 'Wcześniejsze lata', disabled: false, go: () => setYearsFrom(yearsFrom - 12) }
+  const forward =
+    view === 'days'
+      ? { label: 'Następny miesiąc', disabled: !canGoForward, go: () => setMonth(shiftMonth(month, 1)) }
+      : view === 'months'
+        ? {
+            label: 'Następny rok',
+            disabled: yearOutside(year + 1),
+            go: () => showMonth(`${year + 1}${month.slice(4)}`),
+          }
+        : { label: 'Późniejsze lata', disabled: false, go: () => setYearsFrom(yearsFrom + 12) }
+
   return (
     <div className={cn('w-72 select-none', className)}>
       <div className="mb-3 flex items-center justify-between gap-2 px-1">
-        <button
-          type="button"
-          aria-live="polite"
-          title="Wybierz rok"
-          onClick={() => setYearsFrom(yearsFrom === null ? Number(month.slice(0, 4)) - 7 : null)}
-          className="-mx-1 rounded-lg px-1 py-0.5 text-sm font-semibold capitalize transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          {yearsFrom === null ? monthTitle.format(parseIsoDate(month)) : `${yearsFrom} – ${yearsFrom + 11}`}
-        </button>
-        {yearsFrom === null ? (
-          <div className="flex gap-1">
-            <MonthButton
-              label="Poprzedni miesiąc"
-              disabled={!canGoBack}
-              onClick={() => setMonth(shiftMonth(month, -1))}
-            >
-              <ChevronLeftIcon />
-            </MonthButton>
-            <MonthButton
-              label="Następny miesiąc"
-              disabled={!canGoForward}
-              onClick={() => setMonth(shiftMonth(month, 1))}
-            >
-              <ChevronRightIcon />
-            </MonthButton>
-          </div>
-        ) : (
-          <div className="flex gap-1">
-            <MonthButton label="Wcześniejsze lata" onClick={() => setYearsFrom(yearsFrom - 12)}>
-              <ChevronLeftIcon />
-            </MonthButton>
-            <MonthButton label="Późniejsze lata" onClick={() => setYearsFrom(yearsFrom + 12)}>
-              <ChevronRightIcon />
-            </MonthButton>
-          </div>
-        )}
+        <div aria-live="polite" className="-mx-1.5 flex items-center gap-0.5">
+          {view === 'years' ? (
+            <HeaderButton title="Wróć do dni" active onClick={() => setView('days')}>
+              {yearsFrom} – {yearsFrom + 11}
+            </HeaderButton>
+          ) : (
+            <>
+              <HeaderButton
+                title="Wybierz miesiąc"
+                active={view === 'months'}
+                onClick={() => setView(view === 'months' ? 'days' : 'months')}
+              >
+                <span className="capitalize">{MONTHS[monthIndex]}</span>
+              </HeaderButton>
+              <HeaderButton
+                title="Wybierz rok"
+                onClick={() => {
+                  setYearsFrom(year - 7)
+                  setView('years')
+                }}
+              >
+                {year}
+              </HeaderButton>
+            </>
+          )}
+        </div>
+        <div className="flex gap-1">
+          <MonthButton label={back.label} disabled={back.disabled} onClick={back.go}>
+            <ChevronLeftIcon />
+          </MonthButton>
+          <MonthButton label={forward.label} disabled={forward.disabled} onClick={forward.go}>
+            <ChevronRightIcon />
+          </MonthButton>
+        </div>
       </div>
 
-      {yearsFrom !== null && (
+      {view === 'months' && (
         <div className="grid grid-cols-3 gap-1">
-          {Array.from({ length: 12 }, (_, index) => yearsFrom + index).map((year) => (
-            <button
-              key={year}
-              type="button"
-              aria-pressed={String(year) === month.slice(0, 4)}
+          {MONTHS_SHORT.map((name, index) => (
+            <PickButton
+              key={name}
+              selected={index === monthIndex}
+              disabled={monthOutside(index)}
               onClick={() => {
-                setMonth(`${year}${month.slice(4)}`)
-                setYearsFrom(null)
+                setMonth(`${year}-${String(index + 1).padStart(2, '0')}-01`)
+                setView('days')
               }}
-              className={cn(
-                'h-10 rounded-lg text-sm tabular-nums transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
-                String(year) === month.slice(0, 4) && 'bg-muted font-semibold',
-              )}
             >
-              {year}
-            </button>
+              <span className="capitalize">{name}</span>
+            </PickButton>
+          ))}
+        </div>
+      )}
+
+      {view === 'years' && (
+        <div className="grid grid-cols-3 gap-1">
+          {Array.from({ length: 12 }, (_, index) => yearsFrom + index).map((candidate) => (
+            <PickButton
+              key={candidate}
+              selected={candidate === year}
+              disabled={yearOutside(candidate)}
+              onClick={() => {
+                showMonth(`${candidate}${month.slice(4)}`)
+                setView('months')
+              }}
+            >
+              {candidate}
+            </PickButton>
           ))}
         </div>
       )}
@@ -124,7 +181,7 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
         role="grid"
         ref={gridRef}
         onKeyDown={onKeyDown}
-        className={cn('grid grid-cols-7 gap-y-1', yearsFrom !== null && 'hidden')}
+        className={cn('grid grid-cols-7 gap-y-1', view !== 'days' && 'hidden')}
       >
         {WEEKDAYS.map((weekday, index) => (
           <div
@@ -178,6 +235,59 @@ export function Calendar({ value, onChange, min, max, className }: CalendarProps
   )
 }
 
+function HeaderButton({
+  title,
+  active,
+  onClick,
+  children,
+}: {
+  title: string
+  active?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(
+        'rounded-lg px-1.5 py-0.5 text-sm font-semibold tabular-nums transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50',
+        active && 'bg-muted',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function PickButton({
+  selected,
+  disabled,
+  onClick,
+  children,
+}: {
+  selected: boolean
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'h-10 rounded-lg text-sm tabular-nums transition-colors duration-150 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-35',
+        selected && 'bg-brand font-semibold text-brand-foreground hover:bg-brand',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 function MonthButton({
   label,
   disabled,
@@ -187,7 +297,7 @@ function MonthButton({
   label: string
   disabled?: boolean
   onClick: () => void
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <button

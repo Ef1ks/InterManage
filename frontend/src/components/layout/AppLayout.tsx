@@ -44,6 +44,7 @@ import { usePresenceHeartbeat } from '@/features/chat/use-presence'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-store'
+import { AppWindowsBar } from '@/features/windows/AppWindows'
 import { QuickTaskButton } from '@/features/tasks/QuickTaskButton'
 import { FeedbackButton } from '@/features/feedback/FeedbackButton'
 import { StoreSwitcher } from '@/features/stores/StoreSwitcher'
@@ -102,6 +103,7 @@ export function AppLayout() {
 
   // Tytuł karty: numer bieżącego sklepu, żeby przy kilku kartach było widać, która jest którym sklepem.
   const currentStore = useCurrentStore()
+  const me = useCurrentUser()
   useEffect(() => {
     document.title = currentStore ? `${currentStore.number} - InterManage` : 'InterManage'
   }, [currentStore])
@@ -167,7 +169,7 @@ export function AppLayout() {
       )}
 
       {/* col-start-2: wysunięte menu wypada z siatki, a treść ma zostać w swojej kolumnie. */}
-      <div className="flex min-w-0 flex-col md:col-start-2">
+      <div className="flex min-w-0 flex-col md:col-start-2 [&:has([data-favorites-bar])]:[--favorites-bar:2rem]">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b glass-chrome px-4">
           <Button
             variant="ghost"
@@ -187,12 +189,15 @@ export function AppLayout() {
             <UserMenu />
           </div>
         </header>
+        {/* Okna jak karty przeglądarki; klucz = konto, bo po przełączeniu konta są jego okna. */}
+        <AppWindowsBar key={me.id} />
         <DownloadUpdatesBanner />
         <FileQueueBanner />
         {/* Szerokie strony (data-wide-page) zajmują całą szerokość, a menu jest zwinięte do ikon. */}
-        {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem i przewijają się w środku, nie całe.
+        {/* Strony z data-fit-page (od lg) mają wysokość okna pod nagłówkiem (3,5rem) i paskiem okien (2,25rem)
+            i przewijają się w środku, nie całe.
             flex-none, bo flex-1 w kolumnie bez wysokości bierze wysokość treści i wygrywa z h-[…]. */}
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-3.5rem)] lg:has-[[data-fit-page]]:flex-none lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6 has-[[data-wide-page]]:max-w-none lg:has-[[data-fit-page]]:flex lg:has-[[data-fit-page]]:h-[calc(100svh-5.75rem-var(--favorites-bar,0rem))] lg:has-[[data-fit-page]]:flex-none lg:has-[[data-fit-page]]:flex-col lg:has-[[data-fit-page]]:overflow-y-auto">
           <Outlet />
         </main>
         {/* Przewinięcie zapamiętane per ścieżka: powrót na listę wraca w to samo miejsce, a zmiana filtrów
