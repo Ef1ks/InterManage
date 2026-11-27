@@ -12,7 +12,6 @@ import com.intermanage.backend.common.component.ProtoFile;
 import com.intermanage.backend.common.exception.ApiException;
 
 /**
- * Plik inwentaryzacji dla programu sklepu ({@code INVENTAIRE_20260622_144353_IF0AF901_IF0AF901.Traite0}, wzór
  * z programu sklepu): w linii EAN na 13 znakach ({@link PriceControlFile#ean}) i zaraz za nim policzona ilość
  * w tysięcznych na 8 cyfrach ({@code 5903895642483} + {@code 00024000} = 24 szt., 0,5 kg = {@code 00000500}), CRLF.
  * W nazwie czas zapisu (Europe/Warsaw) i dwa razy login osoby, która zapisuje.

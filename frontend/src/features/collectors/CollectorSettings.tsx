@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { DownloadIcon, KeyRoundIcon, PlusIcon, ScanBarcodeIcon, Trash2Icon } from 'lucide-react'
+import { DownloadIcon, KeyRoundIcon, PlusIcon, PrinterIcon, ScanBarcodeIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { Code128 } from '@/components/Code128'
 import { Form, FormActions, TextField } from '@/components/form'
 import { LoadingPanel } from '@/components/LoadingPanel'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ApiError } from '@/lib/api'
+import { printCode128 } from '@/lib/code128'
 import type { StoreCollector } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -15,6 +17,19 @@ import { useAddCollector, useCollectorCode, useCollectors, useRemoveCollector, u
 
 const dateTime = new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
 const time = new Intl.DateTimeFormat('pl-PL', { timeStyle: 'short' })
+
+// Bez „http://” kod jest krótszy, więc szersze kreski i łatwiejszy skan; przeglądarka sama dopisze http.
+// Enter na końcu (\r): po zeskanowaniu przeglądarka od razu otwiera adres.
+const INSTALLER_ADDRESS = 'intermanage.pl/k'
+const INSTALLER_CODE = INSTALLER_ADDRESS + '\r'
+
+const printInstallerCode = () =>
+  printCode128(INSTALLER_CODE, 'Intermanage - instalator kolektora', INSTALLER_ADDRESS, [
+    'Na kolektorze włącz DataWedge.',
+    'Otwórz przeglądarkę i stuknij w pasek adresu.',
+    'Zeskanuj kod. Strona instalatora otworzy się sama.',
+    'Wybierz „Pobierz instalator”, potem Otwórz i Zainstaluj.',
+  ])
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
 
@@ -106,9 +121,10 @@ export function CollectorSettings({ storeId }: { storeId: string }) {
               <p className="text-4xl font-semibold tracking-wide tabular-nums">
                 {shown.code.slice(0, 4)} {shown.code.slice(4)}
               </p>
+              <Code128 value={shown.code} />
               <p className="max-w-prose text-sm text-muted-foreground">
-                Postaw kolektor na podstawce, uruchom na nim Intermanage i wpisz ten kod. Działa raz, do{' '}
-                {time.format(new Date(shown.expiresAt))}.
+                Postaw kolektor na podstawce, uruchom na nim Intermanage i zeskanuj ten kod albo go wpisz. Działa raz,
+                do {time.format(new Date(shown.expiresAt))}.
               </p>
             </>
           )}
@@ -120,20 +136,34 @@ export function CollectorSettings({ storeId }: { storeId: string }) {
         </Card>
       )}
 
-      <Card className="flex flex-wrap items-start justify-between gap-3 p-4">
-        <div className="grid max-w-prose min-w-0 flex-1 basis-64 gap-1">
-          <h3 className="font-medium">Instalator</h3>
-          <p className="text-sm text-muted-foreground">
-            Na kolektorze otwórz przeglądarkę, wpisz adres{' '}
-            <span className="font-mono font-medium text-foreground">http://intermanage.pl/k</span> i uruchom pobrany
-            plik. Bez sieci na kolektorze: pobierz instalator na komputerze i skopiuj go na kolektor. Kolejne wersje
-            kolektor pobiera sam na podstawce.
-          </p>
+      <Card className="grid gap-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid max-w-prose min-w-0 flex-1 basis-64 gap-1">
+            <h3 className="font-medium">Instalator</h3>
+            <p className="text-sm text-muted-foreground">
+              Na kolektorze otwórz przeglądarkę, wpisz adres{' '}
+              <span className="font-mono font-medium text-foreground">http://intermanage.pl/k</span> i uruchom pobrany
+              plik. Bez sieci na kolektorze: pobierz instalator na komputerze i skopiuj go na kolektor. Kolejne wersje
+              kolektor pobiera sam na podstawce.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Z włączonym DataWedge adresu nie trzeba wpisywać: otwórz przeglądarkę na kolektorze, stuknij w pasek
+              adresu i zeskanuj kod poniżej. Strona otworzy się sama. Z ekranu laser czyta słabo, wydrukowany kod czyta
+              zawsze.
+            </p>
+          </div>
+          <a href="/api/collector/setup" download className={buttonVariants({ variant: 'outline' })}>
+            <DownloadIcon aria-hidden />
+            Pobierz instalator
+          </a>
         </div>
-        <a href="/api/collector/setup" download className={buttonVariants({ variant: 'outline' })}>
-          <DownloadIcon aria-hidden />
-          Pobierz instalator
-        </a>
+        <div className="grid justify-items-start gap-2">
+          <Code128 value={INSTALLER_CODE} />
+          <Button variant="outline" size="sm" onClick={printInstallerCode}>
+            <PrinterIcon aria-hidden />
+            Drukuj kod
+          </Button>
+        </div>
       </Card>
 
       <Card className="grid gap-3 p-4">
