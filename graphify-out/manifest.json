@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1795770211.2374768,
-    "seen": 1795770295.5594993,
-    "ast_hash": "9733e051bcab9791fb3507acf433c8e0",
+    "mtime": 1795772332.8891442,
+    "seen": 1795775453.014501,
+    "ast_hash": "3fc7f00841a4afe04a9b6029b77eb37e",
     "semantic_hash": ""
   },
   "frontend/README.md": {
@@ -8022,9 +8022,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceLabelsDialog.tsx": {
-    "mtime": 1795770172.637029,
-    "seen": 1795770295.4848902,
-    "ast_hash": "25fd6ab15322b7ea1c1f70de970cadda",
+    "mtime": 1795772309.688146,
+    "seen": 1795775452.9336152,
+    "ast_hash": "e42b469465fb19f650d4f54352f6f512",
     "semantic_hash": ""
   },
   "frontend/src/features/inventory/PriceMarkdownDialog.tsx": {
@@ -11675,12 +11675,6 @@
     "ast_hash": "0d09f15c1ccb2a07044784fb88a89cc7",
     "semantic_hash": ""
   },
-  "backend/OKNO Z TABELA.txt": {
-    "mtime": 1794774259.4832883,
-    "seen": 1794804560.1182985,
-    "ast_hash": "86fd0dfc4d06cfd7432684f27fdff188",
-    "semantic_hash": ""
-  },
   "frontend/src/features/protocol-entry/ProtocolEntryPage.tsx": {
     "mtime": 1795768525.5219562,
     "seen": 1795768797.9441082,
@@ -12189,12 +12183,6 @@
     "mtime": 1794822490.919275,
     "seen": 1794822826.8627708,
     "ast_hash": "d9804631186246f66feaaee8cebb055e",
-    "semantic_hash": ""
-  },
-  "backend/{236D729E-8677-48BC-B34E-E6A0D4648CFA}.png": {
-    "mtime": 1794822540.935691,
-    "seen": 1794822826.9264398,
-    "ast_hash": "14ef5b33cbc557e02aca92c1c364b96a",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/mea/dto/ArticleMeaResponse.java": {
@@ -12855,18 +12843,6 @@
     "mtime": 1794946907.8517032,
     "seen": 1794947085.241577,
     "ast_hash": "ac5aca7fcae5e6385282e77a2c015d93",
-    "semantic_hash": ""
-  },
-  "backend/Screenshot 2026-11-18 065622.png": {
-    "mtime": 1794981386.713868,
-    "seen": 1794982272.5517983,
-    "ast_hash": "0a1a10b22923e4669c6e67ded8c05419",
-    "semantic_hash": ""
-  },
-  "backend/TEST1111.png": {
-    "mtime": 1794989757.302085,
-    "seen": 1794991370.4662492,
-    "ast_hash": "997ec310631e9c45f8d1ada1ae1df102",
     "semantic_hash": ""
   },
   "frontend/src/features/dashboard/ProfitGoalBar.tsx": {
@@ -14903,12 +14879,6 @@
     "ast_hash": "a6d13d4bba5c7c783ad85c1eafebcf62",
     "semantic_hash": ""
   },
-  "backend/po wykonaniu uzupe\u0142nienia itm8 wrac.txt": {
-    "mtime": 1795523147.023891,
-    "seen": 1795524265.3451962,
-    "ast_hash": "8e3803d47e112fb9d4faac28a8af69ed",
-    "semantic_hash": ""
-  },
   "backend/src/main/java/com/intermanage/backend/agent/service/AgentMacroWaitService.java": {
     "mtime": 1795534464.7939951,
     "seen": 1795534786.7041674,
@@ -15288,9 +15258,9 @@
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/CollectorSettings.tsx": {
-    "mtime": 1795668845.9314034,
-    "seen": 1795675282.6398883,
-    "ast_hash": "c3265796ecdd6e37c1f9e8a8e0a5dd12",
+    "mtime": 1795775276.6944723,
+    "seen": 1795775452.8995466,
+    "ast_hash": "10b200f41026b8163004943783e2931a",
     "semantic_hash": ""
   },
   "frontend/src/features/collectors/api.ts": {
@@ -16008,9 +15978,9 @@
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/dataentry/component/InventoryFile.java": {
-    "mtime": 1795767722.9004858,
-    "seen": 1795768797.676902,
-    "ast_hash": "6c8f399da9df6441baee02586604ec6b",
+    "mtime": 1795772986.702,
+    "seen": 1795775452.6050007,
+    "ast_hash": "06a7597bfa4585afb528582425ac5693",
     "semantic_hash": ""
   },
   "backend/src/main/java/com/intermanage/backend/supplierreturn/controller/SupplierReturnController.java": {
@@ -16125,6 +16095,12 @@
     "mtime": 1795768186.528023,
     "seen": 1795768797.9631085,
     "ast_hash": "be87548e516d442144693502c90d4fd5",
+    "semantic_hash": ""
+  },
+  "frontend/src/components/Code128.tsx": {
+    "mtime": 1795775276.6225529,
+    "seen": 1795775452.8743236,
+    "ast_hash": "ed63cd67acd6d6d94bc195f67dbe2078",
     "semantic_hash": ""
   }
 }
