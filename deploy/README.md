@@ -123,6 +123,24 @@ docker compose ps
 docker compose logs backend | grep -i owner   # hasło właściciela, jeśli OWNER_PASSWORD było puste
 ```
 
+## 8. Beta (https://beta.intermanage.pl)
+
+Zmiany idą najpierw na gałąź `beta`, a po sprawdzeniu merge do `main`. Push na `beta` przechodzi te same testy, buduje obrazy z tagiem sha i `beta` i wdraża je do `/opt/intermanage-beta` na tym samym LXC ([docker-compose.beta.yml](docker-compose.beta.yml): osobny projekt Compose, własny tunel, osobna baza). Beta nie robi zadań w tle produkcji (KSeF, MEA, kopie, raporty kasowe, push, makra serwera) i domyślnie nie wysyła maili.
+
+1. **Baza** (LXC 192.168.33.110), nigdy wspólna z produkcją, bo beta migruje schemat pierwsza:
+   ```sql
+   CREATE USER intermanage_beta WITH PASSWORD '...';
+   CREATE DATABASE intermanage_beta OWNER intermanage_beta;
+   ```
+   W `pg_hba.conf`: `host  intermanage_beta  intermanage_beta  192.168.33.113/32  scram-sha-256`, potem `select pg_reload_conf();`.
+   Pusta baza wystarczy (Flyway). Kopię produkcji daje [beta-refresh-db.sh](beta-refresh-db.sh) (w LXC Postgresa jako `postgres`, backend bety zatrzymany).
+2. **Serwer:** `mkdir -p /opt/intermanage-beta && chown deploy:deploy /opt/intermanage-beta`, plik `.env` z [.env.beta.example](.env.beta.example), `chmod 600`.
+3. **Cloudflare:** Zero Trust → Networks → Tunnels → nowy tunel `intermanage-beta`, token do `TUNNEL_TOKEN` w `.env` bety, Public Hostname `beta.intermanage.pl` → `HTTP` `web:80`. Osobny tunel, bo w jednym tunelu dwa konektory w różnych sieciach Dockera nie wiedzą, który `web` jest który. Warto dołożyć Zero Trust → Access → Application na `beta.intermanage.pl` (logowanie e-mailem), żeby beta nie była publiczna.
+4. **GitHub:** Settings → Environments → nowe środowisko `beta`. Sekrety repozytorium działają w nim same; jeśli `DEPLOY_*` albo `TS_*` są sekretami środowiska `production`, dopisz je też do `beta`.
+5. Gałąź: `git switch -c beta && git push -u origin beta` (pierwszy push od razu wdraża betę).
+
+Na co dzień: commit na `beta` → sprawdzenie na beta.intermanage.pl → `git switch main && git merge beta && git push` (wdrożenie produkcji) → `git switch beta && git merge main`, żeby gałęzie się nie rozjeżdżały. Migracji z bety nie poprawia się po wdrożeniu na betę (inna suma kontrolna = backend bety nie wstanie): nowa poprawka to kolejna migracja albo odświeżenie bazy bety skryptem.
+
 ## Na co dzień
 
 - Każdy commit na `main` wdraża się sam, tylko gdy przejdą testy backendu oraz build i lint frontu.

@@ -1,15 +1,16 @@
-# Każdy push na main: testy → obrazy do ghcr.io → wdrożenie na serwer (LXC 192.168.33.113, przez subnet router Tailscale).
+# Każdy push na main albo beta: testy → obrazy do ghcr.io → wdrożenie na serwer (LXC 192.168.33.113, przez subnet router Tailscale).
+# main = produkcja (https://intermanage.pl, /opt/intermanage), beta = https://beta.intermanage.pl (/opt/intermanage-beta).
 # Sekrety repozytorium: TS_OAUTH_CLIENT_ID, TS_OAUTH_SECRET, DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY. Opis: deploy/README.md.
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   workflow_dispatch:
 
-# Wdrożenia po kolei; nowszy commit nie przerywa trwającego wdrożenia.
+# Wdrożenia po kolei w obrębie gałęzi; nowszy commit nie przerywa trwającego wdrożenia, a beta nie czeka na produkcję.
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -63,14 +64,16 @@ jobs:
           push: true
           tags: |
             ghcr.io/ef1ks/intermanage-${{ matrix.app }}:${{ github.sha }}
-            ghcr.io/ef1ks/intermanage-${{ matrix.app }}:latest
+            ghcr.io/ef1ks/intermanage-${{ matrix.app }}:${{ github.ref_name == 'main' && 'latest' || 'beta' }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
   deploy:
     needs: build
+    # Ręczne uruchomienie z innej gałęzi tylko testuje i buduje obrazy, nic nie wdraża.
+    if: github.ref_name == 'main' || github.ref_name == 'beta'
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ github.ref_name == 'main' && 'production' || 'beta' }}
     permissions:
       contents: read
       packages: read
@@ -107,12 +110,14 @@ jobs:
       - name: Wdrożenie
         env:
           TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          DEPLOY_DIR: ${{ github.ref_name == 'main' && '/opt/intermanage' || '/opt/intermanage-beta' }}
+          COMPOSE_SOURCE: ${{ github.ref_name == 'main' && 'deploy/docker-compose.yml' || 'deploy/docker-compose.beta.yml' }}
         run: |
-          scp -i ~/.ssh/id_deploy deploy/docker-compose.yml "$TARGET:/opt/intermanage/docker-compose.yml"
+          scp -i ~/.ssh/id_deploy "$COMPOSE_SOURCE" "$TARGET:$DEPLOY_DIR/docker-compose.yml"
           # GITHUB_TOKEN wygasa po zakończeniu joba, więc logujemy się do GHCR przy każdym wdrożeniu.
           ssh -i ~/.ssh/id_deploy "$TARGET" "
             set -e
-            cd /opt/intermanage
+            cd $DEPLOY_DIR
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
             export IMAGE_TAG=${{ github.sha }}
             # Każde wdrożenie ma obraz z nowym tagiem; bez -a stare wersje zostawały i zapełniły dysk (224 obrazy).

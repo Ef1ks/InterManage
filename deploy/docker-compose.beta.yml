@@ -1,0 +1,76 @@
+# Beta (https://beta.intermanage.pl). Na serwerze w /opt/intermanage-beta obok pliku .env (wzór: .env.beta.example).
+# Workflow .github/workflows/deploy.yml kopiuje ten plik przy każdym pushu na gałąź beta i podaje IMAGE_TAG = sha commita.
+# Osobny projekt Compose (własna sieć i kontenery), więc nginx bety rozmawia tylko z backendem bety.
+name: intermanage-beta
+
+services:
+  # Osobna baza intermanage_beta w tym samym LXC Postgresa (192.168.33.110): migracje z bety nie mogą dotknąć produkcji.
+  backend:
+    image: ghcr.io/ef1ks/intermanage-backend:${IMAGE_TAG:-beta}
+    restart: unless-stopped
+    environment:
+      DB_URL: ${DB_URL:?ustaw DB_URL w .env}
+      DB_USERNAME: ${DB_USERNAME:?ustaw DB_USERNAME w .env}
+      DB_PASSWORD: ${DB_PASSWORD:?ustaw DB_PASSWORD w .env}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      IMPORTS_MAX_PARALLEL: ${IMPORTS_MAX_PARALLEL:-2}
+      # Inny niż na produkcji.
+      JWT_SECRET: ${JWT_SECRET:?ustaw JWT_SECRET w .env}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?ustaw APP_SECRET_KEY w .env}
+      OWNER_USERNAME: ${OWNER_USERNAME:-admin}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      # Baza bety to zwykle kopia produkcji z prawdziwymi adresami, więc maile domyślnie tylko w logach.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@intermanage.pl}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Intermanage beta}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GUS_API_URL: ${GUS_API_URL:-https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
+      GUS_API_KEY: ${GUS_API_KEY:-}
+      # Puste = nowe zdjęcia w bazie bety, nie w buckecie produkcji.
+      R2_S3_API: ${R2_S3_API:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Zadania w tle robi tylko produkcja. KSeF i portal MEA liczą limity na NIP i adres IP, a beta wychodzi
+      # z tego samego adresu: pobieranie z bety zabierałoby limit produkcji (KSeF karze blokadą całego NIP-u).
+      KSEF_SYNC_ENABLED: ${KSEF_SYNC_ENABLED:-false}
+      MEA_SYNC_ENABLED: "false"
+      BACKUP_SCHEDULE_ENABLED: "false"
+      CASH_CLOSING_ENABLED: "false"
+      PUSH_ENABLED: "false"
+      # Agenty i kolektory sklepów łączą się z produkcją, ale makra serwera i tak nie mają tu po co ruszać.
+      PRODUCT_FILE_MACRO_ENABLED: "false"
+      PRICE_CONTROL_MACRO_ENABLED: "false"
+      CAD_PRIORITY_MACRO_ENABLED: "false"
+      FRONTEND_URL: https://beta.intermanage.pl
+      AUTH_COOKIE_SECURE: "true"
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      TZ: Europe/Warsaw
+      STORE_EVENTS_SPOOL_DIR: /app/store-events
+    volumes:
+      - store-events:/app/store-events
+
+  web:
+    image: ghcr.io/ef1ks/intermanage-frontend:${IMAGE_TAG:-beta}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  # Osobny tunel (intermanage-beta): beta.intermanage.pl → http://web:80 w sieci tego projektu.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?ustaw TUNNEL_TOKEN w .env}
+    depends_on:
+      - web
+
+volumes:
+  store-events:
