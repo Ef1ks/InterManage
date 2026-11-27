@@ -131,11 +131,8 @@ export function useLiveEvents() {
             void queryClient.invalidateQueries({ queryKey: ['staff-time', messageStore] })
             break
           case 'chat':
+            // Powiadomienia o nowych wiadomościach daje features/chat/notifications (toast, dźwięk, systemowe).
             invalidateChat(queryClient, message)
-            if (message.type === 'message' && message.authorId !== userId) {
-              const mentioned = Array.isArray(message.mentioned) && message.mentioned.includes(userId)
-              notifyChat(mentioned)
-            }
             break
           case 'agent-macro':
             invalidate('agent-macros', 'recent')
@@ -408,8 +405,3 @@ function notifyPriceControl(storeId: string, message: LiveMessage) {
 }
 
 const eansOf = (message: LiveMessage) => (Array.isArray(message.eans) ? message.eans.map(String) : [])
-
-/** Nowa wiadomość z karty w tle: powiadomienie systemowe, gdy ktoś je włączył (tak jak przy agencie). */
-function notifyChat(mentioned: boolean) {
-  notify(mentioned ? 'Oznaczono Cię na czacie' : 'Nowa wiadomość na czacie', undefined, 'chat')
-}

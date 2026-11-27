@@ -102,13 +102,14 @@ namespace Intermanage.Collector
         public DateTime PrintedOn = DateTime.Today;
 
         /// <summary>
-        /// Cenówka artykułu z kartoteki na dziś (w promocji cena promocyjna); null, gdy nie ma ceny. Zeskanowany kod
+        /// Cenówka artykułu z kartoteki na dziś z ceną zwykłą, także w promocji (na małych cenówkach promocji nie drukujemy,
+        /// od 1.8.7); null, gdy nie ma ceny. Zeskanowany kod
         /// z multikodów (puszka z czteropaka) daje nazwę, cenę i kaucję tego kodu i jego EAN na kodzie kreskowym;
         /// główny EAN, ITM8 albo nazwa: dane z kartoteki.
         /// </summary>
         public static PriceLabel Of(Article article, Match match)
         {
-            string price = article.PriceOn(DateTime.Today);
+            string price = article.RegularOn(DateTime.Today);
             if (Theme.IsNegativeOrZero(price))
             {
                 return null;

@@ -45,14 +45,24 @@ public class ChatMessage {
     @Column(name = "retracted_at")
     private Instant retractedAt;
 
+    /** Wiadomość, na którą ta odpowiada (z tej samej rozmowy). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_id", updatable = false)
+    private ChatMessage replyTo;
+
     protected ChatMessage() {
     }
 
-    public ChatMessage(ChatConversation conversation, AppUser author, String body) {
+    public ChatMessage(ChatConversation conversation, AppUser author, String body, ChatMessage replyTo) {
         this.conversation = conversation;
         this.author = author;
         this.body = body;
+        this.replyTo = replyTo;
         this.createdAt = Instant.now();
+    }
+
+    public ChatMessage getReplyTo() {
+        return replyTo;
     }
 
     public void retract(AppUser user) {

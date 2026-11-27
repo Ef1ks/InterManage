@@ -1,7 +1,17 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
-import type { ChatConversation, ChatLogoChange, ChatMessage, ChatPeople, ChatPerson, ChatThread } from '@/lib/types'
+import type {
+  ChatConversation,
+  ChatLogoChange,
+  ChatMessage,
+  ChatPeople,
+  ChatPerson,
+  ChatProfile,
+  ChatSettings,
+  ChatSound,
+  ChatThread,
+} from '@/lib/types'
 
 /*
  * Czat: rozmowy nie należą do jednego sklepu, więc API jest pod /api/chat. Zmiany przychodzą na żywo (temat `chat`
@@ -84,15 +94,18 @@ export function useChatActions() {
       body,
       files,
       mentions = [],
+      replyToId,
     }: {
       conversationId: string
       body: string
       files: File[]
       /** `user:<id>`, `department:<id>`, `all` */
       mentions?: string[]
+      replyToId?: string | null
     }) => {
       const formData = new FormData()
       formData.append('body', body)
+      if (replyToId) formData.append('replyToId', replyToId)
       files.forEach((file) => formData.append('files', file, file.name))
       mentions.forEach((token) => formData.append('mentions', token))
       return api<ChatMessage>(`/chat/conversations/${conversationId}/messages`, { method: 'POST', formData })
@@ -152,6 +165,60 @@ export function useChatActions() {
     mutationFn: (conversationId: string) => api(`/chat/conversations/${conversationId}/read`, { method: 'POST' }),
   })
   return { send, retract, restore, createGroup, rename, setLogo, removeLogo, restoreLogo, setMembers, direct, read }
+}
+
+const settingsKey = [...chatKey, 'settings'] as const
+
+/** Ustawienia czatu konta: potwierdzenia odczytu, dźwięk, wyciszone osoby i rozmowy. */
+export function useChatSettings() {
+  return useQuery({
+    queryKey: settingsKey,
+    queryFn: () => api<ChatSettings>('/chat/settings'),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** Zmiany ustawień czatu: odpowiedź to całe ustawienia, więc podmieniają je w pamięci bez pobierania. */
+export function useChatSettingsActions() {
+  const queryClient = useQueryClient()
+  const options = {
+    meta: NO_GLOBAL_INVALIDATION,
+    onSuccess: (settings: ChatSettings) => queryClient.setQueryData(settingsKey, settings),
+  }
+  const save = useMutation({
+    ...options,
+    mutationFn: (input: { readReceipts: boolean; sound: ChatSound }) =>
+      api<ChatSettings>('/chat/settings', { method: 'PUT', json: input }),
+  })
+  const muteUser = useMutation({
+    ...options,
+    mutationFn: ({ userId, muted }: { userId: string; muted: boolean }) =>
+      api<ChatSettings>(`/chat/mutes/users/${userId}`, { method: 'PUT', json: { muted } }),
+  })
+  const muteConversation = useMutation({
+    ...options,
+    mutationFn: ({ conversationId, muted }: { conversationId: string; muted: boolean }) =>
+      api<ChatSettings>(`/chat/mutes/conversations/${conversationId}`, { method: 'PUT', json: { muted } }),
+  })
+  return { save, muteUser, muteConversation }
+}
+
+export function useChatProfile(userId: string | null, storeId: string | undefined) {
+  return useQuery({
+    queryKey: [...chatKey, 'profile', userId, storeId ?? null],
+    enabled: userId !== null,
+    queryFn: () => api<ChatProfile>(`/chat/profiles/${userId}${storeId ? `?storeId=${storeId}` : ''}`),
+  })
+}
+
+export function useSaveChatProfile(storeId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    meta: NO_GLOBAL_INVALIDATION,
+    mutationFn: (input: { nickname: string; about: string; phone: string }) =>
+      api<ChatProfile>(`/chat/profile${storeId ? `?storeId=${storeId}` : ''}`, { method: 'PUT', json: input }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: [...chatKey, 'profile'] }),
+  })
 }
 
 /** „Pisze…”: bez mutacji i odświeżania, samo zgłoszenie (przeglądarka wysyła je najwyżej co kilka sekund). */

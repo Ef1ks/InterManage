@@ -124,8 +124,8 @@ public class ChatController {
     public ChatDtos.Message send(@PathVariable UUID id, @RequestParam(required = false) String body,
             @RequestParam(name = "files", required = false) List<MultipartFile> files,
             @RequestParam(name = "mentions", required = false) List<String> mentions,
-            @AuthenticationPrincipal AppUserPrincipal principal) {
-        return service.send(principal.getId(), id, body, files, mentions);
+            @RequestParam(required = false) UUID replyToId, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.send(principal.getId(), id, body, files, mentions, replyToId);
     }
 
     /** Sam tekst jako JSON {@code {body}} (aplikacja mobilna). */
@@ -133,7 +133,44 @@ public class ChatController {
     @ResponseStatus(HttpStatus.CREATED)
     public ChatDtos.Message sendText(@PathVariable UUID id, @RequestBody ChatDtos.TextRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
-        return service.send(principal.getId(), id, request.body(), List.of(), request.mentions());
+        return service.send(principal.getId(), id, request.body(), List.of(), request.mentions(), request.replyToId());
+    }
+
+    /** Ustawienia czatu konta: potwierdzenia odczytu, dźwięk i wyciszone osoby i rozmowy. */
+    @GetMapping("/api/chat/settings")
+    public ChatDtos.Settings settings(@AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.settings(principal.getId());
+    }
+
+    @PutMapping("/api/chat/settings")
+    public ChatDtos.Settings saveSettings(@Valid @RequestBody ChatDtos.SettingsRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.saveSettings(principal.getId(), request);
+    }
+
+    /** Profil osoby z moich sklepów; {@code storeId} = bieżący sklep (ranga z niego). */
+    @GetMapping("/api/chat/profiles/{userId}")
+    public ChatDtos.Profile profile(@PathVariable UUID userId, @RequestParam(required = false) UUID storeId,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.profile(principal.getId(), userId, storeId);
+    }
+
+    @PutMapping("/api/chat/profile")
+    public ChatDtos.Profile saveProfile(@Valid @RequestBody ChatDtos.ProfileRequest request,
+            @RequestParam(required = false) UUID storeId, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.saveProfile(principal.getId(), request, storeId);
+    }
+
+    @PutMapping("/api/chat/mutes/users/{userId}")
+    public ChatDtos.Settings muteUser(@PathVariable UUID userId, @RequestBody ChatDtos.MuteRequest request,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.muteUser(principal.getId(), userId, request.muted());
+    }
+
+    @PutMapping("/api/chat/mutes/conversations/{conversationId}")
+    public ChatDtos.Settings muteConversation(@PathVariable UUID conversationId,
+            @RequestBody ChatDtos.MuteRequest request, @AuthenticationPrincipal AppUserPrincipal principal) {
+        return service.muteConversation(principal.getId(), conversationId, request.muted());
     }
 
     @PostMapping("/api/chat/conversations/{id}/read")

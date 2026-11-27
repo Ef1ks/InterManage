@@ -4,6 +4,7 @@ import {
   PercentIcon,
   SplitIcon,
   CheckCheckIcon,
+  ClipboardCheckIcon,
   ClipboardCopyIcon,
   ChevronDownIcon,
   CircleCheckIcon,
@@ -24,6 +25,7 @@ import {
   PackageCheckIcon,
   PackagePlusIcon,
   PackageSearchIcon,
+  PackageXIcon,
   PencilIcon,
   RecycleIcon,
   ScaleIcon,
@@ -85,6 +87,9 @@ import { usePriceRoundingRules, useSupplierMargins, useSupplierSalePrices } from
 import { SupplierMarginDialog } from '@/features/suppliers/SupplierMarginDialog'
 import { supplierMarginSummary } from '@/features/suppliers/format'
 import { storeLabel, useCurrentStore } from '@/features/stores/current-store'
+import { InventoryDialog } from '@/features/collectors/InventoryDialog'
+import { useSupplierReturnActions } from '@/features/supplier-returns/api'
+import { supplierReturnsPath } from '@/features/supplier-returns/paths'
 import { ApiError, fetchPostedFile, saveBlob } from '@/lib/api'
 import { setFileQueueDocument } from '@/lib/file-queue'
 import { useHiddenHint } from '@/lib/use-hidden-hint'
@@ -377,6 +382,8 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   const [closeInvoicesOpen, setCloseInvoicesOpen] = useState(false)
   const { data: priceControlPending = 0 } = usePriceControlPendingCount(store.id, true)
   const [pluMacroOpen, setPluMacroOpen] = useState(false)
+  const [inventoryOpen, setInventoryOpen] = useState(false)
+  const returnActions = useSupplierReturnActions(store.id)
   const [promoPricesOpen, setPromoPricesOpen] = useState(false)
   const [splitTargets, setSplitTargets] = useState<DataEntryRow[]>([])
   const [pendingInvoice, setPendingInvoice] = useState<PendingDocument | null>(null)
@@ -1157,6 +1164,46 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
   }
   const protocolSkipped = rows.filter(isArticle).length - protocolLines.length
 
+  // Zwrot do dostawcy i inwentaryzacja: zaznaczone artykuły (od dwóch, bo sam kursor też zaznacza wiersz),
+  // bez zaznaczenia wszystkie; zwrot bez znaku ilości, inwentaryzacja tylko z EAN-em.
+  const stockSource = chosenArticles.length > 1 ? chosenArticles : rows.filter(isArticle)
+  const returnLines = stockSource.flatMap((row) =>
+    !row.eanFallback && row.quantity && row.name
+      ? [
+          {
+            itm8: row.itm8,
+            ean: /^\d{1,14}$/.test(row.ean) ? row.ean : null,
+            name: row.name,
+            brand: row.brand || null,
+            quantity: Math.abs(row.quantity),
+          },
+        ]
+      : [],
+  )
+  const inventoryItems = stockSource.flatMap((row) =>
+    !row.eanFallback && /^\d{1,14}$/.test(row.ean) && row.quantity !== null && row.quantity >= 0 && row.name
+      ? [{ itm8: row.itm8, ean: row.ean, name: row.name, brand: row.brand || null, quantity: row.quantity }]
+      : [],
+  )
+  const createReturn = () =>
+    returnActions.fromProtocols.mutate(
+      // Dostawca dokumentu z tabeli, a bez niego serwer podpowie go z ostatnich dostaw.
+      { lines: returnLines, supplierId: supplier?.id ?? null },
+      {
+        onSuccess: (created) =>
+          toast.success('Utworzono zwrot do dostawcy', {
+            description: created.summary.supplier
+              ? `Dostawca: ${created.summary.supplier.name}`
+              : 'Wybierz dostawcę w zwrocie.',
+            action: {
+              label: 'Otwórz',
+              onClick: () => navigate(`${supplierReturnsPath}?zwrot=${created.summary.id}`),
+            },
+          }),
+        onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się utworzyć zwrotu'),
+      },
+    )
+
   // Etykiety cenowe: zaznaczone artykuły, a bez zaznaczenia wszystkie; tylko z prawdziwym EAN-em.
   const labelSource = chosenArticles.length > 0 ? chosenArticles : rows.filter(isArticle)
   const labelLines: LabelLine[] = labelSource
@@ -1725,6 +1772,34 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
                 label="Zamknij faktury"
                 hint="Faktury z zapisanych plików XML, skrypt do schowka"
                 onClick={() => setCloseInvoicesOpen(true)}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Listy</DropdownMenuLabel>
+              <ActionItem
+                icon={<PackageXIcon />}
+                label="Zwrot do dostawcy"
+                count={returnLines.length}
+                disabled={returnLines.length === 0 || returnActions.fromProtocols.isPending}
+                hint={
+                  returnLines.length === 0
+                    ? 'Żaden artykuł nie ma ilości'
+                    : `Lista do Zakupy → Zwroty do dostawcy${supplier ? `, dostawca: ${supplier.name}` : ''}`
+                }
+                onClick={createReturn}
+              />
+              <ActionItem
+                icon={<ClipboardCheckIcon />}
+                label="Inwentaryzacja"
+                count={inventoryItems.length}
+                disabled={inventoryItems.length === 0 || badEanTitle !== null}
+                hint={
+                  inventoryItems.length === 0
+                    ? 'Żaden artykuł nie ma EAN-u i ilości od 0 w górę'
+                    : 'Policzone ilości jako stan: od razu do programu sklepu albo na przyszłość do historii'
+                }
+                onClick={() => setInventoryOpen(true)}
               />
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -2340,6 +2415,7 @@ function StoreDataEntry({ store }: { store: StoreSummary }) {
 
       <CloseInvoicesDialog storeId={store.id} open={closeInvoicesOpen} onOpenChange={setCloseInvoicesOpen} />
       <PluMacroDialog open={pluMacroOpen} onOpenChange={setPluMacroOpen} items={pluCodes} />
+      <InventoryDialog storeId={store.id} items={inventoryItems} open={inventoryOpen} onOpenChange={setInventoryOpen} />
       <PromoPricesDialog
         storeId={store.id}
         open={promoPricesOpen}

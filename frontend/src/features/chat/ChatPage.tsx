@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { MessagesSquareIcon, PlusIcon, StoreIcon, UsersRoundIcon } from 'lucide-react'
+import { BellOffIcon, MessagesSquareIcon, PlusIcon, SettingsIcon, StoreIcon, UsersRoundIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { LoadingPanel } from '@/components/LoadingPanel'
@@ -15,14 +15,16 @@ import { onLiveMessage } from '@/lib/live-events'
 import type { ChatConversation, ChatPerson } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { useChatActions, useChatUnread, useConversations, useThread } from './api'
+import { useChatActions, useChatSettings, useChatUnread, useConversations, useThread } from './api'
+import { ChatNotificationsPrompt, ChatPreferencesDialog } from './ChatPreferencesDialog'
 import { ChatTasksBar } from './ChatTasksBar'
 import { ChatThread } from './ChatThread'
 import { conversationTitle, filesLabel, listTime } from './format'
 import { GroupDialog } from './GroupDialog'
+import { CONVERSATION_PARAM } from './notifications'
 import { PeoplePanel } from './PeoplePanel'
+import { ProfileDialogHost } from './profile'
 
-const CONVERSATION_PARAM = 'rozmowa'
 const TYPING_MS = 6_000
 
 /**
@@ -39,6 +41,15 @@ export function ChatPage() {
   const [query, setQuery] = useState('')
   const [groupDialog, setGroupDialog] = useState<{ group?: ChatConversation; members?: ChatPerson[] } | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  const [preferencesOpen, setPreferencesOpen] = useState(false)
+  const { data: chatSettings } = useChatSettings()
+  const muted = useMemo(
+    () => ({
+      conversations: new Set(chatSettings?.mutedConversations ?? []),
+      users: new Set((chatSettings?.mutedUsers ?? []).map((person) => person.id)),
+    }),
+    [chatSettings],
+  )
   const typing = useLiveTyping()
   const { direct } = useChatActions()
   // Panel osób idzie za otwartą rozmową: jej sklep i (poza czatem całego sklepu) tylko jej członkowie.
@@ -84,6 +95,7 @@ export function ChatPage() {
   return (
     <div data-wide-page data-fit-page className="flex min-h-0 flex-1 flex-col">
       <ChatTasksBar storeId={storeId} />
+      <ChatNotificationsPrompt />
       <div className="grid h-[calc(100svh-5.5rem)] min-h-0 flex-1 overflow-hidden rounded-xl border bg-card lg:h-auto lg:grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)_17rem]">
         <aside className={cn('flex min-h-0 flex-col border-r', selected && 'hidden lg:flex')}>
           <div className="flex items-center gap-2 px-3 pt-3 pb-2">
@@ -94,6 +106,15 @@ export function ChatPage() {
                 Grupa
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Ustawienia czatu"
+              title="Ustawienia czatu: dźwięk, powiadomienia, odczyty, wyciszone"
+              onClick={() => setPreferencesOpen(true)}
+            >
+              <SettingsIcon />
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -115,6 +136,7 @@ export function ChatPage() {
                 meId={me.id}
                 selected={selected}
                 typing={typing}
+                muted={muted}
                 onSelect={select}
               />
             )}
@@ -164,6 +186,14 @@ export function ChatPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ProfileDialogHost />
+
+      <ChatPreferencesDialog
+        open={preferencesOpen}
+        onOpenChange={setPreferencesOpen}
+        conversations={conversations ?? []}
+      />
 
       <GroupDialog
         open={groupDialog !== null}
@@ -230,10 +260,13 @@ type SectionsProps = {
   meId: string
   selected: string | null
   typing: Map<string, ChatPerson[]>
+  muted: Muted
   onSelect: (id: string) => void
 }
 
-function ConversationSections({ conversations, storeNumber, meId, selected, typing, onSelect }: SectionsProps) {
+type Muted = { conversations: Set<string>; users: Set<string> }
+
+function ConversationSections({ conversations, storeNumber, meId, selected, typing, muted, onSelect }: SectionsProps) {
   const local = conversations.filter((conversation) => conversation.local)
   const other = conversations.filter((conversation) => !conversation.local)
   const row = (conversation: ChatConversation) => (
@@ -243,6 +276,10 @@ function ConversationSections({ conversations, storeNumber, meId, selected, typi
       meId={meId}
       active={conversation.id === selected}
       typing={typing.get(conversation.id) ?? []}
+      muted={
+        muted.conversations.has(conversation.id) ||
+        (conversation.kind === 'DIRECT' && !!conversation.peer && muted.users.has(conversation.peer.id))
+      }
       onSelect={onSelect}
     />
   )
@@ -287,12 +324,14 @@ function ConversationRow({
   meId,
   active,
   typing,
+  muted,
   onSelect,
 }: {
   conversation: ChatConversation
   meId: string
   active: boolean
   typing: ChatPerson[]
+  muted: boolean
   onSelect: (id: string) => void
 }) {
   const title = conversationTitle(conversation)
@@ -332,6 +371,7 @@ function ConversationRow({
                 preview(conversation, meId)
               )}
             </span>
+            {muted && <BellOffIcon aria-label="Wyciszona" className="size-3.5 shrink-0 text-muted-foreground" />}
             {conversation.unreadMentions > 0 && (
               <span
                 title="Ktoś Cię tu oznaczył"
@@ -342,7 +382,12 @@ function ConversationRow({
               </span>
             )}
             {unread && (
-              <span className="shrink-0 rounded-full bg-primary px-1.5 text-[0.7rem] leading-[1.125rem] font-semibold text-primary-foreground tabular-nums">
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-1.5 text-[0.7rem] leading-[1.125rem] font-semibold tabular-nums',
+                  muted ? 'bg-muted-foreground/30 text-foreground' : 'bg-primary text-primary-foreground',
+                )}
+              >
                 {conversation.unread > 99 ? '99+' : conversation.unread}
               </span>
             )}

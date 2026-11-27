@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import {
   CheckIcon,
+  ClipboardCheckIcon,
   FileOutputIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
+  PackageXIcon,
   PrinterIcon,
   ScanBarcodeIcon,
   ShoppingCartIcon,
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react'
-import { useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { FullPageMessage } from '@/components/FullPageMessage'
@@ -42,11 +44,16 @@ import type { CollectorList, CollectorListDetails, CollectorListOutput, Protocol
 import { useLoadMore } from '@/lib/use-load-more'
 import { cn } from '@/lib/utils'
 
+import { useSupplierReturnActions } from '@/features/supplier-returns/api'
+import { supplierReturnsPath } from '@/features/supplier-returns/paths'
+
+import { InventoryDialog } from './InventoryDialog'
+import { collectorPaths } from './paths'
+import { markLoaded, useCreateCollectorFile } from './files-api'
 import {
   listQuery,
   useCollectorListDetails,
   useCollectorLists,
-  useMarkOrderSaved,
   useMarkProtocolSaved,
   useRemoveCollectorList,
   useRestoreCollectorList,
@@ -61,8 +68,13 @@ const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximum
 const quantity = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 3 })
 
 const errorMessage = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback)
+const OUTPUT_LABELS: Partial<Record<CollectorListOutput, string>> = {
+  ORDER: 'Zamówienie',
+  INVENTORY: 'Inwentaryzacja',
+  SUPPLIER_RETURN: 'Zwrot do dostawcy',
+}
 const protocolLabel = (kind: CollectorListOutput) =>
-  kind === 'ORDER' ? 'Zamówienie' : (PROTOCOLS.find((item) => item.kind === kind)?.label ?? kind)
+  OUTPUT_LABELS[kind] ?? PROTOCOLS.find((item) => item.kind === kind)?.label ?? kind
 const plural = new Intl.PluralRules('pl-PL')
 const LINES: Partial<Record<Intl.LDMLPluralRule, string>> = { one: 'pozycja', few: 'pozycje' }
 const lineCount = (count: number) => `${count} ${LINES[plural.select(count)] ?? 'pozycji'}`
@@ -287,7 +299,10 @@ function Actions({
   const { data: settings } = useProtoSettings(storeId)
   const folder = useProtoFolder(storeId)
   const markSaved = useMarkProtocolSaved(storeId)
-  const markOrder = useMarkOrderSaved(storeId)
+  const createFile = useCreateCollectorFile(storeId)
+  const returns = useSupplierReturnActions(storeId)
+  const navigate = useNavigate()
+  const [inventory, setInventory] = useState(false)
   const undo = useUndoProtocol(storeId)
   const [pending, setPending] = useState<ProtocolKind | null>(null)
   const [repeating, setRepeating] = useState<CollectorListOutput | null>(null)
@@ -342,6 +357,25 @@ function Actions({
       setPending(null)
     }
   }
+
+  // Zwrot trafia do Zakupów; dostawcę podpowiada ostatnia dostawa artykułów.
+  const createReturn = () =>
+    returns.fromCollector.mutate(
+      { listIds: ids },
+      {
+        onSuccess: (created) =>
+          toast.success('Utworzono zwrot do dostawcy', {
+            description: created.summary.supplier
+              ? `Dostawca: ${created.summary.supplier.name}`
+              : 'Wybierz dostawcę w zwrocie.',
+            action: {
+              label: 'Otwórz',
+              onClick: () => navigate(`${supplierReturnsPath}?zwrot=${created.summary.id}`),
+            },
+          }),
+        onError: (error) => toast.error(errorMessage(error, 'Nie udało się utworzyć zwrotu.')),
+      },
+    )
 
   const file = (request: Promise<void>, fallback: string) =>
     request.catch((error: unknown) => {
@@ -412,7 +446,32 @@ function Actions({
           <ShoppingCartIcon aria-hidden />
           Zamówienie
         </Button>
+        <Button
+          variant="outline"
+          disabled={pending !== null}
+          onClick={() =>
+            done.some((item) => item.protocol.kind === 'INVENTORY') ? setRepeating('INVENTORY') : setInventory(true)
+          }
+        >
+          <ClipboardCheckIcon aria-hidden />
+          Inwentaryzacja
+        </Button>
+        <Button
+          variant="outline"
+          loading={returns.fromCollector.isPending}
+          disabled={pending !== null}
+          onClick={() =>
+            done.some((item) => item.protocol.kind === 'SUPPLIER_RETURN')
+              ? setRepeating('SUPPLIER_RETURN')
+              : createReturn()
+          }
+        >
+          <PackageXIcon aria-hidden />
+          Zwrot do dostawcy
+        </Button>
       </div>
+
+      <InventoryDialog storeId={storeId} listIds={ids} open={inventory} onOpenChange={setInventory} />
 
       <ZeroStockOrderDialog
         storeId={storeId}
@@ -421,7 +480,17 @@ function Actions({
         onOpenChange={setOrdering}
         orderPath={`/stores/${storeId}/data-entry/export/order`}
         initialQuantity={(item) => String(Math.min(99, Math.max(1, Math.round(listQuantity.get(item.itm8) ?? 1))))}
-        onSaved={(fileName) => markOrder.mutateAsync({ ids, fileName }).then(() => undefined)}
+        onSaved={async (fileName, orderLines) => {
+          const { file } = await createFile.mutateAsync({ kind: 'ORDER', listIds: ids, lines: orderLines })
+          await markLoaded(storeId, file.id, fileName)
+        }}
+        onPrepare={async (orderLines) => {
+          await createFile.mutateAsync({ kind: 'ORDER', listIds: ids, lines: orderLines })
+          toast.success('Zamówienie czeka w historii', {
+            description: 'Plik zrobisz w Kolektory → Zamówienia.',
+            action: { label: 'Otwórz', onClick: () => navigate(collectorPaths.orders) },
+          })
+        }}
         description="Ilości z listy jako liczba kartonów. Odznacz, czego nie zamawiasz, i popraw ilości. Plik trafi do folderu protokołów."
       />
 
@@ -429,12 +498,18 @@ function Actions({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {repeating === 'ORDER' ? 'Utworzyć zamówienie jeszcze raz?' : 'Utworzyć ten protokół jeszcze raz?'}
+              {repeating && repeating in OUTPUT_LABELS
+                ? `Utworzyć jeszcze raz: ${protocolLabel(repeating).toLowerCase()}?`
+                : 'Utworzyć ten protokół jeszcze raz?'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {repeating === 'ORDER'
                 ? 'Z tej listy jest już zamówienie. Program sklepu zamówi te artykuły drugi raz.'
-                : `Z tej listy jest już protokół ${repeating ? protocolLabel(repeating) : ''}. Program sklepu wczyta ilości drugi raz.`}
+                : repeating === 'INVENTORY'
+                  ? 'Z tej listy jest już inwentaryzacja. Nowa trafi do historii jako kolejna.'
+                  : repeating === 'SUPPLIER_RETURN'
+                    ? 'Z tej listy jest już zwrot do dostawcy. Powstanie drugi zwrot z tymi artykułami.'
+                    : `Z tej listy jest już protokół ${repeating ? protocolLabel(repeating) : ''}. Program sklepu wczyta ilości drugi raz.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -442,7 +517,9 @@ function Actions({
             <AlertDialogAction
               onClick={() => {
                 if (repeating === 'ORDER') setOrdering(true)
-                else if (repeating) void save(repeating)
+                else if (repeating === 'INVENTORY') setInventory(true)
+                else if (repeating === 'SUPPLIER_RETURN') createReturn()
+                else if (repeating) void save(repeating as ProtocolKind)
                 setRepeating(null)
               }}
             >

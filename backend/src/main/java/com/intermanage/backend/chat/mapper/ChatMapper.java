@@ -36,9 +36,12 @@ public interface ChatMapper {
     @Mapping(target = "createdAt", source = "message.createdAt")
     @Mapping(target = "retractedAt", source = "message.retractedAt")
     @Mapping(target = "retractedByName", source = "message.retractedBy.displayName")
+    @Mapping(target = "replyTo", source = "replyTo")
+    // Odpowiedź też ma „retracted”: bez tego MapStruct brał je z cytowanej wiadomości.
+    @Mapping(target = "retracted", source = "retracted")
     ChatDtos.Message toMessage(ChatMessage message, String body, String authorAvatarUrl, boolean retracted,
             List<ChatDtos.Attachment> attachments, List<ChatDtos.Mention> mentions, boolean mentionsMe,
-            boolean canRetract, boolean canRestore);
+            boolean canRetract, boolean canRestore, ChatDtos.Reply replyTo);
 
     ChatDtos.Attachment toAttachment(ChatAttachmentRepository.Summary summary);
 }

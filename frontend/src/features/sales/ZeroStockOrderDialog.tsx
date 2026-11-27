@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ShoppingCartIcon } from 'lucide-react'
+import { ClockIcon, ShoppingCartIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -23,8 +23,10 @@ type OrderOptions = {
   initialQuantity?: (item: ZeroStockItem) => string
   /** Endpoint pliku COMMANDE z `{lines}`; bez niego plik z raportu zerówek. */
   orderPath?: string
-  /** Po zapisaniu pliku w folderze (np. oznaczenie listy z kolektora). */
-  onSaved?: (fileName: string) => Promise<void> | void
+  /** Po zapisaniu pliku w folderze (np. oznaczenie listy z kolektora), z pozycjami z pliku. */
+  onSaved?: (fileName: string, lines: OrderLine[]) => Promise<void> | void
+  /** Drugi przycisk: zamówienie zostaje w historii do wgrania później, bez pliku. */
+  onPrepare?: (lines: OrderLine[]) => Promise<void>
   description?: string
 }
 
@@ -60,11 +62,13 @@ function OrderList({
   initialQuantity,
   orderPath,
   onSaved,
+  onPrepare,
 }: OrderOptions & { storeId: string; items: ZeroStockItem[]; onDone: () => void }) {
   const folder = useProtoFolder(storeId)
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [preparing, setPreparing] = useState(false)
 
   const orderable = items.filter((item) => item.ean && ORDER_EAN.test(item.ean))
   const chosen = orderable.filter((item) => !unchecked.has(item.itm8))
@@ -104,7 +108,7 @@ function OrderList({
       )
       if (folderReady) await saveToFolder(folder.key, fileName, blob)
       else saveBlob(blob, fileName)
-      await onSaved?.(fileName)
+      await onSaved?.(fileName, lines)
       toast.success('Zapisano zamówienie', {
         description: [
           fileName,
@@ -186,7 +190,28 @@ function OrderList({
         {lines.some((line) => !validQuantity(line.quantity)) && (
           <p className="text-sm text-destructive">Ilość to liczba całkowita od 1 do {MAX_QUANTITY}.</p>
         )}
-        <Button size="lg" loading={saving} disabled={blocked} onClick={() => void save()}>
+        {onPrepare && (
+          <Button
+            size="lg"
+            variant="outline"
+            loading={preparing}
+            disabled={blocked || saving}
+            title="Zamówienie czeka w historii; plik zrobisz w dniu, w którym ma trafić do programu sklepu"
+            onClick={() => {
+              setPreparing(true)
+              onPrepare(lines)
+                .then(() => onDone())
+                .catch((error: unknown) =>
+                  toast.error(error instanceof ApiError ? error.message : 'Nie udało się przygotować zamówienia'),
+                )
+                .finally(() => setPreparing(false))
+            }}
+          >
+            <ClockIcon />
+            Na później
+          </Button>
+        )}
+        <Button size="lg" loading={saving} disabled={blocked || preparing} onClick={() => void save()}>
           <ShoppingCartIcon />
           Zapisz zamówienie ({lines.length})
         </Button>

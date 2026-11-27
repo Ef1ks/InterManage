@@ -16,6 +16,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
     /** Wiadomości przed chwilą {@code before}, od najnowszej. */
     @Query("""
             select m from ChatMessage m left join fetch m.author left join fetch m.retractedBy
+            left join fetch m.replyTo r left join fetch r.author
             where m.conversation.id = :conversationId and m.createdAt < :before
             order by m.createdAt desc, m.id desc""")
     List<ChatMessage> findPage(UUID conversationId, Instant before, Limit limit);

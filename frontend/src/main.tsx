@@ -7,6 +7,7 @@ import { ThemeProvider } from 'next-themes'
 
 import { App } from '@/App'
 import { SplashScreen } from '@/components/SplashScreen'
+import { StaleToastSweeper } from '@/components/StaleToastSweeper'
 import { Toaster } from '@/components/ui/sonner'
 import { queryClient } from '@/lib/query-client'
 import { THEME_STORAGE_KEY } from '@/lib/theme'
@@ -31,6 +32,7 @@ createRoot(document.getElementById('root')!).render(
           <SplashScreen />
           {/* Pod nagłówkiem (h-14), żeby powiadomienie nie zasłaniało jego przycisków. */}
           <Toaster position="top-right" richColors offset={{ top: '4.25rem' }} mobileOffset={{ top: '4.25rem' }} />
+          <StaleToastSweeper />
           <ReactQueryDevtools buttonPosition="bottom-left" />
         </QueryClientProvider>
       </Provider>

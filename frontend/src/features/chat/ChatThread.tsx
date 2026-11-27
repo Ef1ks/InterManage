@@ -1,11 +1,17 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
+  ArrowDownIcon,
   ArrowLeftIcon,
+  BellIcon,
+  BellOffIcon,
   CheckCheckIcon,
   CheckIcon,
+  CopyIcon,
+  EllipsisVerticalIcon,
   FileTextIcon,
   ImageIcon,
   PaperclipIcon,
+  ReplyIcon,
   SendHorizonalIcon,
   SettingsIcon,
   Undo2Icon,
@@ -16,14 +22,31 @@ import { toast } from 'sonner'
 
 import { LoadingPanel } from '@/components/LoadingPanel'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ApiError, downloadFile } from '@/lib/api'
 import type { ChatConversation, ChatMessage, ChatPerson, ChatThread as Thread } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-import { attachmentUrl, MAX_CHAT_FILE_BYTES, MAX_CHAT_FILES, sendTyping, useChatActions, useThread } from './api'
-import { conversationTitle, dayLabel, fileSize, isSameDay, messageTime } from './format'
+import {
+  attachmentUrl,
+  MAX_CHAT_FILE_BYTES,
+  MAX_CHAT_FILES,
+  sendTyping,
+  useChatActions,
+  useChatSettings,
+  useChatSettingsActions,
+  useThread,
+} from './api'
+import { conversationTitle, dayLabel, fileSize, filesLabel, isSameDay, messageTime } from './format'
 import { ChatSettingsDialog } from './ChatSettingsDialog'
+import { ProfileTrigger } from './profile'
 import { MentionText, mentionOptions, useMentionPicker, type MentionOption } from './mentions'
 
 /** Kolejne wiadomości tej samej osoby w tym czasie stoją razem, bez powtarzania imienia. */
@@ -48,6 +71,11 @@ export function ChatThread({ conversationId, meId, typingNow, onBack, onManage, 
   const messages = useMemo(() => (pages ? [...pages].reverse().flatMap((page) => page.messages) : []), [pages])
   const newest = messages.at(-1)
   const [editing, setEditing] = useState(false)
+  // Odpowiedź należy do rozmowy: po przejściu do innej pasek odpowiedzi znika sam.
+  const [reply, setReply] = useState<{ conversationId: string; message: ChatMessage } | null>(null)
+  const replyTo = reply?.conversationId === conversationId ? reply.message : null
+  const { data: settings } = useChatSettings()
+  const { muteUser, muteConversation } = useChatSettingsActions()
 
   // Odczyt: gdy rozmowa jest na ekranie i przyszło coś nowego od kogoś innego.
   const markRead = read.mutate
@@ -68,6 +96,40 @@ export function ChatThread({ conversationId, meId, typingNow, onBack, onManage, 
   const conversation = first.conversation
   const typing = mergeTyping(first.typing, typingNow, meId)
   const othersCount = Math.max(0, first.members.filter((member) => member.id !== meId).length)
+  const mutedUsers = new Set((settings?.mutedUsers ?? []).map((person) => person.id))
+  const peerId = conversation.kind === 'DIRECT' ? conversation.peer?.id : undefined
+  // W rozmowie dwóch osób dzwonek wycisza osobę (wszędzie), w czacie sklepu i grupie samą rozmowę.
+  const muted = peerId ? mutedUsers.has(peerId) : !!settings?.mutedConversations.includes(conversationId)
+  const toggleMute = () => {
+    const next = !muted
+    const onSuccess = () =>
+      toast.success(next ? (peerId ? 'Osoba wyciszona' : 'Rozmowa wyciszona') : 'Powiadomienia włączone', {
+        description: next
+          ? peerId
+            ? 'Jej wiadomości nie dają powiadomień ani dźwięku, także w grupach.'
+            : 'Bez powiadomień i poza licznikiem. Oznaczenie albo odpowiedź na Twoją wiadomość dalej powiadamia.'
+          : undefined,
+      })
+    const onError = (error: unknown) =>
+      toast.error(error instanceof ApiError ? error.message : 'Nie udało się zmienić wyciszenia')
+    if (peerId) muteUser.mutate({ userId: peerId, muted: next }, { onSuccess, onError })
+    else muteConversation.mutate({ conversationId, muted: next }, { onSuccess, onError })
+  }
+  const muteAuthor = (message: ChatMessage) => {
+    if (!message.authorId) return
+    const userId = message.authorId
+    muteUser.mutate(
+      { userId, muted: true },
+      {
+        onSuccess: () =>
+          toast.success(`Wyciszono: ${message.authorName ?? 'osoba'}`, {
+            description: 'Jej wiadomości nie dają powiadomień ani dźwięku.',
+            action: { label: 'Cofnij', onClick: () => muteUser.mutate({ userId, muted: false }) },
+          }),
+        onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się wyciszyć osoby'),
+      },
+    )
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -76,7 +138,12 @@ export function ChatThread({ conversationId, meId, typingNow, onBack, onManage, 
           <ArrowLeftIcon />
         </Button>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[0.95rem] font-semibold">{conversationTitle(conversation)}</h2>
+          <h2 className="truncate text-[0.95rem] font-semibold">
+            {/* W rozmowie dwóch osób nazwa to druga osoba: klik pokazuje jej profil. */}
+            <ProfileTrigger userId={peerId ?? null} className="max-w-full truncate hover:underline">
+              {conversationTitle(conversation)}
+            </ProfileTrigger>
+          </h2>
           <p className="truncate text-xs text-muted-foreground">
             {typing.length > 0 ? (
               <span className="text-emerald-700 dark:text-emerald-400">{typingLabel(typing)}</span>
@@ -97,6 +164,16 @@ export function ChatThread({ conversationId, meId, typingNow, onBack, onManage, 
             Członkowie
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-pressed={muted}
+          aria-label={muted ? 'Włącz powiadomienia' : peerId ? 'Wycisz osobę' : 'Wycisz rozmowę'}
+          title={muted ? 'Wyciszona: kliknij, żeby włączyć powiadomienia' : peerId ? 'Wycisz osobę' : 'Wycisz rozmowę'}
+          onClick={toggleMute}
+        >
+          {muted ? <BellOffIcon className="text-muted-foreground" /> : <BellIcon />}
+        </Button>
         {onTogglePeople && (
           <Button variant="ghost" size="icon" aria-label="Osoby w rozmowie" onClick={onTogglePeople}>
             <UsersIcon />
@@ -115,12 +192,18 @@ export function ChatThread({ conversationId, meId, typingNow, onBack, onManage, 
         loadingMore={thread.isFetchingNextPage}
         onLoadMore={() => void thread.fetchNextPage()}
         typing={typing}
+        mutedUsers={mutedUsers}
+        onReply={(message) => setReply({ conversationId, message })}
+        onMuteAuthor={conversation.kind === 'DIRECT' ? undefined : muteAuthor}
       />
       {editing && <ChatSettingsDialog conversation={conversation} open={editing} onOpenChange={setEditing} />}
       <Composer
         key={`composer:${conversationId}`}
         conversationId={conversationId}
         mentionable={mentionOptions(first.members, first.departments, first.canMentionAll, meId)}
+        replyTo={replyTo}
+        meId={meId}
+        onCancelReply={() => setReply(null)}
       />
     </div>
   )
@@ -158,6 +241,26 @@ type ListProps = {
   loadingMore: boolean
   onLoadMore: () => void
   typing: ChatPerson[]
+  mutedUsers: Set<string>
+  onReply: (message: ChatMessage) => void
+  /** Bez niego (rozmowa dwóch osób) osobę wycisza dzwonek w nagłówku. */
+  onMuteAuthor?: (message: ChatMessage) => void
+}
+
+const messageElementId = (id: string) => `chat-message-${id}`
+
+/** Klik w cytat: przewija do wiadomości i na chwilę ją podświetla; starszej niż wczytane nie znajdzie. */
+function jumpTo(messageId: string) {
+  const element = document.getElementById(messageElementId(messageId))
+  if (!element) {
+    toast.message('To starsza wiadomość', { description: 'Wczytaj starsze wiadomości, żeby do niej przejść.' })
+    return
+  }
+  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  element.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' })
+  element.classList.remove('chat-message-flash')
+  void element.offsetWidth
+  element.classList.add('chat-message-flash')
 }
 
 function MessageList({
@@ -170,25 +273,66 @@ function MessageList({
   loadingMore,
   onLoadMore,
   typing,
+  mutedUsers,
+  onReply,
+  onMuteAuthor,
 }: ListProps) {
   const scroller = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
   const previousFirst = useRef<string | undefined>(undefined)
+  const previousLast = useRef<string | undefined>(undefined)
   const previousHeight = useRef(0)
+  // Nowe wiadomości, które przyszły, gdy ktoś czytał wyżej: przycisk „Nowe wiadomości” na dole.
+  const [unseen, setUnseen] = useState(0)
 
-  // Nowe wiadomości: na dół, o ile ktoś był na dole. Starsze doczytane u góry: widok zostaje w tym samym miejscu.
+  const toBottom = (smooth = false) => {
+    const element = scroller.current
+    if (!element) return
+    stickToBottom.current = true
+    setUnseen(0)
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    element.scrollTo({ top: element.scrollHeight, behavior: smooth && !reduce ? 'smooth' : 'auto' })
+  }
+
+  // Nowe wiadomości: na dół, gdy ktoś był na dole albo to moja wiadomość. Starsze doczytane u góry: widok zostaje
+  // w tym samym miejscu.
   useLayoutEffect(() => {
     const element = scroller.current
     if (!element) return
     const firstId = messages[0]?.id
-    if (previousFirst.current && firstId !== previousFirst.current) {
+    const last = messages.at(-1)
+    const newLast = !!last && previousLast.current !== undefined && last.id !== previousLast.current
+    if (previousFirst.current && firstId !== previousFirst.current && !newLast) {
       element.scrollTop += element.scrollHeight - previousHeight.current
+    } else if (newLast && last.authorId === meId) {
+      toBottom()
     } else if (stickToBottom.current) {
       element.scrollTop = element.scrollHeight
+    } else if (newLast) {
+      setUnseen((count) => count + 1)
     }
     previousFirst.current = firstId
+    previousLast.current = last?.id
     previousHeight.current = element.scrollHeight
-  }, [messages, typing.length])
+    // toBottom czyta tylko refy i stan przez setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, typing.length, meId])
+
+  // Treść rośnie też bez nowej wiadomości (dopisek „Wyświetlona”, „pisze…”, cytat, pole pisania po wysłaniu
+  // się zwęża): kto jest na dole, zostaje na dole.
+  useEffect(() => {
+    const element = scroller.current
+    const inner = content.current
+    if (!element || !inner || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom.current) element.scrollTop = element.scrollHeight
+      previousHeight.current = element.scrollHeight
+    })
+    observer.observe(inner)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   const readers = (message: ChatMessage) =>
     thread.reads.filter((entry) => entry.userId !== meId && entry.lastReadAt >= message.createdAt)
@@ -196,59 +340,83 @@ function MessageList({
   const names = new Map(thread.members.map((member) => [member.id, member.name]))
 
   return (
-    <div
-      ref={scroller}
-      onScroll={(event) => {
-        const element = event.currentTarget
-        stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80
-        previousHeight.current = element.scrollHeight
-      }}
-      className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
-    >
-      {hasMore && (
-        <div className="mb-4 flex justify-center">
-          <Button variant="outline" size="sm" loading={loadingMore} onClick={onLoadMore}>
-            Starsze wiadomości
-          </Button>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scroller}
+        onScroll={(event) => {
+          const element = event.currentTarget
+          stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80
+          if (stickToBottom.current) setUnseen(0)
+          previousHeight.current = element.scrollHeight
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 [overflow-anchor:none] sm:px-5"
+      >
+        <div ref={content}>
+          {hasMore && (
+            <div className="mb-4 flex justify-center">
+              <Button variant="outline" size="sm" loading={loadingMore} onClick={onLoadMore}>
+                Starsze wiadomości
+              </Button>
+            </div>
+          )}
+          {messages.length === 0 && (
+            <p className="mt-16 text-center text-sm text-muted-foreground">
+              Nie ma jeszcze wiadomości. Napisz pierwszą.
+            </p>
+          )}
+          <ol className="space-y-0.5">
+            {messages.map((message, index) => {
+              const previous = messages[index - 1]
+              const newDay = !previous || !isSameDay(previous.createdAt, message.createdAt)
+              const startsRun =
+                newDay ||
+                previous.authorId !== message.authorId ||
+                new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() > RUN_GAP_MS
+              const mine = message.authorId === meId
+              const seenBy = mine ? readers(message) : []
+              return (
+                <li key={message.id} id={messageElementId(message.id)} className="rounded-xl">
+                  {newDay && (
+                    <div className="my-4 flex justify-center">
+                      <span className="rounded-full bg-muted px-3 py-0.5 text-xs font-medium text-muted-foreground first-letter:uppercase">
+                        {dayLabel(message.createdAt)}
+                      </span>
+                    </div>
+                  )}
+                  <Bubble
+                    message={message}
+                    mine={mine}
+                    startsRun={startsRun}
+                    showAuthor={showAuthors && !mine && startsRun}
+                    read={mine && othersCount > 0 && seenBy.length >= othersCount}
+                    meId={meId}
+                    onReply={onReply}
+                    onMuteAuthor={
+                      onMuteAuthor && !mine && message.authorId && !mutedUsers.has(message.authorId)
+                        ? onMuteAuthor
+                        : undefined
+                    }
+                  />
+                  {message.id === lastMine?.id && othersCount > 0 && (
+                    <SeenLine seenBy={seenBy.map((entry) => names.get(entry.userId) ?? '')} total={othersCount} />
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+          {typing.length > 0 && <TypingDots />}
         </div>
+      </div>
+      {unseen > 0 && (
+        <Button
+          size="sm"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-md animate-in fade-in-0 slide-in-from-bottom-2 duration-200 motion-reduce:animate-none"
+          onClick={() => toBottom(true)}
+        >
+          <ArrowDownIcon data-icon="inline-start" />
+          {unseen === 1 ? 'Nowa wiadomość' : `Nowe wiadomości: ${unseen}`}
+        </Button>
       )}
-      {messages.length === 0 && (
-        <p className="mt-16 text-center text-sm text-muted-foreground">Nie ma jeszcze wiadomości. Napisz pierwszą.</p>
-      )}
-      <ol className="space-y-0.5">
-        {messages.map((message, index) => {
-          const previous = messages[index - 1]
-          const newDay = !previous || !isSameDay(previous.createdAt, message.createdAt)
-          const startsRun =
-            newDay ||
-            previous.authorId !== message.authorId ||
-            new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() > RUN_GAP_MS
-          const mine = message.authorId === meId
-          const seenBy = mine ? readers(message) : []
-          return (
-            <li key={message.id}>
-              {newDay && (
-                <div className="my-4 flex justify-center">
-                  <span className="rounded-full bg-muted px-3 py-0.5 text-xs font-medium text-muted-foreground first-letter:uppercase">
-                    {dayLabel(message.createdAt)}
-                  </span>
-                </div>
-              )}
-              <Bubble
-                message={message}
-                mine={mine}
-                startsRun={startsRun}
-                showAuthor={showAuthors && !mine && startsRun}
-                read={mine && othersCount > 0 && seenBy.length >= othersCount}
-              />
-              {message.id === lastMine?.id && othersCount > 0 && (
-                <SeenLine seenBy={seenBy.map((entry) => names.get(entry.userId) ?? '')} total={othersCount} />
-              )}
-            </li>
-          )
-        })}
-      </ol>
-      {typing.length > 0 && <TypingDots />}
     </div>
   )
 }
@@ -259,15 +427,23 @@ function Bubble({
   startsRun,
   showAuthor,
   read,
+  meId,
+  onReply,
+  onMuteAuthor,
 }: {
   message: ChatMessage
   mine: boolean
   startsRun: boolean
   showAuthor: boolean
   read: boolean
+  meId: string
+  onReply: (message: ChatMessage) => void
+  onMuteAuthor?: (message: ChatMessage) => void
 }) {
   const { retract, restore } = useChatActions()
   const hidden = message.retracted && message.body === null
+  const canReply = !message.retracted
+  const canCopy = !message.retracted && !!message.body
 
   const onRetract = () =>
     retract.mutate(message.id, {
@@ -283,13 +459,23 @@ function Bubble({
       {!mine && (
         <div className="w-8 shrink-0">
           {startsRun && (
-            <UserAvatar name={message.authorName ?? '?'} url={message.authorAvatarUrl} className="size-8 text-xs" />
+            <ProfileTrigger
+              userId={message.authorId}
+              className="rounded-full focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <UserAvatar name={message.authorName ?? '?'} url={message.authorAvatarUrl} className="size-8 text-xs" />
+            </ProfileTrigger>
           )}
         </div>
       )}
       <div className={cn('flex max-w-[min(36rem,78%)] flex-col', mine ? 'items-end' : 'items-start')}>
         {showAuthor && (
-          <span className="mb-0.5 px-1 text-xs font-medium text-muted-foreground">{message.authorName}</span>
+          <ProfileTrigger
+            userId={message.authorId}
+            className="mb-0.5 px-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+          >
+            {message.authorName}
+          </ProfileTrigger>
         )}
         <div
           className={cn(
@@ -309,6 +495,7 @@ function Bubble({
             'Wiadomość cofnięta'
           ) : (
             <>
+              {message.replyTo && <ReplyQuote reply={message.replyTo} mine={mine} meId={meId} />}
               {message.body && (
                 <span>
                   <MentionText body={message.body} mentions={message.mentions} mine={mine} />
@@ -364,27 +551,93 @@ function Bubble({
           </span>
         )}
       </div>
-      <div className="flex shrink-0 self-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-        {message.canRetract && (
-          <MessageAction label="Cofnij dla wszystkich" onClick={onRetract}>
-            <Undo2Icon />
-          </MessageAction>
-        )}
-        {message.canRestore && (
-          <MessageAction label="Przywróć wiadomość" onClick={() => restore.mutate(message.id)}>
-            <Undo2Icon className="-scale-x-100" />
-          </MessageAction>
-        )}
-      </div>
+      {(canReply || canCopy || onMuteAuthor || message.canRetract || message.canRestore) && (
+        // Widać je po najechaniu (na dotyku zawsze), a otwarte menu trzyma przycisk widoczny.
+        <div className="flex shrink-0 self-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 [@media(hover:none)]:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-sm" aria-label="Opcje wiadomości" title="Opcje wiadomości" />}
+            >
+              <EllipsisVerticalIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={mine ? 'end' : 'start'} className="w-56">
+              {canReply && (
+                <DropdownMenuItem onClick={() => onReply(message)}>
+                  <ReplyIcon />
+                  Odpowiedz
+                </DropdownMenuItem>
+              )}
+              {canCopy && (
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigator.clipboard
+                      .writeText(message.body ?? '')
+                      .then(() => toast.success('Skopiowano treść wiadomości'))
+                      .catch(() => toast.error('Nie udało się skopiować'))
+                  }
+                >
+                  <CopyIcon />
+                  Kopiuj tekst
+                </DropdownMenuItem>
+              )}
+              {onMuteAuthor && (
+                <DropdownMenuItem onClick={() => onMuteAuthor(message)}>
+                  <BellOffIcon />
+                  Wycisz: {message.authorName ?? 'osoba'}
+                </DropdownMenuItem>
+              )}
+              {message.canRestore && (
+                <DropdownMenuItem onClick={() => restore.mutate(message.id)}>
+                  <Undo2Icon className="-scale-x-100" />
+                  Przywróć wiadomość
+                </DropdownMenuItem>
+              )}
+              {message.canRetract && (
+                <>
+                  {(canReply || canCopy || onMuteAuthor) && <DropdownMenuSeparator />}
+                  <DropdownMenuItem variant="destructive" onClick={onRetract}>
+                    <Undo2Icon />
+                    Cofnij dla wszystkich
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   )
 }
 
-function MessageAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+function replyText(reply: { preview: string | null; attachmentCount: number; retracted: boolean }): string {
+  if (reply.retracted) return 'Wiadomość cofnięta'
+  return reply.preview || filesLabel(reply.attachmentCount)
+}
+
+/** Cytat wiadomości, na którą ktoś odpowiada; klik przewija do niej. */
+function ReplyQuote({
+  reply,
+  mine,
+  meId,
+}: {
+  reply: NonNullable<ChatMessage['replyTo']>
+  mine: boolean
+  meId: string
+}) {
   return (
-    <Button variant="ghost" size="icon-sm" title={label} aria-label={label} onClick={onClick}>
-      {children}
-    </Button>
+    <button
+      type="button"
+      onClick={() => jumpTo(reply.id)}
+      className={cn(
+        'mb-1 flex w-full flex-col rounded-lg border-l-4 px-2 py-1 text-left text-xs no-underline not-italic',
+        mine
+          ? 'border-primary-foreground/60 bg-primary-foreground/15 hover:bg-primary-foreground/25'
+          : 'border-primary bg-background/70 hover:bg-background',
+      )}
+    >
+      <span className="font-semibold">{reply.authorId === meId ? 'Ty' : (reply.authorName ?? 'Ktoś')}</span>
+      <span className={cn('line-clamp-2 opacity-85', reply.retracted && 'italic')}>{replyText(reply)}</span>
+    </button>
   )
 }
 
@@ -424,7 +677,19 @@ function TypingDots() {
 
 const COMPOSER_MAX_HEIGHT = 160
 
-function Composer({ conversationId, mentionable }: { conversationId: string; mentionable: MentionOption[] }) {
+function Composer({
+  conversationId,
+  mentionable,
+  replyTo,
+  meId,
+  onCancelReply,
+}: {
+  conversationId: string
+  mentionable: MentionOption[]
+  replyTo: ChatMessage | null
+  meId: string
+  onCancelReply: () => void
+}) {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [dragging, setDragging] = useState(false)
@@ -433,6 +698,11 @@ function Composer({ conversationId, mentionable }: { conversationId: string; men
   const lastTyping = useRef(0)
   const { send } = useChatActions()
   const mentions = useMentionPicker(input, text, setText, mentionable)
+
+  // „Odpowiedz” przenosi kursor do pola, żeby od razu pisać.
+  useEffect(() => {
+    if (replyTo) input.current?.focus()
+  }, [replyTo])
 
   // Pole rośnie z treścią do kilku linii; pasek przewijania dopiero ponad nimi (inaczej stoją strzałki przy jednej linii).
   useLayoutEffect(() => {
@@ -462,11 +732,12 @@ function Composer({ conversationId, mentionable }: { conversationId: string; men
     const body = text.trim()
     if ((!body && files.length === 0) || send.isPending) return
     send.mutate(
-      { conversationId, body, files, mentions: mentions.tokens(body) },
+      { conversationId, body, files, mentions: mentions.tokens(body), replyToId: replyTo?.id },
       {
         onSuccess: () => {
           setText('')
           setFiles([])
+          onCancelReply()
           mentions.reset()
           lastTyping.current = 0
         },
@@ -491,6 +762,32 @@ function Composer({ conversationId, mentionable }: { conversationId: string; men
         addFiles(event.dataTransfer.files)
       }}
     >
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-primary bg-muted py-1.5 pr-1 pl-3 text-xs">
+          <ReplyIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">
+              Odpowiedź do: {replyTo.authorId === meId ? 'siebie' : (replyTo.authorName ?? 'Ktoś')}
+            </span>
+            <span className="block truncate text-muted-foreground">
+              {replyText({
+                preview: replyTo.body,
+                attachmentCount: replyTo.attachments.length,
+                retracted: replyTo.retracted,
+              })}
+            </span>
+          </span>
+          <button
+            type="button"
+            aria-label="Nie odpowiadaj"
+            title="Nie odpowiadaj (Esc)"
+            className="rounded p-1 hover:bg-background"
+            onClick={onCancelReply}
+          >
+            <XIcon className="size-4" />
+          </button>
+        </div>
+      )}
       {files.length > 0 && (
         <ul className="mb-2 flex flex-wrap gap-1.5">
           {files.map((file, index) => (
@@ -555,6 +852,11 @@ function Composer({ conversationId, mentionable }: { conversationId: string; men
           aria-expanded={mentions.open}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || mentions.onKeyDown(event)) return
+            if (event.key === 'Escape' && replyTo) {
+              event.preventDefault()
+              onCancelReply()
+              return
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               submit()

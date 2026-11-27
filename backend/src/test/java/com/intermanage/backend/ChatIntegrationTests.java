@@ -251,8 +251,13 @@ class ChatIntegrationTests {
         String fromAnna = send(group, anna, "Cześć");
         mvc.perform(post("/api/chat/messages/" + fromAnna + "/retract").cookie(otherManager.cookie()).with(csrf()))
                 .andExpect(status().isForbidden());
+        // Cudzej wiadomości nie cofa nikt, także zarządzający czatem (założyciel grupy); autor tak.
         mvc.perform(post("/api/chat/messages/" + fromAnna + "/retract").cookie(manager.cookie()).with(csrf()))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/chat/messages/" + fromAnna + "/retract").cookie(anna.cookie()).with(csrf()))
                 .andExpect(status().isOk());
+        mvc.perform(post("/api/chat/messages/" + fromAnna + "/restore").cookie(manager.cookie()).with(csrf()))
+                .andExpect(status().isForbidden());
 
         // Grupa sklepu: kto stracił dostęp do sklepu, nie czyta jej i nie jest liczony jako członek.
         String storeGroup = JsonPath.read(mvc.perform(post("/api/chat/groups").cookie(manager.cookie()).with(csrf())
@@ -427,6 +432,110 @@ class ChatIntegrationTests {
                         .cookie(manager.cookie()).with(csrf()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(JsonPath.<String>read(restored, "$.logoUrl")).isEqualTo(logoUrl);
+    }
+
+    @Test
+    void repliesReadReceiptsAndMutes() throws Exception {
+        String storeId = store();
+        String otherStore = store();
+        Account anna = account(storeId, "EMPLOYEE");
+        Account piotr = account(storeId, "EMPLOYEE");
+        Account kasia = account(storeId, "EMPLOYEE");
+        String list = mvc.perform(get("/api/chat/conversations").cookie(anna.cookie()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String storeChat = JsonPath.<List<String>>read(list, "$[?(@.kind == 'STORE')].id").getFirst();
+
+        // Odpowiedź niesie podgląd wiadomości, na którą odpowiada; spoza rozmowy = 400.
+        String original = send(storeChat, anna, "Kto zamyka dziś sklep?");
+        String reply = mvc.perform(post("/api/chat/conversations/" + storeChat + "/messages").cookie(piotr.cookie())
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("body", "Ja", "replyToId", original))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<String>read(reply, "$.replyTo.id")).isEqualTo(original);
+        assertThat(JsonPath.<String>read(reply, "$.replyTo.preview")).isEqualTo("Kto zamyka dziś sklep?");
+        String otherChat = JsonPath.<List<String>>read(mvc.perform(get("/api/chat/conversations")
+                        .cookie(account(otherStore, "EMPLOYEE").cookie()))
+                .andReturn().getResponse().getContentAsString(), "$[?(@.kind == 'STORE')].id").getFirst();
+        String foreign = send(otherChat, account(otherStore, "EMPLOYEE"), "Inny sklep");
+        mvc.perform(post("/api/chat/conversations/" + storeChat + "/messages").cookie(piotr.cookie())
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("body", "Zła odpowiedź", "replyToId", foreign))))
+                .andExpect(status().isBadRequest());
+        String annaThread = mvc.perform(get("/api/chat/conversations/" + storeChat + "/messages")
+                        .cookie(anna.cookie()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<String>read(annaThread, "$.messages[-1].replyTo.authorId")).isEqualTo(anna.id());
+
+        // Potwierdzenia odczytu w obie strony: Piotr ich nie ma, więc Anna nie widzi jego odczytu, a on niczyjego.
+        mvc.perform(put("/api/chat/settings").cookie(piotr.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("readReceipts", false, "sound", "ALL"))))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/chat/conversations/" + storeChat + "/read").cookie(piotr.cookie()).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/chat/conversations/" + storeChat + "/read").cookie(kasia.cookie()).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/chat/conversations/" + storeChat + "/read").cookie(anna.cookie()).with(csrf()))
+                .andExpect(status().isNoContent());
+        String forAnna = mvc.perform(get("/api/chat/conversations/" + storeChat + "/messages").cookie(anna.cookie()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(forAnna, "$.reads[*].userId")).contains(kasia.id(), anna.id())
+                .doesNotContain(piotr.id());
+        String forPiotr = mvc.perform(get("/api/chat/conversations/" + storeChat + "/messages").cookie(piotr.cookie()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(forPiotr, "$.reads[*].userId")).containsExactly(piotr.id());
+
+        // Wyciszona rozmowa nie liczy się do licznika; wyciszona osoba jest w ustawieniach.
+        send(storeChat, kasia, "Nowa wiadomość");
+        assertThat(JsonPath.<Integer>read(mvc.perform(get("/api/chat/unread").cookie(anna.cookie()))
+                .andReturn().getResponse().getContentAsString(), "$.total")).isEqualTo(1);
+        mvc.perform(put("/api/chat/mutes/conversations/" + storeChat).cookie(anna.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("muted", true))))
+                .andExpect(status().isOk());
+        assertThat(JsonPath.<Integer>read(mvc.perform(get("/api/chat/unread").cookie(anna.cookie()))
+                .andReturn().getResponse().getContentAsString(), "$.total")).isZero();
+        String settings = mvc.perform(put("/api/chat/mutes/users/" + kasia.id()).cookie(anna.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("muted", true))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(settings, "$.mutedUsers[*].id")).containsExactly(kasia.id());
+        assertThat(JsonPath.<List<String>>read(settings, "$.mutedConversations")).containsExactly(storeChat);
+        mvc.perform(put("/api/chat/mutes/conversations/" + otherChat).cookie(anna.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("muted", true))))
+                .andExpect(status().isNotFound());
+        String unmuted = mvc.perform(put("/api/chat/mutes/conversations/" + storeChat).cookie(anna.cookie())
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json(Map.of("muted", false))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<List<String>>read(unmuted, "$.mutedConversations")).isEmpty();
+    }
+
+    @Test
+    void profileShowsWhatPersonWroteAndRankOnlyToPeopleFromSameStore() throws Exception {
+        String storeId = store();
+        Account anna = account(storeId, "EMPLOYEE");
+        Account piotr = account(storeId, "MANAGER");
+        Account stranger = account(store(), "EMPLOYEE");
+
+        mvc.perform(put("/api/chat/profile").cookie(piotr.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("nickname", "Pit", "about", "Nabiał i chłodnie", "phone", "abc"))))
+                .andExpect(status().isBadRequest());
+        String own = mvc.perform(put("/api/chat/profile").cookie(piotr.cookie()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("nickname", " Pit ", "about", "Nabiał i chłodnie", "phone",
+                                "+48 600 100 200"))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<Boolean>read(own, "$.me")).isTrue();
+        assertThat(JsonPath.<String>read(own, "$.nickname")).isEqualTo("Pit");
+
+        String seen = mvc.perform(get("/api/chat/profiles/" + piotr.id()).param("storeId", storeId)
+                        .cookie(anna.cookie()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<String>read(seen, "$.phone")).isEqualTo("+48 600 100 200");
+        assertThat(JsonPath.<String>read(seen, "$.about")).isEqualTo("Nabiał i chłodnie");
+        assertThat(JsonPath.<String>read(seen, "$.rankName")).isNotBlank();
+        assertThat(JsonPath.<Boolean>read(seen, "$.me")).isFalse();
+        mvc.perform(get("/api/chat/profiles/" + piotr.id()).cookie(stranger.cookie()))
+                .andExpect(status().isNotFound());
     }
 
     private String openDirect(Account me, Account other, java.util.concurrent.CyclicBarrier start) throws Exception {

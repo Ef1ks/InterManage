@@ -514,6 +514,21 @@ input::-ms-clear {
   animation: chat-typing 1s ease-in-out infinite;
 }
 
+/* Wiadomość, do której przeszedł klik w cytat: tło na chwilę się rozjaśnia i gaśnie. */
+.chat-message-flash {
+  animation: chat-message-flash 1.6s ease-out;
+}
+
+@keyframes chat-message-flash {
+  0%,
+  30% {
+    background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
 @keyframes chat-typing {
   0%,
   60%,
