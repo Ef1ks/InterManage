@@ -151,6 +151,79 @@ public class CollectorListService {
         return new CollectorListDetails(responses(found), rows, quantity, purchase.setScale(2, RoundingMode.HALF_UP), sale);
     }
 
+    /** Pozycja spoza listy kolektora (historia inwentaryzacji i zamówień, zwrot do dostawcy). */
+    public record Item(String itm8, String ean, String name, String brand, BigDecimal quantity) {
+    }
+
+    /** Podgląd jak listy: ceny i marża z kartoteki z chwili odczytu, bez list i rozbicia skanów. */
+    @Transactional(readOnly = true)
+    public CollectorListDetails detailsOfItems(UUID storeId, List<Item> items) {
+        Map<String, Product> catalog = products.findByStoreIdAndItm8In(storeId, items.stream().map(Item::itm8)
+                .filter(itm8 -> itm8 != null && !itm8.isBlank()).distinct().toList()).stream()
+                .collect(Collectors.toMap(Product::getItm8, Function.identity(), (a, b) -> a));
+        LocalDate today = LocalDate.now(StoreTime.ZONE);
+        List<CollectorListDetails.Row> rows = new ArrayList<>();
+        BigDecimal quantity = BigDecimal.ZERO;
+        BigDecimal purchase = BigDecimal.ZERO;
+        BigDecimal sale = BigDecimal.ZERO;
+        for (Item item : items) {
+            Product product = item.itm8() == null ? null : catalog.get(item.itm8());
+            BigDecimal amount = item.quantity().stripTrailingZeros();
+            BigDecimal purchasePrice = product == null ? null : product.getPurchasePrice();
+            BigDecimal salePrice = product == null ? null : salePrice(product, today);
+            Integer vat = product == null ? null : vat(product.getVatCode());
+            CollectorListDetails.Row row = new CollectorListDetails.Row(item.itm8() == null ? "" : item.itm8(),
+                    item.ean(), product == null ? item.name() : product.getName(),
+                    product == null ? item.brand() : product.getBrand(), purchasePrice,
+                    purchasePrice == null ? null : purchasePrice.multiply(amount).setScale(2, RoundingMode.HALF_UP),
+                    salePrice, salePrice == null ? null : salePrice.multiply(amount).setScale(2, RoundingMode.HALF_UP),
+                    purchasePrice == null || salePrice == null || salePrice.signum() <= 0 || vat == null ? null
+                            : Margin.percent(salePrice, BigDecimal.valueOf(vat), purchasePrice, 2),
+                    amount, List.of(), product != null);
+            rows.add(row);
+            quantity = quantity.add(amount);
+            if (row.purchaseValue() != null) {
+                purchase = purchase.add(row.purchaseValue());
+            }
+            if (row.saleValue() != null) {
+                sale = sale.add(row.saleValue());
+            }
+        }
+        return new CollectorListDetails(List.of(), rows, quantity, purchase.setScale(2, RoundingMode.HALF_UP), sale);
+    }
+
+    /** Excel podglądu (listy, historia, zwrot): te same kolumny co lista z kolektora. */
+    public byte[] xlsxOf(String sheet, CollectorListDetails details) {
+        return xlsxOf(sheet, List.of(), details);
+    }
+
+    /** Z opisem nad tabelą: tytuł, data sporządzenia, stan (wiersze {@code label: wartość}). */
+    public byte[] xlsxOf(String sheet, List<XlsxWriter.Row> intro, CollectorListDetails details) {
+        List<XlsxWriter.Row> rows = new ArrayList<>();
+        for (CollectorListDetails.Row row : details.rows()) {
+            rows.add(XlsxWriter.Row.of(itm8(row.itm8()), row.ean(), row.name(), row.brand(), money(row.purchasePrice()),
+                    money(row.purchaseValue()), money(row.salePrice()), money(row.saleValue()), row.marginPercent(),
+                    row.quantity()));
+        }
+        rows.add(XlsxWriter.Row.of(XlsxWriter.Cell.bold("Razem"), null, null, null, null,
+                XlsxWriter.Cell.boldMoney(details.totalPurchaseValue()), null,
+                XlsxWriter.Cell.boldMoney(details.totalSaleValue()), null, XlsxWriter.Cell.bold(details.totalQuantity())));
+        return xlsx.writeRows(sheet, intro, List.of(new XlsxWriter.Column("ITM8", 12), new XlsxWriter.Column("EAN", 16),
+                new XlsxWriter.Column("Nazwa", 38), new XlsxWriter.Column("Marka", 18),
+                new XlsxWriter.Column("Cena zakupu netto", 18),
+                new XlsxWriter.Column("Wartość zakupu netto", 18), new XlsxWriter.Column("Cena sprzedaży szt.", 18),
+                new XlsxWriter.Column("Wartość sprzedaży", 18), new XlsxWriter.Column("Marża %", 10),
+                new XlsxWriter.Column("Ilość", 10)), rows);
+    }
+
+    /** Wydruk podglądu z własnym tytułem i miejscami na podpis. */
+    @Transactional(readOnly = true)
+    public byte[] pdfOf(UUID storeId, String title, String subtitle, String note, CollectorListDetails details,
+            String printedBy, List<String> signatures) {
+        Store store = stores.findById(storeId).orElseThrow(() -> ApiException.notFound("Nie znaleziono sklepu"));
+        return pdf.pdf(title, subtitle, note, store.getNumber(), details, printedBy, signatures);
+    }
+
     /** Plik protokołu; zapisanie go na dysku potwierdza {@link #markSaved}. */
     @Transactional(readOnly = true)
     public DataEntryProtocolService.ProtocolFile protocol(UUID storeId, ProtocolKind kind, Collection<UUID> ids,
@@ -213,21 +286,7 @@ public class CollectorListService {
 
     @Transactional(readOnly = true)
     public byte[] xlsx(UUID storeId, Collection<UUID> ids) {
-        CollectorListDetails details = details(storeId, ids);
-        List<XlsxWriter.Row> rows = new ArrayList<>();
-        for (CollectorListDetails.Row row : details.rows()) {
-            rows.add(XlsxWriter.Row.of(itm8(row.itm8()), row.ean(), row.name(), row.brand(), money(row.purchasePrice()),
-                    money(row.purchaseValue()), money(row.salePrice()), money(row.saleValue()), row.marginPercent(), row.quantity()));
-        }
-        rows.add(XlsxWriter.Row.of(XlsxWriter.Cell.bold("Razem"), null, null, null, null,
-                XlsxWriter.Cell.boldMoney(details.totalPurchaseValue()), null,
-                XlsxWriter.Cell.boldMoney(details.totalSaleValue()), null, XlsxWriter.Cell.bold(details.totalQuantity())));
-        return xlsx.writeRows("Kolektor", List.of(new XlsxWriter.Column("ITM8", 12), new XlsxWriter.Column("EAN", 16),
-                new XlsxWriter.Column("Nazwa", 38), new XlsxWriter.Column("Marka", 18),
-                new XlsxWriter.Column("Cena zakupu netto", 18),
-                new XlsxWriter.Column("Wartość zakupu netto", 18), new XlsxWriter.Column("Cena sprzedaży szt.", 18),
-                new XlsxWriter.Column("Wartość sprzedaży", 18), new XlsxWriter.Column("Marża %", 10),
-                new XlsxWriter.Column("Ilość", 10)), rows);
+        return xlsxOf("Kolektor", details(storeId, ids));
     }
 
     private CollectorListDetails.Row row(List<CollectorListLine> scanned, Product product, LocalDate today) {

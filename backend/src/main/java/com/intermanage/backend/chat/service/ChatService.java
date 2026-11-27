@@ -40,6 +40,9 @@ import com.intermanage.backend.chat.entity.ChatMember;
 import com.intermanage.backend.chat.entity.ChatMention;
 import com.intermanage.backend.chat.entity.ChatMentionKind;
 import com.intermanage.backend.chat.entity.ChatMessage;
+import com.intermanage.backend.chat.entity.ChatMute;
+import com.intermanage.backend.chat.entity.ChatProfile;
+import com.intermanage.backend.chat.entity.ChatUserSettings;
 import com.intermanage.backend.chat.mapper.ChatMapper;
 import com.intermanage.backend.chat.repository.ChatAttachmentRepository;
 import com.intermanage.backend.chat.repository.ChatConversationRepository;
@@ -47,6 +50,9 @@ import com.intermanage.backend.chat.repository.ChatMemberRepository;
 import com.intermanage.backend.chat.repository.ChatLogoRepository;
 import com.intermanage.backend.chat.repository.ChatMentionRepository;
 import com.intermanage.backend.chat.repository.ChatMessageRepository;
+import com.intermanage.backend.chat.repository.ChatMuteRepository;
+import com.intermanage.backend.chat.repository.ChatProfileRepository;
+import com.intermanage.backend.chat.repository.ChatUserSettingsRepository;
 import com.intermanage.backend.common.component.LiveEvents;
 import com.intermanage.backend.common.component.ScanFiles;
 import com.intermanage.backend.common.exception.ApiException;
@@ -102,12 +108,16 @@ public class ChatService {
     private final ChatMentionRepository mentions;
     private final StaffEmployeeRepository employees;
     private final ChatLogoRepository logos;
+    private final ChatMuteRepository mutes;
+    private final ChatUserSettingsRepository chatSettings;
+    private final ChatProfileRepository profiles;
 
     public ChatService(ChatConversationRepository conversations, ChatMemberRepository members,
             ChatMessageRepository messages, ChatAttachmentRepository attachments, AppUserRepository users,
             StoreRepository stores, UserAvatarRepository avatars, UserImages images, StaffTimeService staffTime,
             ChatTyping typing, LiveEvents live, ChatMapper mapper, ChatMentionRepository mentions,
-            StaffEmployeeRepository employees, ChatLogoRepository logos) {
+            StaffEmployeeRepository employees, ChatLogoRepository logos, ChatMuteRepository mutes,
+            ChatUserSettingsRepository chatSettings, ChatProfileRepository profiles) {
         this.conversations = conversations;
         this.members = members;
         this.messages = messages;
@@ -123,6 +133,9 @@ public class ChatService {
         this.mentions = mentions;
         this.employees = employees;
         this.logos = logos;
+        this.mutes = mutes;
+        this.chatSettings = chatSettings;
+        this.profiles = profiles;
     }
 
     public record StoredFile(String fileName, String contentType, byte[] content) {
@@ -140,7 +153,9 @@ public class ChatService {
     @Transactional
     public ChatDtos.Unread unread(UUID userId) {
         AppUser me = user(userId);
-        List<UUID> ids = visible(me).stream().map(ChatConversation::getId).toList();
+        // Wyciszona rozmowa nie liczy się do licznika (jak w WhatsAppie); na liście rozmów dalej ma swój.
+        Set<UUID> muted = mutedTargets(userId, ChatMute.Kind.CONVERSATION);
+        List<UUID> ids = visible(me).stream().map(ChatConversation::getId).filter(id -> !muted.contains(id)).toList();
         long total = ids.isEmpty() ? 0
                 : conversations.countUnread(ids, userId).stream()
                         .mapToLong(ChatConversationRepository.Unread::getUnread).sum();
@@ -285,8 +300,7 @@ public class ChatService {
         Map<UUID, AppUser> byId = byId(people);
         List<ChatDtos.Person> typingNow = typing.typingNow(conversationId, userId).stream().map(byId::get)
                 .filter(Objects::nonNull).map(user -> mapper.toPerson(user, photos.get(user.getId()))).toList();
-        List<ChatDtos.Read> reads = conversations.findReads(conversationId).stream()
-                .map(read -> new ChatDtos.Read(read.getUserId(), read.getLastReadAt())).toList();
+        List<ChatDtos.Read> reads = reads(conversationId, userId);
         ChatDtos.Conversation summary = summaries(List.of(conversation), me, storeId(conversation)).getFirst();
         List<ChatDtos.Person> memberList = people.stream().map(user -> mapper.toPerson(user, photos.get(user.getId())))
                 .toList();
@@ -301,9 +315,12 @@ public class ChatService {
 
     @Transactional
     public ChatDtos.Message send(UUID userId, UUID conversationId, String body, List<MultipartFile> files,
-            List<String> mentionTokens) {
+            List<String> mentionTokens, UUID replyToId) {
         AppUser me = user(userId);
         ChatConversation conversation = visible(me, conversationId);
+        ChatMessage replyTo = replyToId == null ? null : messages.findWithConversation(replyToId)
+                .filter(found -> found.getConversation().getId().equals(conversationId))
+                .orElseThrow(() -> ApiException.badRequest("Odpowiadasz tylko na wiadomość z tej rozmowy"));
         List<AppUser> people = memberUsers(conversation);
         List<Resolved> resolved = resolveMentions(conversation, me, people, mentionTokens);
         String text = body == null ? "" : body.strip();
@@ -320,7 +337,7 @@ public class ChatService {
         if (parts.stream().mapToLong(MultipartFile::getSize).sum() > MAX_FILE_BYTES) {
             throw ApiException.badRequest("Pliki jednej wiadomości mogą mieć razem najwyżej 10 MB");
         }
-        ChatMessage message = messages.save(new ChatMessage(conversation, me, text));
+        ChatMessage message = messages.save(new ChatMessage(conversation, me, text, replyTo));
         for (MultipartFile file : parts) {
             String type = file.getContentType() == null || file.getContentType().isBlank()
                     ? "application/octet-stream" : file.getContentType();
@@ -345,14 +362,28 @@ public class ChatService {
         conversations.markRead(conversationId, userId, message.getCreatedAt());
         conversations.touchPresence(userId);
         typing.stopped(conversationId, userId);
-        announce(conversation, audience, "message", Map.of("messageId", message.getId(), "authorId", userId,
-                "mentioned", List.copyOf(mentioned)));
+        // Z treścią do powiadomienia w przeglądarce (toast, powiadomienie systemowe): idzie tylko do członków rozmowy.
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("messageId", message.getId());
+        fields.put("authorId", userId);
+        fields.put("authorName", me.getDisplayName());
+        fields.put("mentioned", List.copyOf(mentioned));
+        fields.put("preview", notificationPreview(text, parts.size()));
+        fields.put("kind", conversation.getKind().name());
+        String title = notificationTitle(conversation);
+        if (title != null) {
+            fields.put("title", title);
+        }
+        if (replyTo != null && replyTo.getAuthor() != null) {
+            fields.put("replyToAuthorId", replyTo.getAuthor().getId());
+        }
+        announce(conversation, audience, "message", fields);
         messages.flush();
         boolean moderator = moderates(conversation, me);
         return toMessages(List.of(message), me, moderator, avatarUrls(List.of(userId))).getFirst();
     }
 
-    /** Cofnięcie dla wszystkich: autor albo zarządzający czatem. */
+    /** Cofnięcie dla wszystkich: tylko autor (zarządzający czatem też nie cofa cudzych). */
     @Transactional
     public ChatDtos.Message retract(UUID userId, UUID messageId) {
         AppUser me = user(userId);
@@ -361,7 +392,7 @@ public class ChatService {
         if (message.getRetractedAt() != null) {
             throw ApiException.conflict("Wiadomość jest już cofnięta");
         }
-        if (!mine(message, me) && !moderator) {
+        if (!mine(message, me)) {
             throw ApiException.forbidden("Cofasz tylko swoje wiadomości");
         }
         message.retract(me);
@@ -370,7 +401,7 @@ public class ChatService {
         return toMessages(List.of(message), me, moderator, avatarUrls(authorIds(message))).getFirst();
     }
 
-    /** Przywrócenie cofniętej: autor (gdy sam ją cofnął) albo zarządzający czatem. */
+    /** Przywrócenie cofniętej: tylko autor, który sam ją cofnął. */
     @Transactional
     public ChatDtos.Message restore(UUID userId, UUID messageId) {
         AppUser me = user(userId);
@@ -379,8 +410,8 @@ public class ChatService {
         if (message.getRetractedAt() == null) {
             throw ApiException.conflict("Wiadomość nie jest cofnięta");
         }
-        if (!canRestore(message, me, moderator)) {
-            throw ApiException.forbidden("Tę wiadomość przywróci zarządzający czatem");
+        if (!canRestore(message, me)) {
+            throw ApiException.forbidden("Przywracasz tylko swoje wiadomości");
         }
         message.restore();
         announce(message.getConversation(), audience(message.getConversation()), "restored",
@@ -393,7 +424,157 @@ public class ChatService {
         AppUser me = user(userId);
         ChatConversation conversation = visible(me, conversationId);
         conversations.markRead(conversationId, userId, Instant.now());
-        announce(conversation, audience(conversation), "read", Map.of("userId", userId));
+        // Bez potwierdzeń odczytu inni nie dowiadują się o odczycie; własne karty odświeżają licznik.
+        Set<UUID> told = receiptsOn(userId) ? audience(conversation) : Set.of(userId);
+        announce(conversation, told, "read", Map.of("userId", userId));
+    }
+
+    // ---------------------------------------------------------------- profile
+
+    /**
+     * Profil osoby, z którą mam wspólny sklep (albo mój). Ranga z bieżącego sklepu, a gdy jej tam nie ma, z pierwszego
+     * wspólnego sklepu, w którym ją ma.
+     */
+    @Transactional(readOnly = true)
+    public ChatDtos.Profile profile(UUID userId, UUID otherId, UUID currentStoreId) {
+        AppUser me = user(userId);
+        AppUser other = userId.equals(otherId) ? me : byId(candidates(me, null)).get(otherId);
+        if (other == null) {
+            throw ApiException.notFound("Nie ma takiej osoby w Twoich sklepach");
+        }
+        ChatProfile own = profiles.findById(otherId).orElse(null);
+        String rank = other.rankNameIn(currentStoreId);
+        if (rank == null) {
+            rank = myStores(me).stream().map(store -> other.rankNameIn(store.getId())).filter(Objects::nonNull)
+                    .findFirst().orElse(null);
+        }
+        String position = employees.findActiveOfUsers(List.of(otherId)).stream()
+                .map(employee -> employee.getPosition().getName()).findFirst().orElse(null);
+        Instant lastSeen = conversations.findSeen(List.of(otherId)).stream()
+                .map(ChatConversationRepository.Seen::getLastSeenAt).findFirst().orElse(null);
+        return new ChatDtos.Profile(other.getId(), other.getDisplayName(), avatarUrls(List.of(otherId)).get(otherId),
+                own == null ? null : own.getNickname(), own == null ? null : own.getAbout(),
+                own == null ? null : own.getPhone(), rank, position, lastSeen,
+                lastSeen != null && lastSeen.isAfter(Instant.now().minus(ONLINE)), userId.equals(otherId));
+    }
+
+    @Transactional
+    public ChatDtos.Profile saveProfile(UUID userId, ChatDtos.ProfileRequest request, UUID currentStoreId) {
+        String phone = blankToNull(request.phone());
+        if (phone != null && (!phone.matches("[0-9+()\\-. ]+") || phone.replaceAll("\\D", "").length() < 6)) {
+            throw ApiException.badRequest("Numer telefonu: same cyfry, spacje, „+” i „-”, co najmniej 6 cyfr");
+        }
+        ChatProfile own = profiles.findById(userId).orElseGet(() -> new ChatProfile(userId));
+        own.change(blankToNull(request.nickname()), blankToNull(request.about()), phone);
+        profiles.save(own);
+        return profile(userId, userId, currentStoreId);
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    // ---------------------------------------------------------------- ustawienia i wyciszenia
+
+    @Transactional(readOnly = true)
+    public ChatDtos.Settings settings(UUID userId) {
+        ChatUserSettings own = chatSettings.findById(userId).orElseGet(() -> new ChatUserSettings(userId));
+        List<ChatMute> active = mutes.findActive(userId);
+        List<UUID> userIds = active.stream().filter(mute -> mute.getKind() == ChatMute.Kind.USER)
+                .map(ChatMute::getTargetId).toList();
+        Map<UUID, String> photos = avatarUrls(userIds);
+        List<ChatDtos.Person> mutedUsers = users.findAllById(userIds).stream()
+                .map(user -> mapper.toPerson(user, photos.get(user.getId())))
+                .sorted(Comparator.comparing(person -> person.name().toLowerCase())).toList();
+        List<UUID> mutedConversations = active.stream().filter(mute -> mute.getKind() == ChatMute.Kind.CONVERSATION)
+                .map(ChatMute::getTargetId).toList();
+        return new ChatDtos.Settings(own.isReadReceipts(), own.getSound(), mutedUsers, mutedConversations);
+    }
+
+    @Transactional
+    public ChatDtos.Settings saveSettings(UUID userId, ChatDtos.SettingsRequest request) {
+        ChatUserSettings own = chatSettings.findById(userId).orElseGet(() -> new ChatUserSettings(userId));
+        boolean receiptsChanged = own.isReadReceipts() != request.readReceipts();
+        own.change(request.readReceipts(), request.sound());
+        chatSettings.save(own);
+        if (receiptsChanged) {
+            // „Wyświetlone” zmienia się w każdej rozmowie konta, więc członkowie odświeżają odczyty.
+            AppUser me = user(userId);
+            for (ChatConversation conversation : visible(me)) {
+                announce(conversation, audience(conversation), "read", Map.of("userId", userId));
+            }
+        }
+        return settings(userId);
+    }
+
+    /** Wyciszenie osoby: jej wiadomości nie dają powiadomień ani dźwięku (dalej są w rozmowach). */
+    @Transactional
+    public ChatDtos.Settings muteUser(UUID userId, UUID otherId, boolean muted) {
+        if (userId.equals(otherId)) {
+            throw ApiException.badRequest("Nie wyciszysz siebie");
+        }
+        users.findById(otherId).orElseThrow(() -> ApiException.notFound("Nie ma takiego konta"));
+        setMute(userId, ChatMute.Kind.USER, otherId, muted);
+        return settings(userId);
+    }
+
+    /** Wyciszenie rozmowy: bez powiadomień i poza licznikiem; oznaczenie mnie dalej powiadamia. */
+    @Transactional
+    public ChatDtos.Settings muteConversation(UUID userId, UUID conversationId, boolean muted) {
+        visible(user(userId), conversationId);
+        setMute(userId, ChatMute.Kind.CONVERSATION, conversationId, muted);
+        live.publishToUsers(List.of(userId), "chat", Map.of("type", "conversation", "conversationId", conversationId));
+        return settings(userId);
+    }
+
+    private void setMute(UUID userId, ChatMute.Kind kind, UUID targetId, boolean muted) {
+        var current = mutes.findActive(userId, kind, targetId);
+        if (muted && current.isEmpty()) {
+            mutes.save(new ChatMute(userId, kind, targetId));
+        } else if (!muted) {
+            current.ifPresent(ChatMute::remove);
+        }
+    }
+
+    private Set<UUID> mutedTargets(UUID userId, ChatMute.Kind kind) {
+        return mutes.findActive(userId).stream().filter(mute -> mute.getKind() == kind).map(ChatMute::getTargetId)
+                .collect(Collectors.toSet());
+    }
+
+    private boolean receiptsOn(UUID userId) {
+        return chatSettings.findById(userId).map(ChatUserSettings::isReadReceipts).orElse(true);
+    }
+
+    /**
+     * Odczyty rozmowy. Potwierdzenia działają w obie strony: konto z wyłączonymi widzi tylko własny odczyt, a odczytów
+     * kont z wyłączonymi nie widzi nikt.
+     */
+    private List<ChatDtos.Read> reads(UUID conversationId, UUID userId) {
+        List<ChatConversationRepository.ReadState> all = conversations.findReads(conversationId);
+        boolean mineOn = receiptsOn(userId);
+        Set<UUID> hidden = all.isEmpty() ? Set.of()
+                : new HashSet<>(chatSettings.findWithoutReceipts(all.stream()
+                        .map(ChatConversationRepository.ReadState::getUserId).toList()));
+        return all.stream()
+                .filter(read -> read.getUserId().equals(userId) || (mineOn && !hidden.contains(read.getUserId())))
+                .map(read -> new ChatDtos.Read(read.getUserId(), read.getLastReadAt())).toList();
+    }
+
+    private static String notificationPreview(String text, int files) {
+        if (!text.isEmpty()) {
+            return text.length() > PREVIEW ? text.substring(0, PREVIEW) + "…" : text;
+        }
+        return files == 1 ? "Plik" : "Pliki: " + files;
+    }
+
+    /** Nazwa rozmowy w powiadomieniu; rozmowa dwóch osób jej nie ma (tytułem jest autor). */
+    private static String notificationTitle(ChatConversation conversation) {
+        return switch (conversation.getKind()) {
+            case DIRECT -> null;
+            case STORE -> conversation.getName() != null ? conversation.getName()
+                    : "Cały sklep " + conversation.getStore().getNumber();
+            case GROUP -> conversation.getName();
+        };
     }
 
     @Transactional(readOnly = true)
@@ -730,9 +911,9 @@ public class ChatService {
         return message.getAuthor() != null && message.getAuthor().getId().equals(me.getId());
     }
 
-    private static boolean canRestore(ChatMessage message, AppUser me, boolean moderator) {
-        return moderator || (mine(message, me) && message.getRetractedBy() != null
-                && message.getRetractedBy().getId().equals(me.getId()));
+    private static boolean canRestore(ChatMessage message, AppUser me) {
+        return mine(message, me) && message.getRetractedBy() != null
+                && message.getRetractedBy().getId().equals(me.getId());
     }
 
     private boolean hasStore(AppUser me, Store store) {
@@ -862,6 +1043,11 @@ public class ChatService {
         Map<UUID, List<ChatDtos.Attachment>> files = attachments.findOfMessages(messageIds).stream()
                 .collect(Collectors.groupingBy(ChatAttachmentRepository.Summary::getMessageId,
                         Collectors.mapping(mapper::toAttachment, Collectors.toList())));
+        List<UUID> replyIds = list.stream().map(ChatMessage::getReplyTo).filter(Objects::nonNull)
+                .map(ChatMessage::getId).distinct().toList();
+        Map<UUID, Long> replyFiles = replyIds.isEmpty() ? Map.of()
+                : attachments.findOfMessages(replyIds).stream().collect(Collectors.groupingBy(
+                        ChatAttachmentRepository.Summary::getMessageId, Collectors.counting()));
         return list.stream().map(message -> {
             boolean retracted = message.getRetractedAt() != null;
             boolean hidden = retracted && !moderator;
@@ -871,8 +1057,24 @@ public class ChatService {
                     hidden ? List.of() : files.getOrDefault(message.getId(), List.of()),
                     hidden ? List.of() : mentionsOf.getOrDefault(message.getId(), List.of()),
                     !retracted && mentioningMe.contains(message.getId()),
-                    !retracted && (mine(message, me) || moderator), retracted && canRestore(message, me, moderator));
+                    !retracted && mine(message, me), retracted && canRestore(message, me),
+                    hidden ? null : reply(message.getReplyTo(), replyFiles));
         }).toList();
+    }
+
+    private static ChatDtos.Reply reply(ChatMessage original, Map<UUID, Long> files) {
+        if (original == null) {
+            return null;
+        }
+        boolean retracted = original.getRetractedAt() != null;
+        String body = retracted ? null : original.getBody();
+        if (body != null && body.length() > PREVIEW) {
+            body = body.substring(0, PREVIEW) + "…";
+        }
+        AppUser author = original.getAuthor();
+        return new ChatDtos.Reply(original.getId(), author == null ? null : author.getId(),
+                author == null ? null : author.getDisplayName(), body,
+                retracted ? 0 : files.getOrDefault(original.getId(), 0L).intValue(), retracted);
     }
 
     private Map<UUID, String> avatarUrls(Collection<UUID> userIds) {

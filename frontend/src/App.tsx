@@ -11,7 +11,10 @@ import { SetPasswordPage } from '@/features/auth/SetPasswordPage'
 import { BakeryCheckPage } from '@/features/bakery-check/BakeryCheckPage'
 import { bakeryPath } from '@/features/bakery-check/paths'
 import { CollectorDevicesPage } from '@/features/collectors/CollectorDevicesPage'
+import { CollectorFilesPage } from '@/features/collectors/CollectorFilesPage'
 import { CollectorListsPage } from '@/features/collectors/CollectorListsPage'
+import { SupplierReturnsPage } from '@/features/supplier-returns/SupplierReturnsPage'
+import { supplierReturnsPath } from '@/features/supplier-returns/paths'
 import { CollectorPromotionsPage } from '@/features/collectors/CollectorPromotionsPage'
 import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
@@ -163,6 +166,31 @@ const router = createBrowserRouter([
         element: (
           <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
             <CollectorListsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: collectorPaths.inventories,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <CollectorFilesPage kind="INVENTORY" />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: collectorPaths.orders,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <CollectorFilesPage kind="ORDER" />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Zwroty do dostawcy: kto przyjmuje towar, ten go oddaje (uprawnienie jak wprowadzanie danych).
+        path: supplierReturnsPath,
+        element: (
+          <RequireAuth permission={{ category: 'DATA_ENTRY' }}>
+            <SupplierReturnsPage />
           </RequireAuth>
         ),
       },

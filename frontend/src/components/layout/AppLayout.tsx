@@ -41,6 +41,9 @@ import { AgentActivity } from '@/features/agent-macros/AgentActivity'
 import { AgentStatusDot } from '@/features/store-agent/AgentStatusDot'
 import { useLiveEvents } from '@/features/store-agent/use-live-events'
 import { usePresenceHeartbeat } from '@/features/chat/use-presence'
+import { useChatUnread } from '@/features/chat/api'
+import { ChatHeaderButton } from '@/features/chat/ChatHeaderButton'
+import { useChatNotifications, useFaviconBadge } from '@/features/chat/notifications'
 import { usePriceFileWatcher } from '@/features/data-entry/price-files'
 import { DownloadUpdatesBanner } from '@/features/downloads/DownloadUpdatesBanner'
 import { useCurrentStore, useStoreFromAddress } from '@/features/stores/current-store'
@@ -70,6 +73,7 @@ export function AppLayout() {
   // Przed obecnością i blokadą, bo obie czytają zapisany ruch.
   useActivityTracking()
   usePresenceHeartbeat()
+  useChatNotifications()
   useWorkdayLock()
   useIdleLock()
   const mobileNavOpen = useAppSelector((state) => state.ui.mobileNavOpen)
@@ -104,9 +108,13 @@ export function AppLayout() {
   // Tytuł karty: numer bieżącego sklepu, żeby przy kilku kartach było widać, która jest którym sklepem.
   const currentStore = useCurrentStore()
   const me = useCurrentUser()
+  // Nieprzeczytane wiadomości czatu: liczba w tytule i kropka na ikonie, widoczne też z innej karty i programu.
+  const chatUnread = useChatUnread().data?.total ?? 0
   useEffect(() => {
-    document.title = currentStore ? `${currentStore.number} - InterManage` : 'InterManage'
-  }, [currentStore])
+    const base = currentStore ? `${currentStore.number} - InterManage` : 'InterManage'
+    document.title = chatUnread > 0 ? `(${chatUnread > 99 ? '99+' : chatUnread}) ${base}` : base
+  }, [currentStore, chatUnread])
+  useFaviconBadge(chatUnread)
 
   // Krótkie opóźnienie: przejechanie kursorem przy krawędzi okna nie rozwija menu.
   const onPointerEnter = (event: React.PointerEvent) => {
@@ -185,6 +193,7 @@ export function AppLayout() {
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <AgentActivity />
             <AgentStatusDot />
+            <ChatHeaderButton />
             <FeedbackButton />
             <UserMenu />
           </div>

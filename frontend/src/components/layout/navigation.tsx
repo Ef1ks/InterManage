@@ -5,6 +5,8 @@ import {
   ChefHatIcon,
   ClipboardCheckIcon,
   ClipboardListIcon,
+  PackageXIcon,
+  ShoppingCartIcon,
   BeefIcon,
   CookingPotIcon,
   CroissantIcon,
@@ -35,7 +37,10 @@ import { basePath, meaPath } from '@/features/base-delivery/paths'
 import { cadPriorityPath } from '@/features/cad-priority/paths'
 import { meaOnlinePath } from '@/features/mea/paths'
 import { leafletLabelsPath, leafletPath } from '@/features/leaflet/paths'
+import { CollectorFilesBadge } from '@/features/collectors/CollectorFilesBadge'
 import { CollectorListsBadge } from '@/features/collectors/CollectorListsBadge'
+import { SupplierReturnsBadge } from '@/features/supplier-returns/SupplierReturnsBadge'
+import { supplierReturnsPath } from '@/features/supplier-returns/paths'
 import { CollectorPromotionsBadge } from '@/features/collectors/CollectorPromotionsBadge'
 import { collectorPaths } from '@/features/collectors/paths'
 import { protocolEntryPath } from '@/features/protocol-entry/paths'
@@ -175,6 +180,16 @@ const GROUPS: GroupSpec[] = [
         icon: ListChecksIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
       },
+      {
+        key: 'supplier-returns',
+        section: SUPPLIER_LIST,
+        path: supplierReturnsPath,
+        label: 'Zwroty do dostawcy',
+        description: 'Towar do oddania z kolektora albo z Protokołów: stany, bon dostawy i korekty podpinane same.',
+        icon: PackageXIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+        badge: () => <SupplierReturnsBadge />,
+      },
       { category: 'SUPPLIERS', section: SUPPLIER_LIST },
     ],
   },
@@ -308,6 +323,24 @@ const GROUPS: GroupSpec[] = [
         icon: ClipboardListIcon,
         visible: (me) => hasPermission(me, 'DATA_ENTRY'),
         badge: () => <CollectorListsBadge />,
+      },
+      {
+        key: 'collector-inventories',
+        path: collectorPaths.inventories,
+        label: 'Inwentaryzacje',
+        description: 'Z kolektorów i tabeli: wgrane do Mercalys i przygotowane na przyszłość, Excel, PDF i wydruk.',
+        icon: ClipboardCheckIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+        badge: () => <CollectorFilesBadge kind="INVENTORY" />,
+      },
+      {
+        key: 'collector-orders',
+        path: collectorPaths.orders,
+        label: 'Zamówienia',
+        description: 'Z kolektorów: wgrane do Mercalys i przygotowane na później, Excel, PDF i wydruk.',
+        icon: ShoppingCartIcon,
+        visible: (me) => hasPermission(me, 'DATA_ENTRY'),
+        badge: () => <CollectorFilesBadge kind="ORDER" />,
       },
       {
         key: 'collector-promotions',

@@ -5,11 +5,13 @@ import {
   DiffIcon,
   FileOutputIcon,
   PackageSearchIcon,
+  PackageXIcon,
   Redo2Icon,
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useStore } from 'react-redux'
 import { toast } from 'sonner'
 
@@ -41,6 +43,9 @@ import { type SalesChartTarget, useSalesReportsOverview } from '@/features/sales
 import { useCanSeeArticleStats } from '@/features/sales/ArticleStatsButton'
 import { SalesChartDialog } from '@/features/sales/SalesChartDialog'
 import { useCurrentStore } from '@/features/stores/current-store'
+import { useSupplierReturnActions } from '@/features/supplier-returns/api'
+import { supplierReturnsPath } from '@/features/supplier-returns/paths'
+import { ApiError } from '@/lib/api'
 import { addDays, todayIso } from '@/lib/dates'
 import type { StoreSummary } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -97,6 +102,8 @@ const NO_FILTER: string[] = []
 function StoreProtocolEntry({ store }: { store: StoreSummary }) {
   const dispatch = useAppDispatch()
   const reduxStore = useStore<RootState>()
+  const navigate = useNavigate()
+  const returnActions = useSupplierReturnActions(store.id)
   const { rows } = useAppSelector((state) => state.protocolEntryDraft.drafts[store.id]) ?? EMPTY_PROTOCOL_ENTRY
   const currentDraft = useCallback(
     () => reduxStore.getState().protocolEntryDraft.drafts[store.id] ?? EMPTY_PROTOCOL_ENTRY,
@@ -296,6 +303,42 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
   const protocolTitle =
     badEanTitle ?? (protocolLines.length === 0 ? 'Najpierw dodaj artykuły z ilością' : 'Wybierz protokół i zapisz plik')
 
+  // ---------- zwrot do dostawcy: artykuły z ilością (bez znaku) trafiają do Zakupów jako zwrot
+  const returnLines = useMemo(
+    () =>
+      articles.flatMap((row) =>
+        !row.eanFallback && row.quantity && row.name
+          ? [
+              {
+                itm8: row.itm8,
+                ean: /^\d{1,14}$/.test(row.ean) ? row.ean : null,
+                name: row.name,
+                brand: row.brand || null,
+                quantity: Math.abs(row.quantity),
+              },
+            ]
+          : [],
+      ),
+    [articles],
+  )
+  const createReturn = () =>
+    returnActions.fromProtocols.mutate(
+      { lines: returnLines },
+      {
+        onSuccess: (created) =>
+          toast.success('Utworzono zwrot do dostawcy', {
+            description: created.summary.supplier
+              ? `Dostawca: ${created.summary.supplier.name}`
+              : 'Wybierz dostawcę w zwrocie.',
+            action: {
+              label: 'Otwórz',
+              onClick: () => navigate(`${supplierReturnsPath}?zwrot=${created.summary.id}`),
+            },
+          }),
+        onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Nie udało się utworzyć zwrotu'),
+      },
+    )
+
   // ---------- przeniesienie stanów w Mercalys: makro do schowka, jak „Przeniesienie” we wprowadzaniu danych
   const transferMacro = useMemo(() => planTransferMacro(articles), [articles])
   const transferTitle =
@@ -450,6 +493,21 @@ function StoreProtocolEntry({ store }: { store: StoreSummary }) {
           title={transferTitle}
         >
           <TileContent icon={<ArrowRightLeftIcon />}>Przeniesienie</TileContent>
+        </Button>
+
+        <Button
+          className={cn(ACTION_TONES.load, ACTION_TILE, TILE_WIDTH, 'whitespace-normal')}
+          variant="outline"
+          onClick={createReturn}
+          disabled={returnLines.length === 0 || badEanTitle !== null || returnActions.fromProtocols.isPending}
+          title={
+            badEanTitle ??
+            (returnLines.length === 0
+              ? 'Najpierw dodaj artykuły z ilością'
+              : 'Lista trafi do Zakupy → Zwroty do dostawcy; dostawcę podpowie ostatnia dostawa artykułów')
+          }
+        >
+          <TileContent icon={<PackageXIcon />}>Zwrot do dostawcy</TileContent>
         </Button>
 
         <Button

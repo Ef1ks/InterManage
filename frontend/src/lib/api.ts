@@ -32,12 +32,32 @@ function readCookie(name: string): string | undefined {
     ?.slice(name.length + 1)
 }
 
-/** Backend czyści token przy logowaniu i wylogowaniu, więc pobieramy nowy, gdy go brak. */
-async function csrfToken(renew = false): Promise<string | undefined> {
-  if (renew) document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/'
-  if (renew || !readCookie('XSRF-TOKEN')) {
-    await fetch('/api/auth/csrf', { credentials: 'same-origin' })
+/** Jedno pobranie tokenu naraz w karcie: równoległe żądania czekają na to samo. */
+let fetchingToken: Promise<unknown> | null = null
+
+function fetchNewToken(): Promise<unknown> {
+  fetchingToken ??= fetch('/api/auth/csrf', { credentials: 'same-origin' }).finally(() => {
+    fetchingToken = null
+  })
+  return fetchingToken
+}
+
+/**
+ * Token CSRF z ciasteczka; backend czyści je przy logowaniu i wylogowaniu, więc bez niego pobieramy nowy.
+ * `sent` = token odrzucony przez serwer. Gdy ciasteczko ma już inny (zmieniła go inna karta albo równoległe żądanie),
+ * wystarczy wysłać ten. Ciasteczka nie kasujemy z góry: skasowane w jednej karcie sprawiało, że inne karty pobierały
+ * każda swój nowy token i nawzajem unieważniały sobie żądania.
+ */
+async function csrfToken(sent?: string): Promise<string | undefined> {
+  const current = readCookie('XSRF-TOKEN')
+  const decoded = current && decodeURIComponent(current)
+  if (decoded && decoded !== sent) return decoded
+  if (decoded && sent) {
+    // Ten sam token odrzucony: zostaje tylko wymiana, także zabłąkanego ciasteczka z innej ścieżki.
+    document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/'
+    document.cookie = 'XSRF-TOKEN=; Max-Age=0; path=/api'
   }
+  await fetchNewToken()
   const token = readCookie('XSRF-TOKEN')
   return token && decodeURIComponent(token)
 }
@@ -75,7 +95,7 @@ export async function api<T = void>(
 
   const send = async (renewToken: boolean) => {
     if (!SAFE_METHODS.has(method)) {
-      const token = await csrfToken(renewToken)
+      const token = await csrfToken(renewToken ? (headers['X-XSRF-TOKEN'] ?? '') : undefined)
       if (token) headers['X-XSRF-TOKEN'] = token
     }
     return onUploadProgress

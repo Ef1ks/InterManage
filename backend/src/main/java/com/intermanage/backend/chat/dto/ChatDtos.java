@@ -9,6 +9,7 @@ import java.util.UUID;
 import com.intermanage.backend.chat.entity.ChatAttachmentKind;
 import com.intermanage.backend.chat.entity.ChatKind;
 import com.intermanage.backend.chat.entity.ChatMentionKind;
+import com.intermanage.backend.chat.entity.ChatUserSettings;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -47,7 +48,39 @@ public final class ChatDtos {
     public record Message(UUID id, UUID authorId, String authorName, String authorAvatarUrl, String body,
             Instant createdAt, boolean retracted, Instant retractedAt, String retractedByName,
             List<Attachment> attachments, List<Mention> mentions, boolean mentionsMe, boolean canRetract,
-            boolean canRestore) {
+            boolean canRestore, Reply replyTo) {
+    }
+
+    /**
+     * Wiadomość, na którą ktoś odpowiada: podgląd nad odpowiedzią. Cofnięta bez treści (moderator też widzi tu tylko
+     * „Wiadomość cofnięta”, treść ma w samej wiadomości).
+     */
+    public record Reply(UUID id, UUID authorId, String authorName, String preview, int attachmentCount,
+            boolean retracted) {
+    }
+
+    /** Ustawienia czatu konta z wyciszonymi osobami i rozmowami. */
+    public record Settings(boolean readReceipts, ChatUserSettings.Sound sound, List<Person> mutedUsers,
+            List<UUID> mutedConversations) {
+    }
+
+    public record SettingsRequest(boolean readReceipts, @NotNull ChatUserSettings.Sound sound) {
+    }
+
+    public record MuteRequest(boolean muted) {
+    }
+
+    /**
+     * Profil osoby: nick, opis i telefon wpisała sama, ranga i stanowisko są ze sklepu. {@code me} = mój profil
+     * (do edycji).
+     */
+    public record Profile(UUID id, String name, String avatarUrl, String nickname, String about, String phone,
+            String rankName, String position, Instant lastSeenAt, boolean online, boolean me) {
+    }
+
+    public record ProfileRequest(@Size(max = 40, message = "Nick może mieć najwyżej 40 znaków") String nickname,
+            @Size(max = 500, message = "Opis może mieć najwyżej 500 znaków") String about,
+            @Size(max = 30, message = "Numer telefonu może mieć najwyżej 30 znaków") String phone) {
     }
 
     /** Oznaczenie w treści: {@code @label}; {@code id} = konto albo dział (przy {@code ALL} puste). */
@@ -102,7 +135,7 @@ public final class ChatDtos {
     }
 
     /** {@code mentions}: {@code user:<id>}, {@code department:<id>}, {@code all}. */
-    public record TextRequest(String body, List<String> mentions) {
+    public record TextRequest(String body, List<String> mentions, UUID replyToId) {
     }
 
     public record DirectRequest(@NotNull UUID userId) {

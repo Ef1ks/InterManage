@@ -5339,7 +5339,66 @@ export type CollectorList = {
   }[]
 }
 
-export type CollectorListOutput = ProtocolKind | 'ORDER'
+export type CollectorListOutput = ProtocolKind | 'ORDER' | 'INVENTORY' | 'SUPPLIER_RETURN'
+
+/** Inwentaryzacja albo zamówienie z kolektora w historii: wgrane do Mercalys albo czekające na wgranie. */
+export type CollectorFile = {
+  id: string
+  kind: 'INVENTORY' | 'ORDER'
+  status: 'WAITING' | 'LOADED'
+  note: string | null
+  fileName: string | null
+  createdAt: string
+  createdBy: string | null
+  loadedAt: string | null
+  loadedBy: string | null
+  lineCount: number
+}
+
+export type SupplierReturnStatus = 'NEW' | 'REPORTED' | 'IN_PROGRESS' | 'ACCEPTED' | 'CORRECTED' | 'REJECTED'
+
+export type SupplierReturnDocument = {
+  id: string
+  /** PZ = przyjęcie, WZ = korekta od dostawcy, PK = korekta błędu sklepu. */
+  type: string
+  number: string
+  bonNumber: string
+  documentDate: string | null
+  supplierDocumentNumber: string | null
+  purchaseValue: number | null
+}
+
+export type SupplierReturnInvoice = { id: string; invoiceNumber: string; issueDate: string | null; netAmount: number | null }
+
+export type SupplierReturnSummary = {
+  id: string
+  status: SupplierReturnStatus
+  source: 'COLLECTOR' | 'PROTOCOLS'
+  supplier: { id: string; code: string | null; name: string; nip: string | null } | null
+  note: string | null
+  createdAt: string
+  createdBy: string | null
+  updatedAt: string
+  lineCount: number
+  totalQuantity: number
+  delivery: SupplierReturnDocument | null
+  correction: SupplierReturnDocument | null
+  invoice: SupplierReturnInvoice | null
+}
+
+export type SupplierReturnDetails = {
+  summary: SupplierReturnSummary
+  items: CollectorListDetails
+  events: { kind: string; detail: string | null; createdAt: string; createdBy: string | null; automatic: boolean }[]
+}
+
+export type SupplierReturnCandidates = {
+  lineCount: number
+  deliveries: { document: SupplierReturnDocument; common: number }[]
+  corrections: { document: SupplierReturnDocument; common: number }[]
+  /** `common` puste: XML korekty nie jest jeszcze pobrany. */
+  invoices: { invoice: SupplierReturnInvoice; common: number | null }[]
+}
 
 /** Zawartość wybranych list razem (CollectorListDetails). */
 export type CollectorListDetails = {
@@ -5642,6 +5701,45 @@ export type ChatMessage = {
   mentionsMe: boolean
   canRetract: boolean
   canRestore: boolean
+  /** Wiadomość, na którą ta odpowiada (podgląd nad treścią). */
+  replyTo: ChatReply | null
+}
+
+export type ChatReply = {
+  id: string
+  authorId: string | null
+  authorName: string | null
+  /** Przy cofniętej `null`. */
+  preview: string | null
+  attachmentCount: number
+  retracted: boolean
+}
+
+/** Profil osoby w czacie: nick, opis i telefon wpisała sama, ranga i stanowisko są ze sklepu. */
+export type ChatProfile = {
+  id: string
+  name: string
+  avatarUrl: string | null
+  nickname: string | null
+  about: string | null
+  phone: string | null
+  rankName: string | null
+  position: string | null
+  lastSeenAt: string | null
+  online: boolean
+  /** Mój profil (do edycji). */
+  me: boolean
+}
+
+/** Kiedy przeglądarka gra dźwięk nowej wiadomości. */
+export type ChatSound = 'NONE' | 'MENTIONS' | 'ALL'
+
+export type ChatSettings = {
+  /** Wyłączone: inni nie widzą moich odczytów, a ja nie widzę ich (w obie strony). */
+  readReceipts: boolean
+  sound: ChatSound
+  mutedUsers: ChatPerson[]
+  mutedConversations: string[]
 }
 
 export type ChatThread = {

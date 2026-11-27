@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 import { usePeople } from './api'
 import { lastSeen } from './format'
+import { openProfile } from './profile'
 
 type Props = {
   storeId: string
@@ -120,7 +121,6 @@ function PersonRow({
   me,
   active,
   detail,
-  onOpen,
   opening,
 }: {
   person: Pick<ChatWorking | ChatOther, 'userId' | 'name' | 'avatarUrl'>
@@ -135,10 +135,11 @@ function PersonRow({
     <li>
       <button
         type="button"
-        disabled={me || opening !== null}
+        disabled={opening !== null}
         aria-busy={loading}
-        onClick={() => onOpen(person.userId)}
-        title={me ? undefined : `Napisz do: ${person.name}`}
+        // Profil z „Napisz”, telefonem i opisem, zamiast od razu otwierać rozmowę.
+        onClick={() => openProfile(person.userId)}
+        title={me ? 'Mój profil' : `Profil: ${person.name}`}
         className="flex w-full items-center gap-2.5 px-4 py-1.5 text-left hover:bg-muted disabled:hover:bg-transparent"
       >
         <span className="relative shrink-0">

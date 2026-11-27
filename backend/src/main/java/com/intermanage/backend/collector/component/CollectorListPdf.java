@@ -58,22 +58,37 @@ public class CollectorListPdf {
     }
 
     public byte[] pdf(String storeNumber, CollectorListDetails details, String printedBy) {
+        String lists = details.lists().stream()
+                .map(list -> list.collectorName() + " " + DATE_TIME.format(list.receivedAt().atZone(StoreTime.ZONE)))
+                .collect(Collectors.joining(", "));
+        List<String> protocols = details.lists().stream().flatMap(list -> list.protocols().stream())
+                .map(protocol -> protocol.kind().label()).distinct().toList();
+        return pdf("Lista z kolektora", lists, protocols.isEmpty() ? null : "Protokół: " + String.join(", ", protocols),
+                storeNumber, details, printedBy, SIGNATURES);
+    }
+
+    /** Podpisy pod listą, gdy wydruk nie poda własnych. */
+    public static final List<String> SIGNATURES = List.of("Sporządził", "Sprawdził");
+
+    /**
+     * Ten sam układ z własnym tytułem (inwentaryzacja, zamówienie, zwrot do dostawcy) i własnymi miejscami na podpis
+     * (każde z linią i opisem „data i podpis” pod spodem).
+     */
+    public byte[] pdf(String title, String subtitle, String note, String storeNumber, CollectorListDetails details,
+            String printedBy, List<String> signatures) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4.rotate(), MARGIN, MARGIN, MARGIN, MARGIN_BOTTOM);
         try {
             PdfWriter writer = PdfWriter.getInstance(document, out);
-            writer.setPageEvent(new PdfPageFooter(font(regular, 7, MUTED), "Lista z kolektora · sklep " + storeNumber
+            writer.setPageEvent(new PdfPageFooter(font(regular, 7, MUTED), title + " · sklep " + storeNumber
                     + " · wydruk " + DATE_TIME.format(ZonedDateTime.now(StoreTime.ZONE))
                     + (printedBy != null ? " · " + printedBy : "")));
-            document.addTitle("Lista z kolektora");
+            document.addTitle(title);
             document.addCreator("Intermanage");
             document.open();
-            document.add(header(storeNumber, details));
+            document.add(header(title, subtitle, note, storeNumber, details));
             document.add(table(details));
-            Paragraph signature = new Paragraph("Podpis: ................................................................",
-                    font(regular, 9, INK));
-            signature.setSpacingBefore(28);
-            document.add(signature);
+            document.add(signatures(signatures));
             document.close();
         } catch (DocumentException exception) {
             throw new IllegalStateException("Nie udało się utworzyć wydruku listy", exception);
@@ -81,18 +96,49 @@ public class CollectorListPdf {
         return out.toByteArray();
     }
 
-    private Paragraph header(String storeNumber, CollectorListDetails details) {
+    /**
+     * Miejsca na podpis obok siebie: wolne miejsce, linia i pod nią kto podpisuje. Tabela nie dzieli się między strony,
+     * więc podpisy nie zostają same na kolejnej kartce bez kontekstu.
+     */
+    private PdfPTable signatures(List<String> labels) throws DocumentException {
+        PdfPTable table = new PdfPTable(labels.size());
+        table.setWidthPercentage(labels.size() == 1 ? 40 : Math.min(100, labels.size() * 33));
+        table.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        table.setSpacingBefore(36);
+        table.setKeepTogether(true);
+        for (String label : labels) {
+            PdfPCell cell = new PdfPCell();
+            cell.setBorder(Rectangle.NO_BORDER);
+            cell.setPaddingLeft(12);
+            cell.setPaddingRight(12);
+            Paragraph space = new Paragraph(" ", font(regular, 9, INK));
+            space.setSpacingAfter(22);
+            cell.addElement(space);
+            PdfPTable line = new PdfPTable(1);
+            line.setWidthPercentage(100);
+            PdfPCell rule = new PdfPCell(new Phrase(label + " (data i podpis)", font(regular, 8, MUTED)));
+            rule.setBorder(Rectangle.TOP);
+            rule.setBorderColorTop(INK);
+            rule.setBorderWidthTop(0.6f);
+            rule.setHorizontalAlignment(Element.ALIGN_CENTER);
+            rule.setPaddingTop(3);
+            line.addCell(rule);
+            cell.addElement(line);
+            table.addCell(cell);
+        }
+        return table;
+    }
+
+    private Paragraph header(String title, String subtitle, String note, String storeNumber,
+            CollectorListDetails details) {
         Paragraph header = new Paragraph();
         header.setSpacingAfter(8);
-        header.add(new Phrase("Lista z kolektora\n", font(bold, 14, INK)));
-        header.add(new Phrase("Sklep " + storeNumber + " · " + details.lists().stream()
-                .map(list -> list.collectorName() + " " + DATE_TIME.format(list.receivedAt().atZone(StoreTime.ZONE)))
-                .collect(Collectors.joining(", ")) + " · ", font(regular, 9, INK)));
+        header.add(new Phrase(title + "\n", font(bold, 14, INK)));
+        header.add(new Phrase("Sklep " + storeNumber + (subtitle == null || subtitle.isBlank() ? "" : " · " + subtitle)
+                + " · ", font(regular, 9, INK)));
         header.add(new Phrase("artykułów: " + details.rows().size() + "\n", font(bold, 9, INK)));
-        List<String> protocols = details.lists().stream().flatMap(list -> list.protocols().stream())
-                .map(protocol -> protocol.kind().label()).distinct().toList();
-        if (!protocols.isEmpty()) {
-            header.add(new Phrase("Protokół: " + String.join(", ", protocols), font(regular, 9, INK)));
+        if (note != null && !note.isBlank()) {
+            header.add(new Phrase(note, font(regular, 9, INK)));
         }
         return header;
     }

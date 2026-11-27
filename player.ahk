@@ -3,13 +3,13 @@
 ;@Ahk2Exe-SetName Intermanage Makra
 ;@Ahk2Exe-SetDescription Intermanage - odtwarzacz makr
 ;@Ahk2Exe-SetCompanyName Intermanage
-;@Ahk2Exe-SetVersion 0.73.0.0
+;@Ahk2Exe-SetVersion 0.74.0.0
 #SingleInstance Force
 SendMode "Event"
 SetKeyDelay 30, 30
 CoordMode "Mouse", "Screen"
 SetTitleMatchMode 2 ; WEBCLICK: wystarczy fragment tytułu okna
-global PlayerVersion := "0.73" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
+global PlayerVersion := "0.74" ; numeracja 0.NN (dawna wersja NN = 0.NN); podbijamy przy każdej zmianie (też SetVersion wyżej), widać go w menu przy zegarze i w raporcie skanowania
 global AlwaysOnTop := " 262144" ; opcja MsgBox: wynik musi być widać, nawet gdy po ostatnim zamknięciu otworzy się PDF bonu
 
 global PartMode := false ; trwa część makra z ponawianiem (#PART): błąd nie pokazuje okna, tylko wraca do PlayParts
@@ -17,6 +17,8 @@ global PartError := ""
 global PartReport := ""
 global FailedBooks := [] ; skoroszyty, których EXCELSAVE nie zapisał: ponowienie je zamyka
 global FailedPdfs := [] ; to samo dla okien PDF po PDFSAVE
+global PartExcelSeen := "" ; skoroszyty otwarte przed pierwszą próbą części (od 0.74): wspólne dla jej ponowień
+global ExcelSaveNote := "" ; dopisek ostatniego EXCELSAVE do podsumowania (zapisany skoroszyt bez pasującego nagłówka)
 global MacroRunning := false ; Esc działa tylko w trakcie makra
 ; Makro zlecone przez agenta sklepu (od 0.64): pierwsza linia #RESULT|<id> i wynik w pliku <id>.txt w folderze agenta.
 ; Makro podaje sam identyfikator, nie ścieżkę, więc tekst ze Schowka nie wskaże cudzego pliku.
@@ -420,9 +422,14 @@ PlayParts(rawClip) {
     done := ""
     failed := ""
     clean := false ; ekran Mercalys jest taki, jak zostawiła go poprzednia udana część
+    global PartExcelSeen
     for part in plan.parts {
         started := A_TickCount
         attempt := 0
+        ; Jedna lista „starych” skoroszytów na całą część (od 0.74): raport, który Mercalys oddał już po błędzie próby
+        ; (np. po godzinie czekania), jest dla ponowienia nowy, a nie cudzy. Wcześniej każda próba robiła nową listę,
+        ; więc spóźniony skoroszyt zostawał otwarty, a Mercalys drukował raport od nowa (09575, 27.11.2026).
+        PartExcelSeen := InStr(part.body part.alt, "EXCELSAVE") ? ExcelSnapshot() : ""
         Loop {
             attempt += 1
             PartStatus(part.name, attempt, part.tries)
@@ -438,6 +445,12 @@ PlayParts(rawClip) {
             shown := CleanAfterFailure()
             if (shown != "")
                 problem .= "`nKomunikat Mercalys: " shown
+            ; Raport z poprzedniej próby doszedł po błędzie: zapis bez ponownego drukowania w Mercalys.
+            tail := LateWorkbookTail(part.body)
+            if (tail != "" && PlayPart(tail, &summary) = "") {
+                done .= "Raport doszedł po błędzie próby " attempt ", zapisany bez ponownego drukowania.`n" summary
+                break
+            }
             ; Samo czekanie na Excela trwa do godziny, więc po 90 minutach części już nie zaczynamy od nowa.
             if (attempt >= part.tries || A_TickCount - started > 5400000) {
                 failed .= part.name " (próby: " attempt "):`n" problem "`n`n"
@@ -446,6 +459,7 @@ PlayParts(rawClip) {
             Sleep 5000 * attempt
         }
     }
+    PartExcelSeen := ""
     if (failed != "") {
         MacroBox "Nie udało się:`n" failed done, "Makro zakończone z błędami", "Icon!" AlwaysOnTop
         return
@@ -880,7 +894,9 @@ PlayMacro(rawClip, ctx := "") {
     closingRan := false ; czy w tym przebiegu był krok WEBCLOSE
     closedCount := 0 ; dostawy zamknięte przez WEBCLOSE w tym przebiegu
     ; EXCELSAVE: skoroszyty otwarte przed makrem nie są „nowe”, więc makro nie zapisze cudzego pliku
-    excelSeen := lanes ? ctx.excelSeen : InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
+    ; W części z ponawianiem (PlayParts) lista z pierwszej próby, żeby spóźniony raport poprzedniej próby był „nowy”
+    excelSeen := lanes ? ctx.excelSeen : IsObject(PartExcelSeen) ? PartExcelSeen
+        : InStr(rawClip, "EXCELSAVE") ? ExcelSnapshot() : Map()
     pdfSeen := lanes ? ctx.pdfSeen : InStr(rawClip, "PDFSAVE") ? PdfSnapshot() : Map() ; to samo dla okien PDF
     orders := Map() ; dostawca -> numer zamówienia dostawy z bazy (WEBORDERREAD, WEBORDERKNOWN)
     pickedOrder := "" ; zamówienie przeniesione do wybranych przez ostatni WEBORDERPICK
@@ -1021,8 +1037,10 @@ PlayMacro(rawClip, ctx := "") {
             case "EXCELSAVE":
                 ; EXCELSAVE|ścieżka pliku|limit w ms|wzór nagłówka: czeka na nowy skoroszyt w Excelu (np. po przycisku Excel w
                 ; Mercalys), zapisuje go pod tą ścieżką (format z końcówki: xlsx, xlsm, xlsb, xls, csv; istniejący plik jest
-                ; nadpisywany) i zamyka. Wzór (od 0.73) liczy się tylko na kilku Mercalys: skoroszyt przydziela PlayLanes.
+                ; nadpisywany) i zamyka. Na kilku Mercalys skoroszyt przydziela PlayLanes po wzorze (od 0.73), na jednym
+                ; (od 0.74) pasujący do wzoru ma pierwszeństwo, a inny nowy skoroszyt jest brany dopiero po minucie.
                 timeout := parts.Length >= 3 ? Integer(Trim(parts[3])) : 120000
+                global ExcelSaveNote := ""
                 if (lanes && parts.Length >= 2) {
                     LaneWaitStart(ctx, index, timeout)
                     if !IsObject(ctx.excel) {
@@ -1040,12 +1058,12 @@ PlayMacro(rawClip, ctx := "") {
                     }
                 } else
                     problem := parts.Length < 2 ? "Linia EXCELSAVE wymaga ścieżki pliku."
-                        : ExcelSave(Trim(parts[2]), timeout, excelSeen)
+                        : ExcelSave(Trim(parts[2]), timeout, excelSeen, parts.Length >= 4 ? Trim(parts[4]) : "")
                 if (problem != "") {
                     MacroBox report problem "`n`nMakro zatrzymane na linii " index ":`n" line, "Błąd makra", "Icon!" AlwaysOnTop
                     return
                 }
-                report .= "Zapisano: " Trim(parts[2]) "`n"
+                report .= "Zapisano: " Trim(parts[2]) "`n" ExcelSaveNote
             case "PDFSAVE":
                 ; PDFSAVE|ścieżka pliku .pdf|limit w ms: czeka na nowe okno PDF (np. raport drukowany z Mercalys), zapisuje
                 ; ten dokument pod tą ścieżką (istniejący plik jest zastępowany) i zamyka okno PDF
@@ -1951,7 +1969,10 @@ EnsureFolder(dir) {
     return DirExist(dir) ? "" : "Nie udało się założyć folderu `"" dir "`" (brak uprawnień?)."
 }
 
-ExcelSave(path, timeoutMs, seen) {
+; pattern (od 0.74): wzór nagłówka raportu. Pasujący skoroszyt jest brany od razu, inny nowy dopiero po minucie bez
+; pasującego (wzór mógł nie trafić w nagłówek, a do 0.73 brany był każdy nowy), z dopiskiem w podsumowaniu.
+ExcelSave(path, timeoutMs, seen, pattern := "") {
+    global ExcelSaveNote
     SplitPath path, , &dir, &ext
     format := ExcelFormat(ext)
     if !format
@@ -1960,19 +1981,59 @@ ExcelSave(path, timeoutMs, seen) {
     if (problem != "")
         return problem
     deadline := A_TickCount + timeoutMs
+    unknown := Map() ; nowy skoroszyt bez pasującego nagłówka -> od kiedy jest otwarty
     Loop {
         for item in ExcelWorkbooks() {
             if seen.Has(item.key)
                 continue
             ready := false
             try ready := item.app.Ready
-            if ready
+            if !ready
+                continue
+            if (pattern = "" || WorkbookMatches(item, pattern))
                 return ExcelSaveWorkbook(item, path, format, seen)
+            if !unknown.Has(item.key)
+                unknown[item.key] := A_TickCount
+            else if (A_TickCount - unknown[item.key] >= 60000) {
+                name := ""
+                try name := item.book.Name
+                ExcelSaveNote := "Nie rozpoznano raportu w skoroszycie " name ", zapisany mimo to.`n"
+                return ExcelSaveWorkbook(item, path, format, seen)
+            }
         }
         if (A_TickCount >= deadline)
             return "Excel nie otworzył nowego skoroszytu w ciągu " Round(timeoutMs / 1000) " s."
         Sleep 500
     }
+}
+
+WorkbookMatches(item, pattern) {
+    text := WorkbookHeader(item)
+    if (text = "")
+        return false
+    try return RegExMatch(text, "is)" pattern) > 0
+    return false
+}
+
+; Linie części od EXCELSAVE, gdy w Excelu jest już nowy skoroszyt z nagłówkiem tego raportu (spóźniony raport
+; poprzedniej próby, od 0.74). Bez wzoru nagłówka nic: nie da się poznać, że to ten raport. "" = trzeba drukować od nowa.
+LateWorkbookTail(body) {
+    global PartExcelSeen
+    if !IsObject(PartExcelSeen) || !RegExMatch(body, "im)^[ \t]*EXCELSAVE\|[^\r\n]*", &found)
+        return ""
+    fields := StrSplit(Trim(found[0]), "|")
+    pattern := fields.Length >= 4 ? Trim(fields[4]) : ""
+    if (pattern = "")
+        return ""
+    for item in ExcelWorkbooks() {
+        if PartExcelSeen.Has(item.key)
+            continue
+        ready := false
+        try ready := item.app.Ready
+        if (ready && WorkbookMatches(item, pattern))
+            return SubStr(body, found.Pos)
+    }
+    return ""
 }
 
 ExcelSaveWorkbook(item, path, format, seen) {
